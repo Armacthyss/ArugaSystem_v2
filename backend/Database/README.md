@@ -13,6 +13,8 @@ Order on a new machine: `Schema.sql` → (optional) `DemoSeed.sql`.
 Order on an existing database: back up → `Cleanup_2026-09.sql` → (optional) `DemoSeed.sql`.
 
 Notes
+- Every script switches to `ArugaSystemDB` by itself, so it doesn't matter which database is selected in SSMS.
+- If your `appsettings.json` signs in with the SQL login `ArugaSystem` (`User Id=ArugaSystem`) instead of `Trusted_Connection=True`, `Schema.sql` gives that login access to the new database automatically.
 - SSMS shows "Caution: Changing any part of an object name could break scripts..." while `Cleanup_2026-09.sql` gives constraints readable names. That is expected.
 - From the command line, add `-I` so SQL Server accepts the scripts:
   `sqlcmd -S localhost -E -I -d ArugaSystemDB -i DemoSeed.sql`

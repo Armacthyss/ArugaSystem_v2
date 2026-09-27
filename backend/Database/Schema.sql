@@ -5,8 +5,9 @@
    its keys and rules, plus the starting data the system needs to work:
 
      • the 7 DOH EPI vaccines and their dose schedule rules
-     • clinic hours: Monday–Friday, 8:00 AM – 5:00 PM (check-in until 4 PM)
-       (change these in the app: System Admin > Operating Hours)
+     • vaccination days: Monday, Wednesday, Friday, 8:00 AM – 12:00 PM
+       (check-in until 11 AM; change these in the app: System Admin >
+       Operating Hours)
      • 3 vaccination rooms (Room 1–3); staff pick who works in each today
      • QR check-in switched ON
      • one administrator account:
@@ -532,6 +533,15 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM dbo.Accounts WHERE Username = N'admin')
         INSERT dbo.Accounts (Username, PasswordHash, AccountType, ReferenceID, Status, MustChangePassword)
         VALUES (N'admin', @AdminPwd, 'Personnel', @AdminID, 1, 1);
+END
+GO
+
+-- If this SQL Server has the team's "ArugaSystem" login (appsettings.json with
+-- User Id=ArugaSystem instead of Trusted_Connection=True), let it use the database.
+IF SUSER_ID(N'ArugaSystem') IS NOT NULL AND USER_ID(N'ArugaSystem') IS NULL
+BEGIN
+    CREATE USER [ArugaSystem] FOR LOGIN [ArugaSystem] WITH DEFAULT_SCHEMA = dbo;
+    ALTER ROLE db_owner ADD MEMBER [ArugaSystem];
 END
 GO
 

@@ -35,9 +35,11 @@
        named Room 1, Room 2, Room 3; the test stations made during
        development (101, 102, 103, Station A/B/C) are removed.
 
-   Run in SSMS against ArugaSystemDB
-   (or: sqlcmd -S <server> -d ArugaSystemDB -i Cleanup_2026-09.sql)
+   Open in SSMS and press Execute: it switches to ArugaSystemDB by itself
+   (or: sqlcmd -S <server> -E -I -i Cleanup_2026-09.sql)
    ===================================================================== */
+
+USE ArugaSystemDB;   -- if the database doesn't exist, nothing below runs
 
 SET NOCOUNT ON;
 SET XACT_ABORT ON;

@@ -25,8 +25,11 @@
      Grandmother .......... lourdes.luna@demo.aruga.ph (Isabela Cruz's
                             second guardian, to show a relative checking in)
 
-   Run in SSMS against ArugaSystemDB (or: sqlcmd -S <server> -d ArugaSystemDB -i DemoSeed.sql)
+   Open in SSMS and press Execute: it switches to ArugaSystemDB by itself
+   (or: sqlcmd -S <server> -E -I -i DemoSeed.sql)
    ===================================================================== */
+
+USE ArugaSystemDB;   -- if the database doesn't exist, nothing below runs
 
 SET NOCOUNT ON;
 SET XACT_ABORT ON;

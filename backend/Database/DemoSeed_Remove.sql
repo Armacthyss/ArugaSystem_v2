@@ -6,7 +6,10 @@
    The rooms (Room 1, Room 2, …) are real and stay; the demo health
    workers are just taken off them.
    Real (non-demo) data is left untouched.
+   Open in SSMS and press Execute: it switches to ArugaSystemDB by itself.
    ===================================================================== */
+
+USE ArugaSystemDB;   -- if the database doesn't exist, nothing below runs
 
 SET NOCOUNT ON;
 SET XACT_ABORT ON;
