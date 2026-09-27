@@ -136,6 +136,8 @@ namespace AndroidWebAPI.Controllers
         [HttpPut("{id}")]
         public async Task<IActionResult> Update(int id, [FromBody] VaccineInventory inventory)
         {
+            // The batch ID is in the URL; a body without one means the same batch
+            if (inventory.InventoryID == 0) inventory.InventoryID = id;
             if (id != inventory.InventoryID)
                 return BadRequest("ID mismatch.");
 
@@ -143,6 +145,11 @@ namespace AndroidWebAPI.Controllers
 
             if (existing == null)
                 return NotFound();
+
+            // Dose counts only change when doses are given, so an edit made from
+            // a page opened earlier can't undo a vaccination done in between.
+            inventory.InitialQuantity = existing.InitialQuantity;
+            inventory.CurrentQuantity = existing.CurrentQuantity;
 
             var updated = await _repository.UpdateAsync(inventory);
 

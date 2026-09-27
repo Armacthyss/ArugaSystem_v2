@@ -1,5 +1,6 @@
 <script setup>
 import { API_ORIGIN } from '@/utils/apiBase'
+import { toISODate } from '@/utils/format'
 import { ref, reactive, computed, watch, onMounted } from 'vue'
 import axios from 'axios'
 import AppSidebar from './Components/AppSidebar.vue'
@@ -86,10 +87,15 @@ function formatDate(iso) {
   const d = new Date(iso)
   return isNaN(d) ? iso : d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
 }
+// "2027-12-31T00:00:00" -> "2027-12-31". Not through toISOString(): in
+// Philippine time (UTC+8) that turns midnight into the previous day, so every
+// save moved the expiry date one day earlier.
 function toDateInputValue(iso) {
   if (!iso) return ''
+  const s = String(iso)
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10)
   const d = new Date(iso)
-  return isNaN(d) ? String(iso).slice(0, 10) : d.toISOString().slice(0, 10)
+  return isNaN(d) ? '' : toISODate(d)
 }
 const startOfToday = new Date(new Date().toDateString())
 function daysUntil(iso) {
@@ -377,6 +383,7 @@ async function submitEdit() {
     // VaccineID / InitialQuantity / CurrentQuantity / ReceivedDate stay untouched here —
     // dose counts should only change through vaccination-administration actions.
     await api.updateInventory(editForm.id, {
+      inventoryID: editForm.id,
       vaccineID: raw.vaccineID,
       lotNumber: editForm.lotNumber,
       initialQuantity: raw.initialQuantity,
@@ -421,6 +428,7 @@ async function setActiveState(item, nextActive) {
   isSaving.value = true
   try {
     await api.updateInventory(item.inventoryID, {
+      inventoryID: item.inventoryID,
       vaccineID: item.vaccineID,
       lotNumber: item.lotNumber,
       initialQuantity: item.initialQuantity,

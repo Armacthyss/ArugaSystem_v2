@@ -189,6 +189,8 @@ const handleLogin = async () => {
     isLoading.value = false
   }
 }
+
+const currentYear = new Date().getFullYear()
 </script>
 
 <template>
@@ -311,8 +313,8 @@ const handleLogin = async () => {
         </button>
 
         <p class="text-center text-xs text-gray-400 mt-8 leading-relaxed">
-          This login is used by parents, healthworkers,
-          staff, and system administrators.
+          © {{ currentYear }} Aruga · Leveriza Health Center<br />
+          All rights reserved.
         </p>
       </form>
     </div>

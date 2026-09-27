@@ -35,7 +35,7 @@ namespace AndroidWebAPI.Services
             // 1. Today's code already exists -> same code all day
             var existing = await _qrRepository.GetTodayAsync(today);
             if (existing != null)
-                return (existing, null);
+                return (await WithCurrentHoursAsync(existing), null);
 
             // 2. Clinic hours for today (a schedule exception wins)
             var hours = await GetHoursAsync(today);
@@ -67,7 +67,27 @@ namespace AndroidWebAPI.Services
         public async Task<QueueQRCode?> GetActiveQRCodeAsync()
         {
             var active = await _qrRepository.GetActiveAsync();
-            return active != null && active.QRDate.Date == DateTime.Today ? active : null;
+            return active != null && active.QRDate.Date == DateTime.Today ? await WithCurrentHoursAsync(active) : null;
+        }
+
+        // A code keeps the hours it was made with, but the administrator may
+        // change today's hours afterwards (e.g. add an Operating Hours
+        // exception to open late). Keep the code's window in step with them.
+        private async Task<QueueQRCode> WithCurrentHoursAsync(QueueQRCode code)
+        {
+            var hours = await GetHoursAsync(code.QRDate.Date);
+            if (hours == null) return code;
+
+            var (open, cutoff) = hours.Value;
+            var from = code.QRDate.Date.Add(open);
+            var until = code.QRDate.Date.Add(cutoff);
+            if (code.ValidFrom != from || code.ValidUntil != until)
+            {
+                code.ValidFrom = from;
+                code.ValidUntil = until;
+                await _qrRepository.UpdateAsync(code);
+            }
+            return code;
         }
 
         public async Task<(bool Ok, string? Error)> ValidateAsync(string? code)
@@ -83,6 +103,10 @@ namespace AndroidWebAPI.Services
 
             if (!matches || today == null || !today.IsActive)
                 return (false, "That isn't today's check-in code. Please scan the QR code posted at the clinic today.");
+
+            if (await GetHoursAsync(DateTime.Today) == null)
+                return (false, "There are no vaccinations today. Please come back on the next vaccination day.");
+            today = await WithCurrentHoursAsync(today);
 
             var now = DateTime.Now;
             if (now < today.ValidFrom)

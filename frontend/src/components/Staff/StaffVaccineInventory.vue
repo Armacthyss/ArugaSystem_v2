@@ -268,6 +268,7 @@
 
 <script setup>
 import { API_ORIGIN } from '@/utils/apiBase'
+import { toISODate } from '@/utils/format'
 import { ref, reactive, computed, onMounted } from 'vue'
 import axios from 'axios'
 import { Plus, Package, AlertTriangle, Trash2, X, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-vue-next'
@@ -392,7 +393,7 @@ const handleSaveBatch = async () => {
       minimumStock: batchForm.MinimumStock ?? 0,
       expirationDate: batchForm.ExpirationDate,
       manufacturingDate: batchForm.ManufacturingDate || null,
-      receivedDate: batchForm.ReceivedDate || new Date().toISOString().slice(0, 10),
+      receivedDate: batchForm.ReceivedDate || toISODate(),
       supplier: batchForm.Supplier || null,
       status: true,
     }

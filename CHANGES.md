@@ -5,6 +5,29 @@ by who uses it. The work is on the `Aruga-Polished` git branch.
 
 ---
 
+## Full-system check (Sep 27, 2026)
+
+Every page for all four user levels was opened, and every main action was
+done once on a copy of the database: registering a family, check-in (Staff
+and the parent's QR), sending to a station, vaccinating, stock going down,
+the parent seeing the record, user/room/vaccine/inventory management,
+closures, announcements, reports, password changes and Forgot Password.
+These were fixed:
+
+- **Check-in QR ignored hours changed later in the day.** Today's QR kept the hours it was made with, so if the admin opened the day late (an Operating Hours exception, e.g. for a demo after 11 AM), parents were still told "Check-in for today closed at 11:00 AM". The QR now always follows today's Operating Hours.
+- **Admin → Inventory: Edit Batch, Deactivate and Activate failed** ("ID mismatch"). Fixed.
+- **Editing a batch moved its expiry date one day earlier** (a time-zone bug: Dec 31 was saved as Dec 30 on every save). Fixed; the manufacturing date had the same problem.
+- **Editing a batch can no longer undo doses given in the meantime.** If a nurse gave a dose while the admin had the Inventory page open, saving the batch put the old stock count back. The stock count now only changes when doses are given or a batch is received.
+- **Staff → Patient Records: "Make Primary" now saves.** Before, it only changed the screen and was lost on refresh.
+- **Staff → Patient Records: "Vaccination reminders notify: Primary Contact Only / All Linked Accounts" now saves** and controls who gets reminders. Before, it did nothing and always showed "Primary Contact Only" even though every linked account was being notified. Changing the primary contact while "Primary Contact Only" is on moves the reminders to the new primary. Both changes are in the Audit Logs.
+- **Link / Transfer guardian: the window now closes after saving.** It stayed open after a successful save, which looked like it had failed (and invited a second click).
+- **Doctor/Nurse → My Account: removed the "Email Alerts / SMS Alerts / Daily Reports" switches.** They were only saved in the browser and did nothing (Aruga sends reminders to parents, not to health workers). The card now says what is actually sent.
+- **Staff → Vaccine Schedule:** the "Child Name" search box no longer overlaps the status filter.
+- **Staff → Inventory:** a new batch without a received date is dated today even before 8 AM (it was dated the day before).
+- **Login page:** the line "This login is used by parents, healthworkers, staff, and system administrators" is replaced with "© 2026 Aruga · Leveriza Health Center. All rights reserved." (the year updates by itself).
+
+---
+
 ## Newest fixes (parent portal)
 
 - **Clinic hours and vaccination hours are shown separately.**

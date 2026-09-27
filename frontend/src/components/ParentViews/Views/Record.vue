@@ -100,11 +100,11 @@ const parentData        = ref(null)
 const children           = ref([])
 const selectedChild      = ref(null)
 
-// Opens the printable immunization record; choose "Save as PDF" in the
-// browser's print dialog to keep a copy.
+// Opens the immunization record and saves it as a PDF file; that page
+// also has a Print button for a paper copy.
 function downloadRecord() {
   if (!selectedChild.value) return
-  window.open(`/print/vaccination-card/${selectedChild.value.childID}?print=1`, '_blank')
+  window.open(`/print/vaccination-card/${selectedChild.value.childID}?download=1`, '_blank')
 }
 const showProfile        = ref(false)
 const showNotifications  = ref(false)

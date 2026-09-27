@@ -10,6 +10,8 @@ namespace AndroidWebAPI.Repositories
 
         Task<QueueQRCode> CreateAsync(QueueQRCode qrCode);
 
+        Task UpdateAsync(QueueQRCode qrCode);
+
         Task DeactivateAllAsync();
     }
 }

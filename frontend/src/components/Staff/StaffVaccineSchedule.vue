@@ -433,9 +433,9 @@ const selectedDaySchedule = computed(() => {
         <!-- Toolbar -->
         <div class="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
           <div class="flex flex-wrap items-center gap-3">
-            <div class="flex items-center gap-2 flex-1 min-w-[240px] rounded-xl border border-stone-200 px-3 py-2.5">
+            <div class="flex items-center gap-2 flex-1 min-w-[300px] rounded-xl border border-stone-200 px-3 py-2.5">
               <Search :size="16" class="text-stone-400 shrink-0" />
-              <input v-model="searchQuery" type="text" :placeholder="`Search by ${searchBy.toLowerCase()}...`" class="flex-1 text-[13px] outline-none placeholder:text-stone-400" />
+              <input v-model="searchQuery" type="text" :placeholder="`Search by ${searchBy.toLowerCase()}...`" class="flex-1 min-w-0 text-[13px] outline-none placeholder:text-stone-400" />
               <div class="relative shrink-0">
                 <select v-model="searchBy" class="appearance-none bg-stone-50 rounded-lg pl-3 pr-7 py-1.5 text-[12px] font-medium text-stone-600 outline-none cursor-pointer">
                   <option v-for="opt in searchByOptions" :key="opt" :value="opt">{{ opt }}</option>

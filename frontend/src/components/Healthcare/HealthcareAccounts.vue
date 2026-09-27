@@ -137,31 +137,17 @@
               <p v-if="doctor.prcNo" class="text-xs text-slate-400 mt-0.5">{{ doctor.prcNo }}</p>
             </div>
 
-            <!-- Notification Settings -->
+            <!-- Notifications (what Aruga actually sends) -->
             <div class="bg-white rounded-xl border border-slate-200 p-5">
               <h3 class="font-semibold text-slate-800 mb-3">
-                <Bell class="w-4 h-4 inline mr-1.5 text-slate-400" />Notification Settings
+                <Bell class="w-4 h-4 inline mr-1.5 text-slate-400" />Notifications
               </h3>
-              <div class="space-y-3">
-                <label v-for="n in notifSettings" :key="n.key"
-                  class="flex items-center justify-between cursor-pointer">
-                  <span class="text-sm text-slate-600" :class="n.highlight ? 'text-red-500 font-medium' : ''">{{ n.label }}</span>
-                  <div class="relative">
-                    <input type="checkbox" v-model="n.enabled" class="sr-only" />
-                    <div class="w-9 h-5 rounded-full transition-colors"
-                      :class="n.enabled ? 'bg-emerald-500' : 'bg-slate-200'">
-                      <div class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform"
-                        :class="n.enabled ? 'translate-x-4' : 'translate-x-0'"></div>
-                    </div>
-                  </div>
-                </label>
-              </div>
-              <p class="text-[11px] text-slate-400 mt-3 leading-relaxed">
-                In-app alerts (bell) are always on. SMS and email delivery start once the clinic's messaging gateway is connected.
+              <p class="text-sm text-slate-600 leading-relaxed">
+                Clinic notices appear in the bell at the top of the page.
               </p>
-              <button @click="saveNotifSettings" class="mt-3 w-full py-2 text-sm font-medium text-white bg-slate-700 rounded-lg hover:bg-slate-800 transition-colors">
-                {{ notifSaved ? '✓ Settings Saved' : 'Save Settings' }}
-              </button>
+              <p class="text-[11px] text-slate-400 mt-2 leading-relaxed">
+                Vaccination reminders and visit summaries go to parents by in-app notice, email and SMS. Health workers are not sent email or SMS.
+              </p>
             </div>
 
           </div>
@@ -230,7 +216,6 @@ if (!u) { router.push('/'); return }
   form.value.lastName  = u.LastName || ''
   form.value.prcNo     = doctor.value.prcNo
   loadProfile()
-  loadNotifSettings()
 })
 
 const doctorInitials = computed(() =>
@@ -278,30 +263,6 @@ async function saveProfile() {
   } finally {
     savingProfile.value = false
   }
-}
-
-// ── Notification preferences (saved per user on this device) ─
-const notifSettings = ref([
-  { key: 'email',   label: 'Email Alerts',          enabled: true,  highlight: false },
-  { key: 'sms',     label: 'SMS Alerts',            enabled: false, highlight: false },
-  { key: 'daily',   label: 'Daily Reports',         enabled: true,  highlight: false },
-])
-const notifSaved = ref(false)
-const notifKey = () => `aruga.notifSettings.${doctor.value.userId}`
-
-function loadNotifSettings() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(notifKey()) || 'null')
-    if (saved) notifSettings.value.forEach(n => { if (n.key in saved) n.enabled = saved[n.key] })
-  } catch { /* ignore a corrupt/blocked store */ }
-}
-
-function saveNotifSettings() {
-  try {
-    localStorage.setItem(notifKey(), JSON.stringify(Object.fromEntries(notifSettings.value.map(n => [n.key, n.enabled]))))
-  } catch { /* storage blocked — settings still apply for this visit */ }
-  notifSaved.value = true
-  setTimeout(() => notifSaved.value = false, 2500)
 }
 
 async function changePassword() {

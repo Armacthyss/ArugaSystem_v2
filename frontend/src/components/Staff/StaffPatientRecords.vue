@@ -52,6 +52,8 @@ const api = {
   getRelationshipsByParent:     (parentId)    => axios.get(`${API_BASE}/ChildParentRelationships/parent/${parentId}`).then(r => r.data),
   createRelationship:           (payload)     => axios.post(`${API_BASE}/ChildParentRelationships`, payload).then(r => r.data),
   deleteRelationship:           (relationshipId) => axios.delete(`${API_BASE}/ChildParentRelationships/${relationshipId}`).then(r => r.data),
+  makePrimaryContact:           (relationshipId) => axios.patch(`${API_BASE}/ChildParentRelationships/${relationshipId}/primary`).then(r => r.data),
+  setReminderRecipients:        (childId, mode)  => axios.patch(`${API_BASE}/ChildParentRelationships/child/${childId}/notifications`, { mode }).then(r => r.data),
 
   // A parent's portal login (AccountController; staff may change parent logins only)
   setAccountStatus:             (accountId, status) => axios.patch(`${API_BASE}/accounts/${accountId}/status`, { status }).then(r => r.data),
@@ -156,7 +158,7 @@ const mapChild = (c, overview = null) => {
     allergies:c.allergies||"",
     existingConditions:c.existingConditions||"",
     familyNo:c.familyNo||"",
-    vaccStatus, nextVaccine, status:"Active", address:c.address||"—", barangay:c.barangay||"—", notifyMode:"primary",
+    vaccStatus, nextVaccine, status:"Active", address:c.address||"—", barangay:c.barangay||"—",
     raw:c, // original API record, kept so edits that don't touch every field don't lose data
   };
 };
@@ -266,14 +268,28 @@ const childrenOf = (parent) => relationshipsOfParent(parent)
   }))
   .filter(x => x.child);
 
-function setPrimary(childId, relId) {
-  // The current backend does not yet expose a PUT/PATCH endpoint for
-  // changing IsPrimaryContact. Keep this as a local UI change for now.
-  relationships.value.forEach(r => {
-    if (r.childId === childId && r.status === "Active") {
-      r.isPrimary = r.id === relId;
-    }
-  });
+async function setPrimary(childId, relId) {
+  try {
+    await api.makePrimaryContact(relId);
+    await loadRelationships();
+  } catch (e) {
+    alert(`Couldn't change the primary contact: ${e.response?.data?.message || e.message}`);
+  }
+}
+
+// Reminders go to every linked account unless some links are switched off,
+// in which case only the primary contact gets them (CanReceiveNotifications).
+const notifyModeOf = (child) =>
+  relationshipsOfChild(child).every(r => r.canReceiveNotifications) ? "all" : "primary";
+
+async function setNotifyMode(child, mode) {
+  if (notifyModeOf(child) === mode) return;
+  try {
+    await api.setReminderRecipients(child.id, mode);
+    await loadRelationships();
+  } catch (e) {
+    alert(`Couldn't change who gets reminders: ${e.response?.data?.message || e.message}`);
+  }
 }
 
 /* ============================= Summary cards (per tab) ============================= */
@@ -702,6 +718,8 @@ async function confirmPicker() {
       if (freshChild) selectedChild.value = freshChild;
     }
 
+    // closePicker() won't close while a save is running, so finish it first
+    s.submitting = false;
     closePicker();
   } catch (e) {
     console.error("Error saving parent-child relationship:", e);
@@ -1378,8 +1396,8 @@ async function submitChildRegister() {
             <div class="rounded-xl bg-stone-50 p-3 mb-3">
               <p class="text-[11px] font-medium text-stone-500 mb-2">Vaccination reminders notify</p>
               <div class="flex items-center rounded-lg border border-stone-200 p-1 bg-white w-fit">
-                <button @click="selectedChild.notifyMode = 'primary'" class="rounded-md px-3 py-1.5 text-[12px] font-medium transition-colors" :class="selectedChild.notifyMode === 'primary' ? 'bg-emerald-700 text-white' : 'text-stone-500'">Primary Contact Only</button>
-                <button @click="selectedChild.notifyMode = 'all'" class="rounded-md px-3 py-1.5 text-[12px] font-medium transition-colors" :class="selectedChild.notifyMode === 'all' ? 'bg-emerald-700 text-white' : 'text-stone-500'">All Linked Accounts</button>
+                <button @click="setNotifyMode(selectedChild, 'primary')" class="rounded-md px-3 py-1.5 text-[12px] font-medium transition-colors" :class="notifyModeOf(selectedChild) === 'primary' ? 'bg-emerald-700 text-white' : 'text-stone-500'">Primary Contact Only</button>
+                <button @click="setNotifyMode(selectedChild, 'all')" class="rounded-md px-3 py-1.5 text-[12px] font-medium transition-colors" :class="notifyModeOf(selectedChild) === 'all' ? 'bg-emerald-700 text-white' : 'text-stone-500'">All Linked Accounts</button>
               </div>
             </div>
             <div class="space-y-2">

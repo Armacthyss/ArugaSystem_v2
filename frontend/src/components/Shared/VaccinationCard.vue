@@ -4,21 +4,28 @@
 
   Opens in its own tab and lays the child's record out on one page:
   details, every scheduled dose with the date given, batch and health
-  worker, and the next due dose. "Print / Save as PDF" uses the
-  browser's print dialog, so parents can keep a PDF copy too.
+  worker, and the next due dose. "Print" uses the browser's print
+  dialog; "Download PDF" saves a PDF file directly (?download=1 does
+  this automatically when the page opens).
 -->
 <template>
   <div class="min-h-screen bg-slate-100 py-8 print:bg-white print:py-0">
     <!-- Toolbar (hidden when printing) -->
     <div class="max-w-4xl mx-auto mb-4 flex items-center justify-between px-4 print:hidden">
       <button @click="goBack" class="text-sm text-slate-600 hover:text-slate-900">← Back</button>
-      <button @click="printCard" :disabled="loading || !!loadError"
-        class="text-sm font-semibold px-4 py-2 rounded-lg bg-emerald-700 text-white hover:bg-emerald-800 disabled:opacity-50">
-        Print / Save as PDF
-      </button>
+      <div class="flex items-center gap-2">
+        <button @click="downloadPdf" :disabled="loading || !!loadError || downloading"
+          class="text-sm font-semibold px-4 py-2 rounded-lg border border-emerald-700 text-emerald-800 bg-white hover:bg-emerald-50 disabled:opacity-50">
+          {{ downloading ? 'Preparing PDF...' : 'Download PDF' }}
+        </button>
+        <button @click="printCard" :disabled="loading || !!loadError"
+          class="text-sm font-semibold px-4 py-2 rounded-lg bg-emerald-700 text-white hover:bg-emerald-800 disabled:opacity-50">
+          Print
+        </button>
+      </div>
     </div>
 
-    <div class="max-w-4xl mx-auto bg-white shadow-sm border border-slate-200 rounded-xl p-8 print:shadow-none print:border-0 print:rounded-none print:p-0">
+    <div ref="cardEl" class="max-w-4xl mx-auto bg-white shadow-sm border border-slate-200 rounded-xl p-8 print:shadow-none print:border-0 print:rounded-none print:p-0">
       <div v-if="loading" class="py-20 text-center text-sm text-slate-400">Loading record...</div>
       <div v-else-if="loadError" class="py-20 text-center text-sm text-rose-600">{{ loadError }}</div>
 
@@ -111,7 +118,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import axios from 'axios'
 import logoIcon from '@/assets/logo-icon.svg'
@@ -145,13 +152,15 @@ onMounted(async () => {
     timeline.value = t.data
     records.value = r.data.filter(x => (x.status ?? 'Completed') === 'Completed')
     document.title = `Immunization Record — ${fullName.value}`
-    if (route.query.print === '1') setTimeout(() => window.print(), 400)
   } catch (e) {
     console.error('VaccinationCard:', e)
     loadError.value = 'Could not load this child\'s record.'
   } finally {
     loading.value = false
   }
+  if (loadError.value) return
+  if (route.query.download === '1') { await nextTick(); downloadPdf() }
+  else if (route.query.print === '1') setTimeout(() => window.print(), 400)
 })
 
 const fullName = computed(() => [child.value.firstName, child.value.middleName, child.value.lastName].filter(Boolean).join(' '))
@@ -197,6 +206,41 @@ const statusClass = computed(() =>
   statusLabel.value === 'Fully Immunized' ? 'text-emerald-700' : overdueCount.value ? 'text-rose-600' : 'text-sky-700')
 
 function printCard() { window.print() }
+
+// Renders the card to an image and saves it as an A4 PDF file
+// (continues onto more pages if the dose table is long).
+const cardEl = ref(null)
+const downloading = ref(false)
+async function downloadPdf() {
+  if (!cardEl.value || downloading.value) return
+  downloading.value = true
+  try {
+    const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import('html2canvas-pro'), import('jspdf')])
+    const canvas = await html2canvas(cardEl.value, { scale: 2, backgroundColor: '#ffffff', useCORS: true })
+    const pdf = new jsPDF({ unit: 'mm', format: 'a4' })
+    const margin = 10
+    const fullW = pdf.internal.pageSize.getWidth()
+    const pageW = fullW - margin * 2
+    const pageH = pdf.internal.pageSize.getHeight() - margin * 2
+    const imgH = canvas.height * pageW / canvas.width
+    const img = canvas.toDataURL('image/png')
+    for (let y = 0; y < imgH; y += pageH) {
+      if (y > 0) pdf.addPage()
+      pdf.addImage(img, 'PNG', margin, margin - y, pageW, imgH)
+      // White out the top/bottom margins so each page shows only its own slice.
+      pdf.setFillColor(255, 255, 255)
+      pdf.rect(0, 0, fullW, margin, 'F')
+      pdf.rect(0, margin + pageH, fullW, margin, 'F')
+    }
+    const safeName = (fullName.value || 'Child').replace(/[^A-Za-z0-9]+/g, '_')
+    pdf.save(`Immunization_Record_${safeName}.pdf`)
+  } catch (e) {
+    console.error('VaccinationCard PDF:', e)
+    alert('Could not create the PDF. You can use Print and choose "Save as PDF" instead.')
+  } finally {
+    downloading.value = false
+  }
+}
 function goBack() {
   if (window.history.length > 1) router.back()
   else window.close()

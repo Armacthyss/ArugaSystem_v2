@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using AndroidWebAPI.Data;
 using AndroidWebAPI.DTOs;
+using AndroidWebAPI.Services;
 
 namespace AndroidWebAPI.Controllers
 {
@@ -9,11 +11,17 @@ namespace AndroidWebAPI.Controllers
     public class ChildParentRelationshipsController : ControllerBase
     {
         private readonly IChildParentRelationshipRepository _repository;
+        private readonly AppDbContext _context;
+        private readonly AuditService _audit;
 
         public ChildParentRelationshipsController(
-            IChildParentRelationshipRepository repository)
+            IChildParentRelationshipRepository repository,
+            AppDbContext context,
+            AuditService audit)
         {
             _repository = repository;
+            _context = context;
+            _audit = audit;
         }
 
         // POST /api/ChildParentRelationships
@@ -183,5 +191,80 @@ namespace AndroidWebAPI.Controllers
                 });
             }
         }
+
+        // PATCH /api/ChildParentRelationships/{relationshipID}/primary
+        // Makes this guardian the child's one Primary Contact. When reminders
+        // go to the primary contact only, they follow the new primary.
+        [Microsoft.AspNetCore.Authorization.Authorize(Roles = Roles.StaffOrAdmin)]
+        [HttpPatch("{relationshipID}/primary")]
+        public async Task<IActionResult> MakePrimary(Guid relationshipID)
+        {
+            var target = await _context.ChildParentRelationships
+                .FirstOrDefaultAsync(r => r.RelationshipID == relationshipID && r.Status == "Active");
+            if (target == null)
+                return NotFound(new { message = "Relationship not found." });
+
+            var links = await _context.ChildParentRelationships
+                .Include(r => r.Parent)
+                .Include(r => r.Child)
+                .Where(r => r.ChildID == target.ChildID && r.Status == "Active")
+                .ToListAsync();
+            bool primaryOnly = links.Any(r => !r.CanReceiveNotifications);
+
+            foreach (var r in links)
+            {
+                r.IsPrimaryContact = r.RelationshipID == relationshipID;
+                if (primaryOnly) r.CanReceiveNotifications = r.IsPrimaryContact;
+                r.UpdatedAt = DateTime.Now;
+            }
+            await _context.SaveChangesAsync();
+
+            var parent = target.Parent;
+            await _audit.LogAsync("Patient Management", "Update",
+                $"Child – {target.Child?.FirstName} {target.Child?.LastName}",
+                $"{parent?.FirstName} {parent?.LastName} ({target.RelationshipType}) is now the primary contact.");
+
+            return Ok(new { message = "Primary contact updated." });
+        }
+
+        // PATCH /api/ChildParentRelationships/child/{childID}/notifications
+        // Who gets this child's vaccination reminders: "primary" (the primary
+        // contact only) or "all" (every linked parent/guardian).
+        [Microsoft.AspNetCore.Authorization.Authorize(Roles = Roles.StaffOrAdmin)]
+        [HttpPatch("child/{childID}/notifications")]
+        public async Task<IActionResult> SetNotifyMode(Guid childID, [FromBody] NotifyModeDto dto)
+        {
+            var mode = dto?.Mode?.Trim().ToLowerInvariant();
+            if (mode != "primary" && mode != "all")
+                return BadRequest(new { message = "Mode must be \"primary\" or \"all\"." });
+
+            var links = await _context.ChildParentRelationships
+                .Include(r => r.Child)
+                .Where(r => r.ChildID == childID && r.Status == "Active")
+                .ToListAsync();
+            if (links.Count == 0)
+                return NotFound(new { message = "This child has no linked parent or guardian." });
+            if (mode == "primary" && !links.Any(r => r.IsPrimaryContact))
+                return BadRequest(new { message = "Choose a Primary Contact first." });
+
+            foreach (var r in links)
+            {
+                r.CanReceiveNotifications = mode == "all" || r.IsPrimaryContact;
+                r.UpdatedAt = DateTime.Now;
+            }
+            await _context.SaveChangesAsync();
+
+            var child = links[0].Child;
+            await _audit.LogAsync("Patient Management", "Update",
+                $"Child – {child?.FirstName} {child?.LastName}",
+                mode == "all" ? "Reminders go to all linked accounts." : "Reminders go to the primary contact only.");
+
+            return Ok(new { message = "Reminder recipients updated." });
+        }
+    }
+
+    public class NotifyModeDto
+    {
+        public string? Mode { get; set; }
     }
 }
