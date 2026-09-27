@@ -2,6 +2,7 @@
 import { API_ORIGIN } from '@/utils/apiBase'
 import { toISODate } from '@/utils/format'
 import { ref, reactive, computed, watch, onMounted } from 'vue'
+import { useFloatingMenu } from '@/utils/floatingMenu'
 import axios from 'axios'
 import AppSidebar from './Components/AppSidebar.vue'
 import AppHeader from './Components/AppHeader.vue'
@@ -276,9 +277,7 @@ const expiredList = computed(() =>
 )
 
 /* ------------------------------ Row actions menu ---------------------------- */
-const openMenuId = ref(null)
-const toggleMenu = (id) => (openMenuId.value = openMenuId.value === id ? null : id)
-const closeMenu = () => (openMenuId.value = null)
+const { openMenuId, menuStyle, toggleMenu, closeMenu } = useFloatingMenu()
 
 /* --------------------------------- Batch details drawer --------------------------------- */
 const showDrawer = ref(false)
@@ -553,9 +552,9 @@ async function setActiveState(item, nextActive) {
         </section>
 
         <!-- ============ Table + Alerts ============ -->
-        <section class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+        <section class="grid grid-cols-1 2xl:grid-cols-[minmax(0,1fr)_20rem] gap-6 items-start">
           <!-- Grouped inventory -->
-          <div class="lg:col-span-2 bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+          <div class="min-w-0 bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
             <div class="flex items-center justify-between px-5 py-3 border-b border-slate-200 bg-slate-50/60">
               <p class="text-xs font-semibold text-slate-500">
                 {{ totalGroups }} vaccine{{ totalGroups === 1 ? '' : 's' }} · {{ totalBatchesFiltered }} batch{{ totalBatchesFiltered === 1 ? '' : 'es' }}
@@ -596,10 +595,10 @@ async function setActiveState(item, nextActive) {
                 </button>
 
                 <!-- Batch rows (lots) under this vaccine group -->
-                <div v-if="expandedGroups.has(group.vaccineID)" class="bg-slate-50/40">
+                <div v-if="expandedGroups.has(group.vaccineID)" class="bg-slate-50/40 overflow-x-auto">
                   <table class="w-full text-sm">
                     <thead>
-                      <tr class="text-left text-xs uppercase tracking-wide text-slate-400">
+                      <tr class="text-left text-xs uppercase tracking-wide text-slate-400 whitespace-nowrap">
                         <th class="font-medium pl-12 pr-3 py-2">Lot Number</th>
                         <th class="font-medium px-3 py-2">Current / Min</th>
                         <th class="font-medium px-3 py-2">Manufactured</th>
@@ -629,7 +628,7 @@ async function setActiveState(item, nextActive) {
                         </td>
                         <td class="px-3 py-2.5 whitespace-nowrap text-slate-500">{{ item.manufacturingDate ? formatDate(item.manufacturingDate) : '—' }}</td>
                         <td class="px-3 py-2.5 whitespace-nowrap text-slate-600">{{ formatDate(item.expirationDate) }}</td>
-                        <td class="px-3 py-2.5 whitespace-nowrap text-slate-500">{{ item.supplier || '—' }}</td>
+                        <td class="px-3 py-2.5 min-w-[10rem] max-w-[14rem] text-slate-500 leading-snug">{{ item.supplier || '—' }}</td>
                         <td class="px-3 py-2.5">
                           <span :class="[statusMeta[computeStatus(item)].tint, statusMeta[computeStatus(item)].text]" class="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap">
                             <span :class="statusMeta[computeStatus(item)].dot" class="w-1.5 h-1.5 rounded-full"></span>
@@ -647,14 +646,15 @@ async function setActiveState(item, nextActive) {
                         </td>
                         <td class="pr-5 py-2.5 text-right relative">
                           <button
-                            @click.stop="toggleMenu(item.inventoryID)"
+                            @click.stop="toggleMenu(item.inventoryID, $event)"
                             class="text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg w-8 h-8 inline-flex items-center justify-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                           >⋮</button>
 
+                          <Teleport to="body">
                           <div
                             v-if="openMenuId === item.inventoryID"
                             @click.stop
-                            class="absolute right-5 top-10 z-30 w-44 bg-white border border-slate-200 rounded-lg shadow-md py-1 text-left"
+                            :style="menuStyle" class="fixed z-50 w-44 bg-white border border-slate-200 rounded-lg shadow-md py-1 text-left"
                           >
                             <button @click="openDrawer(item)" class="w-full text-left px-3.5 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors">View Details</button>
                             <button @click="openEditModal(item)" class="w-full text-left px-3.5 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors">Edit Batch</button>
@@ -669,6 +669,7 @@ async function setActiveState(item, nextActive) {
                               class="w-full text-left px-3.5 py-2 text-sm text-emerald-700 hover:bg-emerald-50 transition-colors"
                             >Activate</button>
                           </div>
+                          </Teleport>
                         </td>
                       </tr>
                     </tbody>
@@ -706,7 +707,7 @@ async function setActiveState(item, nextActive) {
           </div>
 
           <!-- Inventory Alerts panel -->
-          <div class="lg:col-span-1 bg-white border border-slate-200 rounded-xl shadow-sm p-5 space-y-5">
+          <div class="bg-white border border-slate-200 rounded-xl shadow-sm p-5 space-y-5">
             <h2 class="text-sm font-bold text-slate-900">Inventory Alerts</h2>
 
             <div>
@@ -778,11 +779,11 @@ async function setActiveState(item, nextActive) {
             </div>
             <div>
               <label class="block text-xs font-semibold text-slate-500 mb-1.5">Initial Quantity</label>
-              <input v-model="receiveForm.initialQuantity" type="number" min="1" class="w-full text-sm rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-colors" />
+              <input v-model="receiveForm.initialQuantity" v-digits type="number" min="1" class="w-full text-sm rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-colors" />
             </div>
             <div>
               <label class="block text-xs font-semibold text-slate-500 mb-1.5">Minimum Stock</label>
-              <input v-model="receiveForm.minimumStock" type="number" min="0" class="w-full text-sm rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-colors" />
+              <input v-model="receiveForm.minimumStock" v-digits type="number" min="0" class="w-full text-sm rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-colors" />
             </div>
             <div>
               <label class="block text-xs font-semibold text-slate-500 mb-1.5">Expiration Date</label>
@@ -829,7 +830,7 @@ async function setActiveState(item, nextActive) {
             </div>
             <div>
               <label class="block text-xs font-semibold text-slate-500 mb-1.5">Minimum Stock</label>
-              <input v-model="editForm.minimumStock" type="number" min="0" class="w-full text-sm rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-colors" />
+              <input v-model="editForm.minimumStock" v-digits type="number" min="0" class="w-full text-sm rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-colors" />
             </div>
             <div>
               <label class="block text-xs font-semibold text-slate-500 mb-1.5">Expiration Date</label>
@@ -923,7 +924,7 @@ async function setActiveState(item, nextActive) {
         </div>
 
         <div class="border-t border-slate-200 p-4 flex items-center gap-2 shrink-0">
-          <button @click="openEditModal(selectedBatch)" class="flex-1 text-sm font-semibold px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors">Edit Batch</button>
+          <button @click="closeDrawer(); openEditModal(selectedBatch)" class="flex-1 text-sm font-semibold px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors">Edit Batch</button>
           <button @click="closeDrawer" class="text-sm font-semibold px-4 py-2 rounded-lg text-slate-500 hover:bg-slate-50 transition-colors">Close</button>
         </div>
       </aside>

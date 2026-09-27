@@ -463,6 +463,14 @@ function askSetLoginActive(p, active) {
   };
 }
 
+// "It was also emailed to x and sent by text." (empty when neither went out)
+function sentNote(emailed, texted, email) {
+  if (emailed && texted) return `It was also emailed to ${email} and sent by text.`;
+  if (emailed) return `It was also emailed to ${email}.`;
+  if (texted) return "It was also sent to them by text.";
+  return "";
+}
+
 function askResetPassword(p) {
   accountDialog.value = {
     title: `Reset ${p.name}'s password?`,
@@ -473,7 +481,7 @@ function askResetPassword(p) {
       const r = await api.resetAccountPassword(p.accountId);
       const realEmail = p.email && !/@example\.com$|@demo\./i.test(p.email);
       return {
-        text: realEmail && r.emailed ? `It was also emailed to ${p.email}.` : "Give it to the parent; it wasn't emailed.",
+        text: sentNote(realEmail && r.emailed, r.texted, p.email) || "Give it to the parent; it wasn't emailed or texted.",
         password: r.temporaryPassword,
       };
     },
@@ -862,16 +870,11 @@ function openRegisterModal(kind, ctx = {}) {
 const closeRegisterModal = () => { registerModal.value.open = false; };
 
 // ── PARENT FORM ─────────────────────────────────────────────────────
-const regParentForm = reactive({ GivenName:"", MiddleName:"", LastName:"", Email:"", ContactNo:"", BarangayNo:"", Address:"", Password:"", CreateLogin:true });
+const regParentForm = reactive({ GivenName:"", MiddleName:"", LastName:"", Email:"", ContactNo:"", BarangayNo:"", Address:"", CreateLogin:true });
 // Letters/spaces/hyphens/apostrophes/periods only — blocks digits in name fields (allows names like "St. Clair", "O'Brien").
 const lettersOnlyInput = (field) => (e) => { regParentForm[field] = e.target.value.replace(/[^a-zA-Z\s.'-]/g, ""); };
-// Digits only — blocks letters in number fields (Contact No, Barangay No).
-const numbersOnlyInput = (field) => (e) => { regParentForm[field] = e.target.value.replace(/[^0-9]/g, ""); };
-// Same rule the backend enforces (AuthController.GetPasswordComplexityError)
-const passwordRuleOk = (p) => p.length >= 8 && /[A-Z]/.test(p) && /[a-z]/.test(p) && /\d/.test(p) && /[^A-Za-z0-9]/.test(p);
-const regParentPasswordValid = computed(() => !regParentForm.CreateLogin || passwordRuleOk(regParentForm.Password));
 function resetParentForm() {
-  Object.assign(regParentForm, { GivenName:"", MiddleName:"", LastName:"", Email:"", ContactNo:"", BarangayNo:"", Address:"", Password:"", CreateLogin:true });
+  Object.assign(regParentForm, { GivenName:"", MiddleName:"", LastName:"", Email:"", ContactNo:"", BarangayNo:"", Address:"", CreateLogin:true });
   regChildSearch.value = "";
   regLinkedChildren.value = [];
 }
@@ -902,10 +905,9 @@ async function submitParentRegister() {
     error.value = "Please fill all required parent fields."; return;
   }
   if (regParentForm.CreateLogin) {
-    if (!regParentForm.Email || !regParentForm.Password) {
-      error.value = "Email and password are required to give this guardian a login."; return;
+    if (!regParentForm.Email) {
+      error.value = "Email is required to give this guardian a login."; return;
     }
-    if (!regParentPasswordValid.value) { error.value = "The temporary password needs 8+ characters with an uppercase letter, a lowercase letter, a number and a symbol."; return; }
   }
 
   registerSubmitting.value = true;
@@ -917,7 +919,9 @@ async function submitParentRegister() {
       contactNo: regParentForm.ContactNo,
       address: regParentForm.Address,
       barangayNo: regParentForm.BarangayNo,
-      password: regParentForm.CreateLogin ? regParentForm.Password : null,
+      // No password: the system makes a temporary one (same as the admin's
+      // Add User) and returns it once so staff can hand it to the parent.
+      password: null,
       createLogin: regParentForm.CreateLogin,
     });
 
@@ -941,6 +945,16 @@ async function submitParentRegister() {
 
     await loadAll();
     closeRegisterModal();
+    if (created?.temporaryPassword) {
+      const realEmail = created.email && !/@example\.com$|@demo\./i.test(created.email);
+      accountDialog.value = {
+        result: {
+          password: created.temporaryPassword,
+          text: `Give this to ${created.firstName} ${created.lastName}. They sign in with ${created.email} and will choose their own password the first time.`
+            + " " + sentNote(realEmail && created.emailed, created.texted, created.email),
+        },
+      };
+    }
     if (linkFailures > 0) {
       error.value = null;
       alert(`Parent registered, but ${linkFailures} child link(s) failed to save. You can link them from the parent's profile instead.`);
@@ -1537,14 +1551,14 @@ async function submitChildRegister() {
             </div>
             <div class="space-y-1">
               <label class="text-[10px] font-bold text-stone-400 uppercase ml-1">Contact No</label>
-              <input :value="regParentForm.ContactNo" @input="numbersOnlyInput('ContactNo')($event)" type="text" inputmode="numeric" class="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:border-emerald-500 outline-none" />
+              <input v-model="regParentForm.ContactNo" v-digits type="text" class="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:border-emerald-500 outline-none" />
             </div>
           </div>
 
           <div class="grid grid-cols-3 gap-4">
             <div class="col-span-1 space-y-1">
               <label class="text-[10px] font-bold text-stone-400 uppercase ml-1">Barangay No</label>
-              <input :value="regParentForm.BarangayNo" @input="numbersOnlyInput('BarangayNo')($event)" type="text" inputmode="numeric" class="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:border-emerald-500 outline-none" />
+              <input v-model="regParentForm.BarangayNo" v-digits type="text" class="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:border-emerald-500 outline-none" />
             </div>
             <div class="col-span-2 space-y-1">
               <label class="text-[10px] font-bold text-stone-400 uppercase ml-1">Complete Address</label>
@@ -1553,12 +1567,7 @@ async function submitChildRegister() {
           </div>
 
           <div v-if="regParentForm.CreateLogin" class="space-y-1">
-            <div class="flex justify-between items-center">
-              <label class="text-[10px] font-bold text-stone-400 uppercase ml-1">Temporary Password</label>
-              <span :class="regParentPasswordValid ? 'text-emerald-600' : 'text-rose-500'" class="text-[10px] font-bold">{{ regParentPasswordValid ? 'OK' : 'A-Z, a-z, 0-9, symbol, 8+ chars' }}</span>
-            </div>
-            <input v-model="regParentForm.Password" type="password" maxlength="32" placeholder="e.g. Aruga@2026" class="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:border-emerald-500 outline-none" />
-            <p class="text-[10px] text-stone-400 ml-1">Give this to the parent. They'll be asked to choose their own password the first time they sign in.</p>
+            <p class="text-[11px] text-stone-500 ml-1">A temporary password will be made automatically and shown after you register. Give it to the parent; they'll choose their own password the first time they sign in.</p>
           </div>
 
           <!-- LINK TO EXISTING CHILD (OPTIONAL) -->
@@ -1676,15 +1685,15 @@ async function submitChildRegister() {
             <div class="grid grid-cols-4 gap-4">
               <div class="space-y-1">
                 <label class="text-[11px] font-bold text-stone-500 ml-1">Birth Weight (kg)</label>
-                <input v-model="regChildForm.BirthWeight" type="number" step="0.01" min="0.5" max="7" placeholder="e.g. 3.2" class="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm outline-none" />
+                <input v-model="regChildForm.BirthWeight" v-digits.decimal type="number" step="0.01" min="0.5" max="7" placeholder="e.g. 3.2" class="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm outline-none" />
               </div>
               <div class="space-y-1">
                 <label class="text-[11px] font-bold text-stone-500 ml-1">Birth Height (cm)</label>
-                <input v-model="regChildForm.BirthHeight" type="number" step="0.1" min="25" max="65" placeholder="e.g. 50" class="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm outline-none" />
+                <input v-model="regChildForm.BirthHeight" v-digits.decimal type="number" step="0.1" min="25" max="65" placeholder="e.g. 50" class="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm outline-none" />
               </div>
               <div class="space-y-1">
                 <label class="text-[11px] font-bold text-stone-500 ml-1">Barangay</label>
-                <input v-model="regChildForm.Barangay" type="text" placeholder="e.g. 704" class="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm outline-none" />
+                <input v-model="regChildForm.Barangay" v-digits type="text" placeholder="e.g. 704" class="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm outline-none" />
               </div>
               <div class="space-y-1">
                 <label class="text-[11px] font-bold text-stone-500 ml-1">Family No.</label>
@@ -1750,7 +1759,7 @@ async function submitChildRegister() {
           <button @click="closeRegisterModal" class="rounded-xl px-4 py-2.5 text-[13px] font-medium text-stone-600 hover:bg-stone-50">Cancel</button>
           <button
             @click="registerModal.kind === 'parent' ? submitParentRegister() : submitChildRegister()"
-            :disabled="registerSubmitting || (registerModal.kind === 'parent' && !regParentPasswordValid)"
+            :disabled="registerSubmitting"
             class="rounded-xl px-5 py-2.5 text-[13px] font-semibold text-white bg-emerald-700 hover:bg-emerald-800 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {{ registerSubmitting ? 'Saving...' : `Register ${registerModal.kind === 'parent' ? 'Parent' : 'Child'}` }}

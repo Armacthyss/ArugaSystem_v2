@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, reactive, onMounted } from 'vue'
+import { useFloatingMenu } from '@/utils/floatingMenu'
 import axios from 'axios'
 import AppHeader from './Components/AppHeader.vue'
 import AppSidebar from './Components/AppSidebar.vue'
@@ -98,9 +99,7 @@ const exportPatients = () => {
 }
 
 /* ------------------------------ Row actions menu ---------------------------- */
-const openMenuId = ref(null)
-const toggleMenu = (id) => (openMenuId.value = openMenuId.value === id ? null : id)
-const closeMenu = () => (openMenuId.value = null)
+const { openMenuId, menuStyle, toggleMenu, closeMenu } = useFloatingMenu()
 
 const printCard = (patient) => {
   closeMenu()
@@ -432,14 +431,16 @@ const saveLink = async () => {
                   </td>
                   <td class="px-3 py-3 text-slate-500 whitespace-nowrap">{{ patient.lastVaccination }}</td>
                   <td class="px-5 py-3 text-right relative">
-                    <button @click.stop="toggleMenu(patient.id)" class="text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg w-8 h-8 inline-flex items-center justify-center transition-colors">⋮</button>
-                    <div v-if="openMenuId === patient.id" @click.stop class="absolute right-5 top-11 z-30 w-56 bg-white border border-slate-200 rounded-lg shadow-md py-1 text-left">
+                    <button @click.stop="toggleMenu(patient.id, $event)" class="text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg w-8 h-8 inline-flex items-center justify-center transition-colors">⋮</button>
+                    <Teleport to="body">
+                    <div v-if="openMenuId === patient.id" @click.stop :style="menuStyle" class="fixed z-50 w-56 bg-white border border-slate-200 rounded-lg shadow-md py-1 text-left">
                       <button @click="openDrawer(patient)" class="w-full text-left px-3.5 py-2 text-sm text-slate-700 hover:bg-slate-50">View Patient Profile</button>
                       <button @click="openEditModal(patient)" class="w-full text-left px-3.5 py-2 text-sm text-slate-700 hover:bg-slate-50">Edit Patient Information</button>
                       <button @click="printCard(patient)" class="w-full text-left px-3.5 py-2 text-sm text-slate-700 hover:bg-slate-50">Print Vaccination Card</button>
                       <div class="my-1 border-t border-slate-100"></div>
                       <button @click="openLinkModal(patient)" class="w-full text-left px-3.5 py-2 text-sm text-slate-700 hover:bg-slate-50">Link Parent / Guardian</button>
                     </div>
+                    </Teleport>
                   </td>
                 </tr>
                 <tr v-if="filteredPatients.length === 0">
@@ -499,7 +500,7 @@ const saveLink = async () => {
               </div>
               <p v-if="!selectedPatient.parents?.length" class="px-4 py-3 text-sm text-slate-400">No parent linked.</p>
             </div>
-            <button @click="openLinkModal(selectedPatient)" class="mt-3 text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50">+ Link Parent / Guardian</button>
+            <button @click="closeDrawer(); openLinkModal(selectedPatient)" class="mt-3 text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50">+ Link Parent / Guardian</button>
           </div>
 
           <div>
@@ -537,7 +538,7 @@ const saveLink = async () => {
         </div>
 
         <div class="border-t border-slate-200 p-4 flex items-center gap-2 shrink-0">
-          <button @click="openEditModal(selectedPatient)" class="flex-1 text-sm font-semibold px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700">Edit Information</button>
+          <button @click="closeDrawer(); openEditModal(selectedPatient)" class="flex-1 text-sm font-semibold px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700">Edit Information</button>
           <button @click="printCard(selectedPatient)" class="flex-1 text-sm font-semibold px-4 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50">Print Vaccination Card</button>
         </div>
       </aside>
@@ -562,11 +563,11 @@ const saveLink = async () => {
                 <div><label class="block text-xs font-semibold text-slate-500 mb-1.5">Birth Date *</label><input v-model="registerForm.birthDate" type="date" :max="toISODate()" class="field" /></div>
                 <div><label class="block text-xs font-semibold text-slate-500 mb-1.5">Sex</label><select v-model="registerForm.sex" class="field"><option>Male</option><option>Female</option></select></div>
                 <div><label class="block text-xs font-semibold text-slate-500 mb-1.5">Place of Birth</label><input v-model="registerForm.placeOfBirth" type="text" class="field" /></div>
-                <div><label class="block text-xs font-semibold text-slate-500 mb-1.5">Birth Weight (kg)</label><input v-model="registerForm.birthWeight" type="number" step="0.01" min="0.5" max="7" placeholder="e.g. 3.2" class="field" /></div>
-                <div><label class="block text-xs font-semibold text-slate-500 mb-1.5">Birth Length (cm)</label><input v-model="registerForm.birthHeight" type="number" step="0.1" min="25" max="65" placeholder="e.g. 50" class="field" /></div>
+                <div><label class="block text-xs font-semibold text-slate-500 mb-1.5">Birth Weight (kg)</label><input v-model="registerForm.birthWeight" v-digits.decimal type="number" step="0.01" min="0.5" max="7" placeholder="e.g. 3.2" class="field" /></div>
+                <div><label class="block text-xs font-semibold text-slate-500 mb-1.5">Birth Length (cm)</label><input v-model="registerForm.birthHeight" v-digits.decimal type="number" step="0.1" min="25" max="65" placeholder="e.g. 50" class="field" /></div>
                 <div><label class="block text-xs font-semibold text-slate-500 mb-1.5">Allergies</label><input v-model="registerForm.allergies" type="text" class="field" /></div>
                 <div><label class="block text-xs font-semibold text-slate-500 mb-1.5">Family No.</label><input v-model="registerForm.familyNo" type="text" class="field" /></div>
-                <div><label class="block text-xs font-semibold text-slate-500 mb-1.5">Barangay</label><input v-model="registerForm.barangay" type="number" class="field" /></div>
+                <div><label class="block text-xs font-semibold text-slate-500 mb-1.5">Barangay</label><input v-model="registerForm.barangay" v-digits type="number" class="field" /></div>
                 <div class="sm:col-span-3"><label class="block text-xs font-semibold text-slate-500 mb-1.5">Address</label><input v-model="registerForm.address" type="text" maxlength="70" class="field" /></div>
               </div>
             </div>
@@ -595,7 +596,7 @@ const saveLink = async () => {
               <div v-else class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div><label class="block text-xs font-semibold text-slate-500 mb-1.5">First Name *</label><input v-model="registerForm.newParentFirstName" type="text" class="field" /></div>
                 <div><label class="block text-xs font-semibold text-slate-500 mb-1.5">Last Name *</label><input v-model="registerForm.newParentLastName" type="text" class="field" /></div>
-                <div><label class="block text-xs font-semibold text-slate-500 mb-1.5">Contact Number *</label><input v-model="registerForm.newParentContact" type="text" class="field" /></div>
+                <div><label class="block text-xs font-semibold text-slate-500 mb-1.5">Contact Number *</label><input v-model="registerForm.newParentContact" v-digits type="text" class="field" /></div>
                 <div><label class="block text-xs font-semibold text-slate-500 mb-1.5">Email (for portal login)</label><input v-model="registerForm.newParentEmail" type="email" class="field" /></div>
               </div>
 
@@ -632,11 +633,11 @@ const saveLink = async () => {
             <div><label class="block text-xs font-semibold text-slate-500 mb-1.5">Birth Date</label><input v-model="editForm.birthDate" type="date" :max="toISODate()" class="field" /></div>
             <div><label class="block text-xs font-semibold text-slate-500 mb-1.5">Sex</label><select v-model="editForm.sex" class="field"><option>Male</option><option>Female</option></select></div>
             <div><label class="block text-xs font-semibold text-slate-500 mb-1.5">Place of Birth</label><input v-model="editForm.placeOfBirth" type="text" class="field" /></div>
-            <div><label class="block text-xs font-semibold text-slate-500 mb-1.5">Birth Weight (kg)</label><input v-model="editForm.birthWeight" type="number" step="0.01" min="0.5" max="7" placeholder="e.g. 3.2" class="field" /></div>
-            <div><label class="block text-xs font-semibold text-slate-500 mb-1.5">Birth Length (cm)</label><input v-model="editForm.birthHeight" type="number" step="0.1" min="25" max="65" placeholder="e.g. 50" class="field" /></div>
+            <div><label class="block text-xs font-semibold text-slate-500 mb-1.5">Birth Weight (kg)</label><input v-model="editForm.birthWeight" v-digits.decimal type="number" step="0.01" min="0.5" max="7" placeholder="e.g. 3.2" class="field" /></div>
+            <div><label class="block text-xs font-semibold text-slate-500 mb-1.5">Birth Length (cm)</label><input v-model="editForm.birthHeight" v-digits.decimal type="number" step="0.1" min="25" max="65" placeholder="e.g. 50" class="field" /></div>
             <div><label class="block text-xs font-semibold text-slate-500 mb-1.5">Allergies</label><input v-model="editForm.allergies" type="text" class="field" /></div>
             <div><label class="block text-xs font-semibold text-slate-500 mb-1.5">Family No.</label><input v-model="editForm.familyNo" type="text" class="field" /></div>
-            <div><label class="block text-xs font-semibold text-slate-500 mb-1.5">Barangay</label><input v-model="editForm.barangay" type="number" class="field" /></div>
+            <div><label class="block text-xs font-semibold text-slate-500 mb-1.5">Barangay</label><input v-model="editForm.barangay" v-digits type="number" class="field" /></div>
             <div class="sm:col-span-3"><label class="block text-xs font-semibold text-slate-500 mb-1.5">Address</label><input v-model="editForm.address" type="text" maxlength="70" class="field" /></div>
             <p v-if="formError" class="sm:col-span-3 text-xs text-rose-500">{{ formError }}</p>
           </div>

@@ -1,8 +1,9 @@
 <!--
   SysAd-Rooms.vue  —  /system-admin/rooms
   The clinic's vaccination rooms (Room 1, Room 2, ...). The admin keeps the
-  list matching the real rooms; the Admission Staff choose who works in each
-  room today and send patients there from their dashboard.
+  list matching the real rooms and can put a Doctor or Nurse in each room
+  (the Admission Staff can also change this from their dashboard), then the
+  staff send patients there.
 -->
 <script setup>
 import { ref, onMounted } from 'vue'
@@ -19,6 +20,7 @@ const error = ref('')
 const newName = ref('')
 const editingId = ref(null)
 const editName = ref('')
+const healthWorkers = ref([])
 
 function flash(text) {
   message.value = text
@@ -85,7 +87,31 @@ async function removeRoom(room) {
   }
 }
 
-onMounted(load)
+// Active Doctors and Nurses for the "who's in this room" dropdown.
+async function loadHealthWorkers() {
+  try {
+    const res = await axios.get(`${API_BASE}/Users`, { params: { position: 'Doctor,Nurse' } })
+    healthWorkers.value = res.data.filter(u => u.status === 'Active')
+  } catch (e) {
+    console.error('loadHealthWorkers:', e)
+  }
+}
+
+// Same endpoint the Admission Staff use; a worker is moved off any other room.
+async function setWorker(room, userId) {
+  error.value = ''
+  try {
+    await axios.put(`${API_BASE}/Vaccination/rooms/${room.roomId}/worker`, { userId: userId || null })
+    const w = healthWorkers.value.find(x => x.userID === userId)
+    flash(w ? `${w.firstName} ${w.lastName} assigned to ${room.roomName}.` : `${room.roomName} has no health worker now.`)
+  } catch (e) {
+    error.value = e.response?.data?.message || 'Could not update this room.'
+  } finally {
+    await load()
+  }
+}
+
+onMounted(() => { load(); loadHealthWorkers() })
 </script>
 
 <template>
@@ -98,8 +124,8 @@ onMounted(load)
       <main class="p-6">
         <div class="max-w-3xl space-y-5">
           <p class="text-sm text-slate-600">
-            Keep this list the same as the rooms at Leveriza Health Center. Every clinic day, the Admission Staff
-            choose which Doctor or Nurse works in each room and send checked-in patients to a room from their dashboard.
+            Keep this list the same as the rooms at Leveriza Health Center and choose which Doctor or Nurse works in
+            each room. The Admission Staff can also change this from their dashboard, and send checked-in patients to a room.
           </p>
 
           <div class="bg-white border border-slate-200 rounded-xl shadow-sm">
@@ -121,7 +147,7 @@ onMounted(load)
             <p v-if="loading" class="px-5 py-6 text-sm text-slate-400">Loading…</p>
 
             <ul v-else class="divide-y divide-slate-100">
-              <li v-for="room in rooms" :key="room.roomId" class="px-5 py-3.5 flex items-center gap-4">
+              <li v-for="room in rooms" :key="room.roomId" class="px-5 py-3.5 flex flex-wrap sm:flex-nowrap items-center gap-4">
                 <div class="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
                   <DoorOpen class="w-4 h-4" />
                 </div>
@@ -141,6 +167,20 @@ onMounted(load)
                     </p>
                   </template>
                 </div>
+
+                <select
+                  v-if="editingId !== room.roomId"
+                  :value="room.workerId || ''"
+                  :disabled="!!room.currentQueueId"
+                  :title="room.currentQueueId ? 'Finish the current patient before changing the health worker' : 'Health worker in this room'"
+                  class="w-52 shrink-0 text-sm rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:bg-slate-50 disabled:text-slate-400"
+                  @change="setWorker(room, $event.target.value)"
+                >
+                  <option value="">— No health worker —</option>
+                  <option v-for="w in healthWorkers" :key="w.userID" :value="w.userID">
+                    {{ w.position === 'Doctor' ? 'Dr.' : 'Nurse' }} {{ w.firstName }} {{ w.lastName }}
+                  </option>
+                </select>
 
                 <span v-if="room.currentQueueId" class="text-[11px] font-semibold px-2 py-1 rounded-full bg-amber-50 text-amber-700">Busy</span>
 

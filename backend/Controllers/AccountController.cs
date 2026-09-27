@@ -204,6 +204,11 @@ Position = dto.Role,
         $"Username: {username}\nTemporary password: {temporaryPassword}\n\n" +
         "You'll be asked to choose your own password the first time you sign in.");
 
+    // ...and by text (test accounts are never texted)
+    bool texted = await TextTemporaryPasswordAsync(sender, dto.ContactNo, dto.Email,
+        $"Aruga - Leveriza Health Center: your staff account is ready. Username: {username} " +
+        $"Temporary password: {temporaryPassword} You will choose your own password the first time you sign in.");
+
     // =========================================================
     // RETURN GENERATED CREDENTIALS
     // =========================================================
@@ -231,8 +236,19 @@ Position = dto.Role,
         },
 
         temporaryPassword,
-        emailed
+        emailed,
+        texted
     });
+}
+
+// Texts a new temporary password to the account owner. False when no text
+// actually went out (no SMS provider, test account, bad number, daily limit).
+private static async Task<bool> TextTemporaryPasswordAsync(
+    AndroidWebAPI.Services.MessageSender sender, string? contactNo, string? email, string text)
+{
+    bool testAccount = AndroidWebAPI.Services.MessageSender.IsTestAddress(email);
+    return await sender.SendSmsAsync(contactNo, text, demoRecipient: testAccount)
+        && sender.SmsEnabled && !testAccount;
 }
 
          
@@ -310,22 +326,28 @@ Position = dto.Role,
                 $"Account – {account.Username}",
                 "Reset the account password to a temporary one (must be changed on next login).");
 
-            // Tell the owner their temporary password, by email
-            string? email = account.AccountType == "Parent"
-                ? await _context.Parents.Where(p => p.ParentID == account.ReferenceID).Select(p => p.Email).FirstOrDefaultAsync()
-                : await _context.Users.Where(u => u.UserID == account.ReferenceID).Select(u => u.Email).FirstOrDefaultAsync();
-            bool emailed = await sender.SendEmailAsync(email, "Your Aruga password was reset",
+            // Tell the owner their temporary password, by email and text
+            var owner = account.AccountType == "Parent"
+                ? await _context.Parents.Where(p => p.ParentID == account.ReferenceID)
+                    .Select(p => new { p.Email, p.ContactNo }).FirstOrDefaultAsync()
+                : await _context.Users.Where(u => u.UserID == account.ReferenceID)
+                    .Select(u => new { u.Email, u.ContactNo }).FirstOrDefaultAsync();
+            bool emailed = await sender.SendEmailAsync(owner?.Email, "Your Aruga password was reset",
                 $"Leveriza Health Center reset the password for your Aruga account ({account.Username}).\n\n" +
                 $"Temporary password: {temporaryPassword}\n\n" +
                 "You'll be asked to choose your own password the next time you sign in. " +
                 "If you didn't ask for this, please contact Leveriza Health Center.");
+            bool texted = await TextTemporaryPasswordAsync(sender, owner?.ContactNo, owner?.Email,
+                $"Aruga - Leveriza Health Center reset your password ({account.Username}). " +
+                $"Temporary password: {temporaryPassword} You will choose a new one when you sign in.");
 
             return Ok(new
             {
                 message = "Password reset successfully.",
                 accountID = account.AccountID,
                 temporaryPassword,
-                emailed
+                emailed,
+                texted
             });
         }
 
@@ -366,12 +388,10 @@ private static string NormalizeName(string name)
             const string characters =
                 "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
 
-            var random = new Random();
-
             return new string(
                 Enumerable
                     .Range(0, 10)
-                    .Select(_ => characters[random.Next(characters.Length)])
+                    .Select(_ => characters[System.Security.Cryptography.RandomNumberGenerator.GetInt32(characters.Length)])
                     .ToArray()
             );
         }

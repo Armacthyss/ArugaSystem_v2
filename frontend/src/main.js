@@ -6,6 +6,7 @@ import App from './App.vue'
 import router from '@/router'
 import { getToken, logout } from '@/utils/auth'
 import { API_ORIGIN } from '@/utils/apiBase'
+import { digits } from '@/utils/digits'
 
 // Is this URL a call to our API? (API_ORIGIN is empty when the API is reached
 // through this site's own /api path — see utils/apiBase.js.)
@@ -77,4 +78,5 @@ window.fetch = async (input, init = {}) => {
 const app = createApp(App)
 
 app.use(router)
+app.directive('digits', digits) // numbers-only inputs, see utils/digits.js
 app.mount('#app')

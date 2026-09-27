@@ -10,6 +10,7 @@ import {
 import StaffSidebar from "./StaffSidebar.vue";
 import StaffTopbar from "./StaffTopbar.vue";
 import { API_BASE, ageLabel, formatDate, toISODate, downloadCSV } from "@/utils/format";
+import { useFloatingMenu } from "@/utils/floatingMenu";
 
 /* ---------------------------------------------------------
    Aruga Pediatric System — Vaccine Schedule (Admission Staff)
@@ -224,10 +225,11 @@ function toggleExpand(key) {
   expandedRows.value = next;
 }
 
-const actionsMenuOpenFor = ref(null);
-function toggleActionsMenu(id) {
-  actionsMenuOpenFor.value = actionsMenuOpenFor.value === id ? null : id;
-}
+const {
+  openMenuId: actionsMenuOpenFor,
+  menuStyle: actionsMenuStyle,
+  toggleMenu: toggleActionsMenu,
+} = useFloatingMenu(110);
 
 /* ---------------- Actions ---------------- */
 const queueingKey = ref("");
@@ -555,10 +557,11 @@ const selectedDaySchedule = computed(() => {
                               <ListPlus :size="14" /> Add to Queue
                             </button>
                             <span v-else-if="appt.inQueue" class="text-[11.5px] text-stone-500 px-2">In queue {{ appt.queueNo }}</span>
-                            <button @click="toggleActionsMenu(appt.key)" class="p-1.5 rounded-lg hover:bg-stone-100 ml-auto" title="More actions">
+                            <button @click="toggleActionsMenu(appt.key, $event)" class="p-1.5 rounded-lg hover:bg-stone-100 ml-auto" title="More actions">
                               <MoreHorizontal :size="15" class="text-stone-500" />
                             </button>
-                            <div v-if="actionsMenuOpenFor === appt.key" class="absolute right-0 top-9 z-40 w-52 rounded-xl border border-stone-200 bg-white shadow-lg py-1.5">
+                            <Teleport to="body">
+                            <div v-if="actionsMenuOpenFor === appt.key" @click.stop :style="actionsMenuStyle" class="fixed z-50 w-52 rounded-xl border border-stone-200 bg-white shadow-lg py-1.5">
                               <button @click="viewPatient(appt)" class="flex w-full items-center gap-2.5 px-3.5 py-2 text-[12.5px] text-stone-700 hover:bg-stone-50">
                                 <Eye :size="15" class="text-stone-500" /> Open Patient Records
                               </button>
@@ -566,6 +569,7 @@ const selectedDaySchedule = computed(() => {
                                 <Printer :size="15" class="text-stone-500" /> Print Vaccination Card
                               </button>
                             </div>
+                            </Teleport>
                           </div>
                         </td>
                       </tr>

@@ -381,6 +381,9 @@ function loadParentSession() {
     middleName: rawUser.middleName ?? rawUser.MiddleName,
     lastName: rawUser.lastName ?? rawUser.LastName,
     email: rawUser.email ?? rawUser.Email,
+    contactNo: rawUser.contactNo ?? rawUser.ContactNo,
+    barangayNo: rawUser.barangayNo ?? rawUser.BarangayNo,
+    address: rawUser.address ?? rawUser.Address,
   }
 
   if (!parentData.value?.parentID) {

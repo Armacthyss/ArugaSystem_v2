@@ -1,6 +1,7 @@
 <script setup>
 import { API_ORIGIN } from '@/utils/apiBase'
 import { ref, computed, reactive, onMounted } from 'vue'
+import { useFloatingMenu } from '@/utils/floatingMenu'
 import axios from 'axios'
 import AppSidebar from './Components/AppSidebar.vue'
 import AppHeader from './Components/AppHeader.vue'
@@ -112,9 +113,7 @@ const summary = computed(() => ({
 const initials = (u) => `${u.firstName[0] ?? ''}${u.lastName[0] ?? ''}`.toUpperCase()
 
 /* ------------------------------ Row actions menu ---------------------------- */
-const openMenuId = ref(null)
-const toggleMenu = (id) => (openMenuId.value = openMenuId.value === id ? null : id)
-const closeMenu = () => (openMenuId.value = null)
+const { openMenuId, menuStyle, toggleMenu, closeMenu } = useFloatingMenu()
 
 const actionError = ref('')
 
@@ -157,6 +156,7 @@ async function resetPassword(user) {
       username: user.username,
       password: response.data.temporaryPassword,
       emailed: !!response.data.emailed,
+      texted: !!response.data.texted,
     }
     showTempPasswordModal.value = true
   } catch (error) {
@@ -314,6 +314,7 @@ async function createUser() {
 let generatedUsername = ''
 let createdName = `${addForm.firstName} ${addForm.lastName}`
 let emailed = false
+let texted = false
 
     if (addForm.role === 'Parent') {
       const response = await axios.post(`${API_BASE_URL}/Parents`, {
@@ -328,6 +329,7 @@ let emailed = false
       temporaryPassword = response.data.temporaryPassword
       generatedUsername = addForm.email
       emailed = !!response.data.emailed
+      texted = !!response.data.texted
     } else {
       const response = await axios.post(`${API_BASE_URL}/accounts/personnel`, {
   firstName: addForm.firstName,
@@ -343,6 +345,7 @@ let emailed = false
 generatedUsername = response.data.account?.username || ''
 temporaryPassword = response.data.temporaryPassword
 emailed = !!response.data.emailed
+texted = !!response.data.texted
     }
 
     showAddModal.value = false
@@ -353,6 +356,7 @@ emailed = !!response.data.emailed
   username: generatedUsername,
   password: temporaryPassword,
   emailed,
+  texted,
 }
     showTempPasswordModal.value = true
 
@@ -522,16 +526,17 @@ emailed = !!response.data.emailed
                   <td class="px-3 py-3 text-slate-500 whitespace-nowrap">{{ user.created }}</td>
                   <td class="px-5 py-3 text-right relative">
                     <button
-                      @click.stop="toggleMenu(user.id)"
+                      @click.stop="toggleMenu(user.id, $event)"
                       class="text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg w-8 h-8 inline-flex items-center justify-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                     >
                       ⋮
                     </button>
 
+                    <Teleport to="body">
                     <div
                       v-if="openMenuId === user.id"
                       @click.stop
-                      class="absolute right-5 top-11 z-30 w-48 bg-white border border-slate-200 rounded-lg shadow-md py-1 text-left"
+                      :style="menuStyle" class="fixed z-50 w-48 bg-white border border-slate-200 rounded-lg shadow-md py-1 text-left"
                     >
                       <button @click="openDrawer(user)" class="w-full text-left px-3.5 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors">View Details</button>
                       <button v-if="user.role !== 'Parent'" @click="openEditModal(user)" class="w-full text-left px-3.5 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors">Edit Profile</button>
@@ -540,6 +545,7 @@ emailed = !!response.data.emailed
                       <button v-if="user.status !== 'Active'" @click="setStatus(user, 'Active')" class="w-full text-left px-3.5 py-2 text-sm text-emerald-700 hover:bg-emerald-50 transition-colors">Activate</button>
                       <button v-if="user.status === 'Active'" @click="setStatus(user, 'Inactive')" class="w-full text-left px-3.5 py-2 text-sm text-slate-600 hover:bg-slate-50 transition-colors">Deactivate</button>
                     </div>
+                    </Teleport>
                   </td>
                 </tr>
 
@@ -613,7 +619,7 @@ emailed = !!response.data.emailed
         </div>
 
         <div class="border-t border-slate-200 p-4 flex items-center gap-2 shrink-0">
-          <button v-if="selectedUser?.role !== 'Parent'" @click="openEditModal(selectedUser)" class="flex-1 text-sm font-semibold px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors">Edit Profile</button>
+          <button v-if="selectedUser?.role !== 'Parent'" @click="closeDrawer(); openEditModal(selectedUser)" class="flex-1 text-sm font-semibold px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors">Edit Profile</button>
           <button @click="resetPassword(selectedUser)" class="flex-1 text-sm font-semibold px-4 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors">Reset Password</button>
           <button @click="closeDrawer" class="text-sm font-semibold px-4 py-2 rounded-lg text-slate-500 hover:bg-slate-50 transition-colors">Close</button>
         </div>
@@ -646,7 +652,7 @@ emailed = !!response.data.emailed
             </div>
             <div v-if="editForm.role === 'Doctor' || editForm.role === 'Nurse'" class="sm:col-span-3">
               <label class="block text-xs font-semibold text-slate-500 mb-1.5">Professional License No. (PRC)</label>
-              <input v-model="editForm.prcNo" type="text" class="w-full text-sm rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white" />
+              <input v-model="editForm.prcNo" v-digits type="text" class="w-full text-sm rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white" />
             </div>
             <div class="sm:col-span-2">
               <label class="block text-xs font-semibold text-slate-500 mb-1.5">Email</label>
@@ -654,7 +660,7 @@ emailed = !!response.data.emailed
             </div>
             <div>
               <label class="block text-xs font-semibold text-slate-500 mb-1.5">Contact No.</label>
-              <input v-model="editForm.contactNo" type="text" class="w-full text-sm rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white" />
+              <input v-model="editForm.contactNo" v-digits type="text" class="w-full text-sm rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white" />
             </div>
             <div class="sm:col-span-3">
               <label class="block text-xs font-semibold text-slate-500 mb-1.5">Address</label>
@@ -709,7 +715,7 @@ emailed = !!response.data.emailed
             <!-- Doctor/Nurse-only: License number -->
             <div v-if="showLicenseField">
               <label class="block text-xs font-semibold text-slate-500 mb-1.5">License / PRC Number</label>
-              <input v-model="addForm.licenseNumber" type="text" class="w-full text-sm rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-colors" />
+              <input v-model="addForm.licenseNumber" v-digits type="text" class="w-full text-sm rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-colors" />
             </div>
 
             <div>
@@ -718,13 +724,13 @@ emailed = !!response.data.emailed
             </div>
             <div>
               <label class="block text-xs font-semibold text-slate-500 mb-1.5">Contact Number</label>
-              <input v-model="addForm.contactNo" type="text" class="w-full text-sm rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-colors" />
+              <input v-model="addForm.contactNo" v-digits type="text" class="w-full text-sm rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-colors" />
             </div>
 
             <!-- Parent-only: Barangay -->
             <div v-if="!isPersonnelRole">
               <label class="block text-xs font-semibold text-slate-500 mb-1.5">Barangay No.</label>
-              <input v-model="addForm.barangayNo" type="text" class="w-full text-sm rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-colors" />
+              <input v-model="addForm.barangayNo" v-digits type="text" class="w-full text-sm rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-colors" />
             </div>
 
             <div :class="isPersonnelRole ? 'sm:col-span-2' : ''">
@@ -797,7 +803,7 @@ emailed = !!response.data.emailed
     </button>
   </div>
 </div>
-          <p v-if="tempPasswordResult?.emailed" class="text-xs text-emerald-700 mb-2">A copy was also sent to their email address.</p>
+          <p v-if="tempPasswordResult?.emailed || tempPasswordResult?.texted" class="text-xs text-emerald-700 mb-2">{{ tempPasswordResult.emailed && tempPasswordResult.texted ? 'A copy was also sent to their email and by text message.' : tempPasswordResult.emailed ? 'A copy was also sent to their email address.' : 'A copy was also sent to them by text message.' }}</p>
           <p v-if="copyStatus" class="text-xs text-emerald-600 mb-4">{{ copyStatus }}</p>
           <p v-else class="text-xs text-transparent mb-4">placeholder</p>
 

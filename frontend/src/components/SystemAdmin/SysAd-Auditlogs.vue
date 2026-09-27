@@ -108,6 +108,8 @@ const openDrawer = (log) => {
   showDrawer.value = true
 }
 const closeDrawer = () => (showDrawer.value = false)
+const hasValueChange = (log) =>
+  [log?.oldValue, log?.newValue].some(v => v && v !== '—')
 
 /* -------------------------------- Timeline ---------------------------- */
 const timeline = computed(() => logs.value.slice(0, 6))
@@ -379,7 +381,8 @@ const timeline = computed(() => logs.value.slice(0, 6))
             </div>
           </div>
 
-          <div>
+          <!-- Before/after values, only for actions that record them (edits, status changes) -->
+          <div v-if="hasValueChange(selectedLog)">
             <h3 class="text-xs font-bold uppercase tracking-wide text-slate-500 mb-2">Value Change</h3>
             <div class="grid grid-cols-1 gap-3">
               <div class="rounded-lg border border-rose-100 bg-rose-50/60 px-4 py-3">

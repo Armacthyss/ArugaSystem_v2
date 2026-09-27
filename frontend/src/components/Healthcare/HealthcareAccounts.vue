@@ -55,7 +55,7 @@
                   <label class="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-1.5">
                     <Phone class="w-3 h-3 inline mr-1" />Contact Number
                   </label>
-                  <input v-model="form.contactNo" type="text"
+                  <input v-model="form.contactNo" v-digits type="text"
                     class="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500" />
                 </div>
                 <!-- Read-only: Role -->

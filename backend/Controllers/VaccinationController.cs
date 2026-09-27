@@ -131,14 +131,23 @@ namespace AndroidWebAPI.Controllers
                 foreach (var other in otherStations) other.AssignedDoctorID = null;
             }
 
+            // Who was here before, for the audit log's Old Value
+            var previous = room.AssignedDoctorID.HasValue
+                ? await _context.Users.FirstOrDefaultAsync(u => u.UserID == room.AssignedDoctorID.Value)
+                : null;
+
             room.AssignedDoctorID = request.UserId;
             await _context.SaveChangesAsync();
+
+            static string WorkerText(User? u) => u != null ? $"{u.Position} {u.FirstName} {u.LastName}" : "No health worker";
 
             await _audit.LogAsync("Queue", "Assign Station",
                 $"Station {room.RoomNumber}",
                 worker != null
                     ? $"Stationed {worker.Position} {worker.FirstName} {worker.LastName} at {room.RoomNumber}."
-                    : $"Cleared the health worker from {room.RoomNumber}.");
+                    : $"Cleared the health worker from {room.RoomNumber}.",
+                oldValue: WorkerText(previous),
+                newValue: WorkerText(worker));
 
             return Ok(new { message = "Station updated.", roomId, workerId = request.UserId });
         }

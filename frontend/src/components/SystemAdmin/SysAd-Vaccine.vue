@@ -2,6 +2,7 @@
 import { API_ORIGIN } from '@/utils/apiBase'
 import axios from "axios"
 import { ref, computed, onMounted } from "vue"
+import { useFloatingMenu } from "@/utils/floatingMenu"
 import AppSidebar from "./Components/AppSidebar.vue"
 import AppHeader from "./Components/AppHeader.vue"
 import { downloadCSV, toISODate } from "@/utils/format"
@@ -249,9 +250,7 @@ const summary = computed(() => ({
 }))
 
 /* ------------------------------ Row actions menu ---------------------------- */
-const openMenuId = ref(null)
-const toggleMenu = (id) => (openMenuId.value = openMenuId.value === id ? null : id)
-const closeMenu = () => (openMenuId.value = null)
+const { openMenuId, menuStyle, toggleMenu, closeMenu } = useFloatingMenu()
 
 async function setStatus(vaccine, activate) {
   const updated = { ...vaccine, status: activate }
@@ -717,16 +716,17 @@ async function save() {
                   </td>
                   <td class="px-5 py-3 text-right relative">
                     <button
-                      @click.stop="toggleMenu(vaccine.vaccineID)"
+                      @click.stop="toggleMenu(vaccine.vaccineID, $event)"
                       class="text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg w-8 h-8 inline-flex items-center justify-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                     >
                       ⋮
                     </button>
 
+                    <Teleport to="body">
                     <div
                       v-if="openMenuId === vaccine.vaccineID"
                       @click.stop
-                      class="absolute right-5 top-11 z-30 w-48 bg-white border border-slate-200 rounded-lg shadow-md py-1 text-left"
+                      :style="menuStyle" class="fixed z-50 w-48 bg-white border border-slate-200 rounded-lg shadow-md py-1 text-left"
                     >
                       <button @click="openDrawer(vaccine)" class="w-full text-left px-3.5 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors">View Details</button>
                       <button @click="edit(vaccine)" class="w-full text-left px-3.5 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors">Edit Vaccine</button>
@@ -735,6 +735,7 @@ async function save() {
                       <button v-if="vaccine.status" @click="setStatus(vaccine, false)" class="w-full text-left px-3.5 py-2 text-sm text-slate-600 hover:bg-slate-50 transition-colors">Deactivate</button>
                       <button @click="remove(vaccine.vaccineID)" class="w-full text-left px-3.5 py-2 text-sm text-rose-600 hover:bg-rose-50 transition-colors">Delete</button>
                     </div>
+                    </Teleport>
                   </td>
                 </tr>
 
@@ -817,7 +818,7 @@ async function save() {
         </div>
 
         <div class="border-t border-slate-200 p-4 flex items-center gap-2 shrink-0">
-          <button @click="edit(selectedVaccine)" class="flex-1 text-sm font-semibold px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors">Edit Vaccine</button>
+          <button @click="closeDrawer(); edit(selectedVaccine)" class="flex-1 text-sm font-semibold px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors">Edit Vaccine</button>
           <button @click="closeDrawer" class="text-sm font-semibold px-4 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors">Close</button>
         </div>
       </aside>
@@ -939,7 +940,7 @@ async function save() {
 
                     <div v-if="dose.recommendedAgePreset === CUSTOM_OPTION" class="flex gap-2 mt-2">
                       <input
-                        v-model.number="dose.recommendedAgeCustomValue"
+                        v-model.number="dose.recommendedAgeCustomValue" v-digits
                         @input="onAgeCustomChange(dose, index)"
                         type="number"
                         min="0"

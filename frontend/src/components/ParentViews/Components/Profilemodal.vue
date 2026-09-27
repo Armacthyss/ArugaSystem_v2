@@ -6,7 +6,7 @@
           <div class="w-16 h-16 rounded-xl bg-white/20 flex items-center justify-center text-4xl shadow-lg shrink-0">👤</div>
           <div class="flex-1 min-w-0">
             <p class="text-white font-bold text-xl leading-tight">
-              {{ parentData?.firstName }} {{ parentData?.middleName ? parentData.middleName + ' ' : '' }}{{ parentData?.lastName }}
+              {{ info?.firstName }} {{ info?.middleName ? info.middleName + ' ' : '' }}{{ info?.lastName }}
             </p>
             <p class="text-slate-300 text-xs font-medium mt-1">Parent/Guardian Account · Aruga Pediatric Portal</p>
           </div>
@@ -16,10 +16,10 @@
           <div>
             <p class="text-[10px] font-semibold text-emerald-600 uppercase tracking-wide mb-4">Your Information</p>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div class="bg-slate-50 rounded-xl px-5 py-4"><p class="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Email Address</p><p class="text-sm font-bold text-slate-800 break-all">{{ parentData?.email || '—' }}</p></div>
-              <div class="bg-slate-50 rounded-xl px-5 py-4"><p class="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Contact Number</p><p class="text-sm font-bold text-slate-800">{{ parentData?.contactNo || parentData?.contactNumber || '—' }}</p></div>
-              <div class="bg-slate-50 rounded-xl px-5 py-4"><p class="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Barangay</p><p class="text-sm font-bold text-slate-800">{{ parentData?.barangayNo || parentData?.barangay || '—' }}</p></div>
-              <div class="bg-slate-50 rounded-xl px-5 py-4"><p class="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Address</p><p class="text-sm font-bold text-slate-800">{{ parentData?.address || '—' }}</p></div>
+              <div class="bg-slate-50 rounded-xl px-5 py-4"><p class="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Email Address</p><p class="text-sm font-bold text-slate-800 break-all">{{ info?.email || '—' }}</p></div>
+              <div class="bg-slate-50 rounded-xl px-5 py-4"><p class="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Contact Number</p><p class="text-sm font-bold text-slate-800">{{ info?.contactNo || info?.contactNumber || '—' }}</p></div>
+              <div class="bg-slate-50 rounded-xl px-5 py-4"><p class="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Barangay</p><p class="text-sm font-bold text-slate-800">{{ info?.barangayNo || info?.barangay || '—' }}</p></div>
+              <div class="bg-slate-50 rounded-xl px-5 py-4"><p class="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Address</p><p class="text-sm font-bold text-slate-800">{{ info?.address || '—' }}</p></div>
             </div>
           </div>
 
@@ -134,7 +134,7 @@
 
 <script setup>
 import { API_ORIGIN } from '@/utils/apiBase'
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import axios from 'axios'
 import { format } from 'date-fns'
 
@@ -149,6 +149,19 @@ const props = defineProps({
 })
 
 defineEmits(['close'])
+
+// The page's copy of the parent's details is from sign-in; load the current
+// ones so edits the clinic staff made since then show up here too.
+const latest = ref(null)
+const info = computed(() => ({ ...props.parentData, ...(latest.value || {}) }))
+onMounted(async () => {
+  if (!props.parentData?.parentID) return
+  try {
+    latest.value = (await axios.get(`${API_BASE_URL}/api/Parents/${props.parentData.parentID}`)).data
+  } catch (e) {
+    console.error('Profilemodal: could not load current details', e)
+  }
+})
 
 function formatDisplayDate(date) {
   if (!date) return '—'

@@ -39,6 +39,7 @@
               </button>
             </div>
             <p v-if="stockCheckMessage" class="px-6 pt-3 text-xs font-semibold text-emerald-700">{{ stockCheckMessage }}</p>
+            <div class="overflow-x-auto">
             <table class="w-full text-left text-sm">
               <thead class="text-[10px] uppercase font-bold text-slate-400">
                 <tr>
@@ -75,6 +76,7 @@
                 </tr>
               </tbody>
             </table>
+            </div>
           </div>
 
           <!-- SUMMARY STATS (computed from real inventory data) -->
@@ -104,6 +106,7 @@
 
           <!-- INVENTORY TABLE -->
           <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+            <div class="overflow-x-auto">
             <table class="w-full text-left text-sm">
               <thead class="bg-slate-50/50 border-b border-slate-200 text-[11px] uppercase font-bold text-slate-500">
                 <tr>
@@ -153,6 +156,7 @@
                 </tr>
               </tbody>
             </table>
+            </div>
             <!-- PAGINATION -->
             <div v-if="inventory.length > 0" class="flex items-center justify-between px-6 py-3.5 border-t border-slate-100 flex-wrap gap-3">
               <div class="flex items-center gap-3">
@@ -221,7 +225,7 @@
               </div>
               <div>
                 <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Doses Received</label>
-                <input v-model.number="batchForm.InitialQuantity" type="number" min="0" placeholder="0" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:border-emerald-500 outline-none">
+                <input v-model.number="batchForm.InitialQuantity" v-digits type="number" min="0" placeholder="0" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:border-emerald-500 outline-none">
               </div>
             </div>
 
@@ -244,7 +248,7 @@
             <div class="grid grid-cols-2 gap-3">
               <div>
                 <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Minimum Stock</label>
-                <input v-model.number="batchForm.MinimumStock" type="number" min="0" placeholder="e.g. 50" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:border-emerald-500 outline-none">
+                <input v-model.number="batchForm.MinimumStock" v-digits type="number" min="0" placeholder="e.g. 50" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:border-emerald-500 outline-none">
               </div>
               <div>
                 <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Supplier</label>

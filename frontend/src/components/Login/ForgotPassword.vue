@@ -190,7 +190,7 @@ const sendAgain = () => {
         <div class="mb-6">
           <label class="block mb-2 text-sm font-semibold text-gray-700">Verification Code</label>
           <input
-            v-model="otp"
+            v-model="otp" v-digits
             type="text"
             inputmode="numeric"
             autocomplete="one-time-code"

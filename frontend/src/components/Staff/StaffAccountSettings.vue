@@ -47,7 +47,7 @@
               </div>
               <div>
                 <label class="block text-[12px] font-medium text-stone-600 mb-1">Mobile Number</label>
-                <input v-model="contact.contactNo" type="tel" placeholder="09XXXXXXXXX" class="w-full rounded-xl border border-stone-200 px-3 py-2.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-emerald-600/30 focus:border-emerald-600" />
+                <input v-model="contact.contactNo" v-digits type="tel" placeholder="09XXXXXXXXX" class="w-full rounded-xl border border-stone-200 px-3 py-2.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-emerald-600/30 focus:border-emerald-600" />
               </div>
               <div class="col-span-2">
                 <label class="block text-[12px] font-medium text-stone-600 mb-1">Address</label>

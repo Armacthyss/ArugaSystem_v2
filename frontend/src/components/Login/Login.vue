@@ -236,13 +236,14 @@ const currentYear = new Date().getFullYear()
         <!-- USERNAME / EMAIL -->
         <div class="mb-5">
           <label for="identifier" class="block mb-2 text-sm font-semibold text-gray-700">
-            Username or Email
+            Email or Username
           </label>
           <input
             id="identifier"
             v-model="identifier"
             type="text"
             autocomplete="username"
+            autocapitalize="none"
             placeholder="Enter your email or username"
             class="w-full border-2 border-[#dcccac] rounded-xl px-4 py-3 focus:outline-none focus:border-[#546b41]"
           />

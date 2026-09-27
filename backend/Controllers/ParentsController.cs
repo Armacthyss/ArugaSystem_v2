@@ -26,12 +26,10 @@ namespace AndroidWebAPI.Controllers
             const string characters =
                 "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
 
-            var random = new Random();
-
             return new string(
                 Enumerable
                     .Range(0, 10)
-                    .Select(_ => characters[random.Next(characters.Length)])
+                    .Select(_ => characters[System.Security.Cryptography.RandomNumberGenerator.GetInt32(characters.Length)])
                     .ToArray()
             );
         }
@@ -138,6 +136,7 @@ public async Task<IActionResult> CreateParent(
 
         Guid? accountId = null;
         bool emailed = false;
+        bool texted = false;
 
         if (dto.CreateLogin)
         {
@@ -177,6 +176,17 @@ public async Task<IActionResult> CreateParent(
                     ? $"Temporary password: {temporaryPassword}\n"
                     : "Password: the temporary password the health center staff gave you\n") +
                 "\nYou'll be asked to choose your own password the first time you sign in.");
+
+            // Same details by text, so the parent doesn't have to read them
+            // off the staff screen. Test accounts are never texted.
+            if (temporaryPassword != null)
+            {
+                bool testAccount = AndroidWebAPI.Services.MessageSender.IsTestAddress(dto.Email);
+                texted = await sender.SendSmsAsync(dto.ContactNo,
+                    $"Aruga - Leveriza Health Center: your parent account is ready. Sign in with {dto.Email} " +
+                    $"Temporary password: {temporaryPassword} You will choose your own password the first time you sign in.",
+                    demoRecipient: testAccount) && sender.SmsEnabled && !testAccount;
+            }
         }
 
         await audit.LogAsync("Patient Management", "Create",
@@ -207,7 +217,8 @@ public async Task<IActionResult> CreateParent(
                 // hand it to the parent. Null when the client supplied
                 // its own password, or when no login was created.
                 temporaryPassword = temporaryPassword,
-                emailed
+                emailed,
+                texted
             }
         );
     }

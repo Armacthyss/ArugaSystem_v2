@@ -71,6 +71,7 @@
 
           <!-- Table -->
           <div class="bg-white border border-stone-200 rounded-2xl shadow-sm overflow-hidden">
+            <div class="overflow-x-auto">
             <table class="w-full text-left border-collapse text-[13px]">
               <thead>
                 <tr class="bg-stone-50 border-b border-stone-200">
@@ -134,6 +135,7 @@
                 </tr>
               </tbody>
             </table>
+            </div>
 
             <!-- Pagination -->
             <div v-if="filteredQueues.length > 0" class="flex items-center justify-between px-6 py-3.5 border-t border-stone-100 flex-wrap gap-3">
