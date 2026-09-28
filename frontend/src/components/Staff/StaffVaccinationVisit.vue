@@ -31,7 +31,25 @@
           <span class="ml-2 text-sm text-slate-400">Loading patient...</span>
         </div>
 
-        <div v-else-if="child" class="grid grid-cols-3 gap-6">
+        <!-- Family strip: every child in this visit and how far along they are -->
+        <div v-if="!loadError && family.length > 1" class="mb-5 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3">
+          <span class="text-xs font-semibold uppercase tracking-wide text-slate-500 mr-1">
+            Child {{ currentIndex + 1 }} of {{ family.length }}
+          </span>
+          <button v-for="c in family" :key="c.childID" @click="goToChild(c)"
+            class="flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors"
+            :class="c.childID === childId
+              ? 'border-emerald-600 bg-emerald-600 text-white'
+              : progress[c.childID]?.state === 'done'
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'">
+            <Check v-if="progress[c.childID]?.state === 'done'" class="w-3.5 h-3.5" />
+            {{ c.name }}
+            <span v-if="progress[c.childID]?.due" class="font-normal opacity-80">· {{ progress[c.childID].due }} due</span>
+          </button>
+        </div>
+
+        <div v-if="!loadError && !loading && child" class="grid grid-cols-3 gap-6">
 
           <!-- LEFT: patient + doses -->
           <div class="col-span-2 space-y-5">
@@ -122,13 +140,23 @@
               </div>
             </div>
 
-            <!-- Visit actions -->
-            <div class="flex items-center justify-end gap-3">
+            <!-- Visit actions: next child first; Complete Visit when every
+                 child of the family is done (or on the last child) -->
+            <div class="flex items-center justify-end gap-3 flex-wrap">
               <button @click="router.push('/staff/dashboard')"
                 class="px-4 py-2.5 text-sm font-medium text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
                 Save &amp; Return to Dashboard
               </button>
-              <button @click="completeVisit" :disabled="completing || !inRoom"
+              <button v-if="nextChild" @click="completeVisit" :disabled="completing || !inRoom"
+                class="px-4 py-2.5 text-sm font-medium text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50 transition-colors"
+                title="Ends the visit for the whole family">
+                Complete Visit
+              </button>
+              <button v-if="nextChild" @click="goToChild(nextChild)"
+                class="px-5 py-2.5 text-sm font-semibold text-white bg-emerald-700 rounded-lg hover:bg-emerald-800 transition-colors flex items-center gap-2">
+                Done with {{ firstName(child.name) }} <ArrowRight class="w-4 h-4" /> Next: {{ firstName(nextChild.name) }}
+              </button>
+              <button v-else @click="completeVisit" :disabled="completing || !inRoom"
                 class="px-5 py-2.5 text-sm font-semibold text-white bg-slate-800 rounded-lg hover:bg-slate-900 disabled:opacity-50 transition-colors flex items-center gap-2">
                 <Loader2 v-if="completing" class="w-4 h-4 animate-spin" />
                 <Check v-else class="w-4 h-4" />
@@ -252,16 +280,17 @@
 
 <script setup>
 import { API_ORIGIN } from '@/utils/apiBase'
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import axios from 'axios'
 import {
-  ArrowLeft, AlertCircle, AlertTriangle, Loader2, CheckCircle, Check, Info, Syringe, X,
+  ArrowLeft, ArrowRight, AlertCircle, AlertTriangle, Loader2, CheckCircle, Check, Info, Syringe, X,
 } from 'lucide-vue-next'
 import { getUser } from '@/utils/auth'
 import StaffSidebar from './StaffSidebar.vue'
 import StaffTopbar from './StaffTopbar.vue'
 import { withRelationship, guardiansOf } from '@/utils/format'
+import { visitProgress, unfinishedChildren } from '@/utils/visitProgress'
 
 const router = useRouter()
 const route  = useRoute()
@@ -295,12 +324,41 @@ const history     = ref([])
 const vaccineList = ref([])
 const givenThisVisit = ref([])
 
-onMounted(async () => {
+// ── The family's other children ──────────────────────────────
+// A parent can bring several children in one visit. The strip at the top
+// shows each child's progress; "Done with … → Next" opens the next child,
+// and Complete Visit (on the last child) warns about anyone left.
+const family = computed(() => visit.value?.children || [])
+const progress = ref({})
+const currentIndex = computed(() => family.value.findIndex(c => c.childID === childId.value))
+const nextChild = computed(() => {
+  const list = family.value
+  const i = currentIndex.value
+  // the next child after this one who still has vaccines due, else the next in line
+  const after = [...list.slice(i + 1), ...list.slice(0, Math.max(i, 0))]
+  return after.find(c => progress.value[c.childID]?.state !== 'done') || null
+})
+async function refreshProgress() {
+  progress.value = await visitProgress(family.value)
+}
+function goToChild(c) {
+  if (c.childID !== childId.value) router.push(`/staff/vaccination/${queueId.value}?child=${c.childID}`)
+}
+
+// Same page, another child of the family: load that child
+watch(childId, (id, old) => { if (id && id !== old) loadVisit() })
+
+onMounted(loadVisit)
+
+async function loadVisit() {
   if (!queueId.value || !childId.value) {
     loadError.value = 'Missing queue or patient reference — go back to the Dashboard and start vaccinating from the Vaccination Room card.'
     loading.value = false
     return
   }
+  loading.value = true
+  loadError.value = ''
+  givenThisVisit.value = []
   try {
     const [childRes, queueRes] = await Promise.all([
       axios.get(`${API}/api/Children/${childId.value}`),
@@ -320,14 +378,14 @@ onMounted(async () => {
     }
     queueNumber.value = queueRes?.data?.queueNumber ?? ''
     visit.value = queueRes?.data ?? null
-    await Promise.all([loadTimeline(), loadHistory(), loadVaccines()])
+    await Promise.all([loadTimeline(), loadHistory(), vaccineList.value.length ? null : loadVaccines(), refreshProgress()])
   } catch (e) {
     console.error('load visit:', e)
     loadError.value = 'Could not load this patient. Go back to the Dashboard and try again.'
   } finally {
     loading.value = false
   }
-})
+}
 
 async function loadTimeline() {
   const res = await axios.get(`${API}/api/VaccinationTimeline/child/${childId.value}`)
@@ -445,7 +503,7 @@ async function submitDose() {
       nurseObservation: f.remarks || null,
     })
 
-    await Promise.all([loadTimeline(), loadHistory()])
+    await Promise.all([loadTimeline(), loadHistory(), refreshProgress()])
 
     // Show the date the recalculation engine just assigned to the next dose.
     const next = timeline.value
@@ -477,8 +535,13 @@ async function submitDose() {
 const completing = ref(false)
 
 async function completeVisit() {
-  if (dueDoses.value.length > 0 &&
-      !confirm(`${dueDoses.value.length} due dose(s) were not recorded. Complete the visit anyway?`)) return
+  // Everyone in the family who still has vaccines due today
+  const left = [
+    ...(dueDoses.value.length ? [`${child.value.name} (${dueDoses.value.length} vaccine${dueDoses.value.length === 1 ? '' : 's'})`] : []),
+    ...unfinishedChildren(family.value, progress.value, childId.value),
+  ]
+  if (left.length &&
+      !confirm(`Still due today and not recorded:\n• ${left.join('\n• ')}\n\nComplete the visit for the whole family anyway?`)) return
   completing.value = true
   try {
     await axios.patch(`${API}/api/Queue/${queueId.value}/complete`)
@@ -500,6 +563,8 @@ function showToast(msg) {
   toast.value = msg
   setTimeout(() => { toast.value = '' }, 3500)
 }
+
+const firstName = (name) => (name || '').split(' ')[0]
 
 function hasReaction(h) {
   const t = (h.nurseObservation || '').toLowerCase()

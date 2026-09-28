@@ -1,6 +1,6 @@
 <script setup>
 import { API_ORIGIN } from '@/utils/apiBase'
-import { ref, computed, onMounted, onUnmounted } from "vue";
+import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import {
   Syringe, FileText, Search, QrCode, UserPlus, CalendarDays,
@@ -12,6 +12,7 @@ import StaffSidebar from "./StaffSidebar.vue";
 import StaffTopbar from "./StaffTopbar.vue";
 import { getToken } from "@/utils/auth";
 import { withRelationship } from "@/utils/format";
+import { visitProgress, unfinishedChildren } from "@/utils/visitProgress";
 
 const router = useRouter();
 
@@ -199,8 +200,22 @@ const backToWaiting = (q) => {
   if (!confirm(`${q.no} did not come in? They go back to waiting and keep their number.`)) return;
   return roomAction(`${API_BASE}/Queue/${q.queueID}/back-to-waiting`, "Could not update this family.");
 };
-const completeVisit = (q) => {
-  if (!confirm(`Complete the visit for ${q.no} (${q.child})? Parents get a text of the vaccines given.`)) return;
+// Each child's progress in the family inside (done / not yet), so nobody
+// is forgotten before Complete Visit. Reloaded when a new family is called
+// in, and when the Nurse comes back to the Dashboard from a visit page.
+const roomProgress = ref({});
+const loadRoomProgress = async () => {
+  roomProgress.value = nowServing.value ? await visitProgress(nowServing.value.children) : {};
+};
+watch(() => nowServing.value?.queueID, loadRoomProgress);
+
+const completeVisit = async (q) => {
+  await loadRoomProgress();
+  const left = unfinishedChildren(q.children, roomProgress.value);
+  const question = left.length
+    ? `Still due today and not recorded:\n• ${left.join("\n• ")}\n\nComplete the visit for ${q.no} anyway?`
+    : `Complete the visit for ${q.no} (${q.child})? Parents get a text of the vaccines given.`;
+  if (!confirm(question)) return;
   return roomAction(`${API_BASE}/Queue/${q.queueID}/complete`, "Could not complete the visit.");
 };
 const startVaccinating = (q, c) => router.push(`/staff/vaccination/${q.queueID}?child=${c.childID}`);
@@ -925,10 +940,19 @@ onUnmounted(() => {
                 </div>
                 <div class="mt-3 divide-y divide-stone-100">
                   <div v-for="c in nowServing.children" :key="c.childID" class="flex items-center justify-between py-2.5">
-                    <span class="text-[13.5px] font-medium">{{ c.name }}</span>
+                    <div class="flex items-center gap-2">
+                      <span class="text-[13.5px] font-medium">{{ c.name }}</span>
+                      <span v-if="roomProgress[c.childID]?.state === 'done'" class="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+                        <Check :size="11" /> Done
+                      </span>
+                      <span v-else-if="roomProgress[c.childID]" class="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                        {{ roomProgress[c.childID].due }} vaccine{{ roomProgress[c.childID].due === 1 ? '' : 's' }} due
+                      </span>
+                    </div>
                     <button @click="startVaccinating(nowServing, c)"
-                      class="flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-emerald-800">
-                      <Syringe :size="13" /> Start Vaccinating
+                      class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-semibold"
+                      :class="roomProgress[c.childID]?.state === 'done' ? 'border border-stone-200 text-stone-600 hover:bg-stone-50' : 'bg-emerald-700 text-white hover:bg-emerald-800'">
+                      <Syringe :size="13" /> {{ roomProgress[c.childID]?.state === 'done' ? 'Open' : 'Start Vaccinating' }}
                     </button>
                   </div>
                 </div>
