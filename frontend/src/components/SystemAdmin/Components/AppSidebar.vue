@@ -12,7 +12,6 @@ import {
   Package,
   Bell,
   Clock,
-  DoorOpen,
   BarChart3,
   ClipboardList,
   LogOut,
@@ -34,7 +33,6 @@ const props = defineProps({
       { label: 'Inventory',          icon: Package,       to: '/system-admin/inventory' },
       { label: 'Notifications',      icon: Bell,          to: '/system-admin/notifications' },
       { label: 'Operating Hours',    icon: Clock,         to: '/system-admin/operating-hours' },
-      { label: 'Vaccination Rooms',  icon: DoorOpen,      to: '/system-admin/rooms' },
       { label: 'Reports',            icon: BarChart3,     to: '/system-admin/reports' },
       { label: 'Audit Logs',         icon: ClipboardList, to: '/system-admin/audit-logs' },
     ]),
@@ -69,7 +67,8 @@ const displayName = computed(() => {
 const displayRole = computed(() => {
   if (props.userRole) return props.userRole
   const position = loggedInUser.value.UserType || loggedInUser.value.position
-  if (account.value?.role === 'SystemAdmin') return 'System Administrator'
+  // Admin level: the Doctor (older accounts may be an "Administrator")
+  if (account.value?.role === 'SystemAdmin') return position === 'Doctor' ? 'Admin / Doctor' : 'Administrator'
   return position || account.value?.role || 'User'
 })
 

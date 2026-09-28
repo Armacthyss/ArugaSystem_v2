@@ -1,7 +1,7 @@
 <!--
-  HealthcareVaccination.vue — the vaccination visit screen.
-  Reached from Queue → "Start Vaccinating":
-    /healthcare/vaccination/:queueId?child=<childID>
+  StaffVaccinationVisit.vue — the vaccination visit screen (Staff / Nurse).
+  Reached from the Dashboard's Vaccination Room card → "Start Vaccinating":
+    /staff/vaccination/:queueId?child=<childID>
 
   Shows the child's doses that are due or overdue (from the vaccination
   timeline), lets the worker record one or several of them in the same
@@ -9,16 +9,16 @@
   assigned. "Complete Visit" closes the queue entry.
 -->
 <template>
-  <div class="flex h-screen bg-slate-50 font-sans antialiased text-slate-900">
-    <HealthcareSidebar />
+  <div class="flex h-screen bg-stone-50 antialiased text-slate-900" style="font-family: 'Inter','Segoe UI',sans-serif;">
+    <StaffSidebar />
 
     <div class="flex flex-col flex-1 overflow-hidden">
-      <HealthcareHeader title="Vaccination Visit" />
+      <StaffTopbar title="Vaccination Visit" breadcrumb="Aruga / Dashboard / Vaccination Room" />
 
       <main class="flex-1 overflow-y-auto p-6">
-        <button @click="router.push('/healthcare/queue')"
+        <button @click="router.push('/staff/dashboard')"
           class="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 mb-4 transition-colors">
-          <ArrowLeft class="w-4 h-4" /> Back to Queue
+          <ArrowLeft class="w-4 h-4" /> Back to Dashboard
         </button>
 
         <div v-if="loadError" class="flex items-start gap-2 p-4 bg-red-50 border border-red-100 rounded-xl text-sm text-red-700">
@@ -69,9 +69,9 @@
                 </div>
               </div>
 
-              <div v-if="!atMyStation" class="mt-4 flex items-start gap-2 p-3 bg-amber-50 border border-amber-100 rounded-lg">
+              <div v-if="!inRoom" class="mt-4 flex items-start gap-2 p-3 bg-amber-50 border border-amber-100 rounded-lg">
                 <AlertCircle class="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                <p class="text-sm text-amber-800">{{ stationNotice }}</p>
+                <p class="text-sm text-amber-800">{{ roomNotice }}</p>
               </div>
             </div>
 
@@ -82,7 +82,7 @@
                   <h2 class="font-semibold text-slate-800">Vaccines Due This Visit</h2>
                   <p class="text-xs text-slate-400 mt-0.5">Due today or overdue, from the child's vaccination schedule</p>
                 </div>
-                <button @click="openManual" :disabled="!atMyStation"
+                <button @click="openManual" :disabled="!inRoom"
                   class="disabled:opacity-40 disabled:cursor-not-allowed text-xs border border-slate-200 text-slate-600 hover:bg-slate-50 px-3 py-1.5 rounded-lg font-medium transition-colors">
                   + Other vaccine
                 </button>
@@ -114,7 +114,7 @@
                       {{ isOverdue(d) ? `Overdue — was due ${formatDate(d.scheduledDate)}` : 'Due today' }}
                     </p>
                   </div>
-                  <button @click="openRecord(d)" :disabled="!atMyStation"
+                  <button @click="openRecord(d)" :disabled="!inRoom"
                     class="disabled:opacity-40 disabled:cursor-not-allowed text-xs bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center gap-1.5">
                     <Syringe class="w-3.5 h-3.5" /> Record Dose
                   </button>
@@ -124,11 +124,11 @@
 
             <!-- Visit actions -->
             <div class="flex items-center justify-end gap-3">
-              <button @click="router.push('/healthcare/queue')"
+              <button @click="router.push('/staff/dashboard')"
                 class="px-4 py-2.5 text-sm font-medium text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
-                Save &amp; Return to Queue
+                Save &amp; Return to Dashboard
               </button>
-              <button @click="completeVisit" :disabled="completing || !atMyStation"
+              <button @click="completeVisit" :disabled="completing || !inRoom"
                 class="px-5 py-2.5 text-sm font-semibold text-white bg-slate-800 rounded-lg hover:bg-slate-900 disabled:opacity-50 transition-colors flex items-center gap-2">
                 <Loader2 v-if="completing" class="w-4 h-4 animate-spin" />
                 <Check v-else class="w-4 h-4" />
@@ -259,9 +259,8 @@ import {
   ArrowLeft, AlertCircle, AlertTriangle, Loader2, CheckCircle, Check, Info, Syringe, X,
 } from 'lucide-vue-next'
 import { getUser } from '@/utils/auth'
-import HealthcareSidebar from './Components/HealthcareSidebar.vue'
-import HealthcareHeader from './Components/HealthcareHeader.vue'
-import { isAtMyStation } from './Components/station.js'
+import StaffSidebar from './StaffSidebar.vue'
+import StaffTopbar from './StaffTopbar.vue'
 import { withRelationship, guardiansOf } from '@/utils/format'
 
 const router = useRouter()
@@ -281,16 +280,15 @@ const child       = ref(null)
 const queueNumber = ref('')
 const visit = ref(null)
 
-// Only the health worker at the station the Admission Staff sent this
-// visit to can record doses (the backend enforces the same rule).
-const atMyStation = computed(() => isAtMyStation(visit.value))
-const stationNotice = computed(() => {
+// Doses can only be recorded while this family is in the vaccination room,
+// i.e. after Call Next (the backend enforces the same rule).
+const inRoom = computed(() => (visit.value?.status || '').toLowerCase().replace(/\s+/g, '') === 'inprogress')
+const roomNotice = computed(() => {
   const v = visit.value
   if (!v) return 'This visit could not be found in today’s queue.'
   const s = (v.status || '').toLowerCase()
   if (s === 'completed') return 'This visit is already completed.'
-  if (!v.assignedRoomID) return 'This patient hasn’t been sent to a station yet. The Admission Staff must assign them to your station before you can record vaccinations.'
-  return `This patient is at ${v.stationName} with ${v.assignedWorkerName || 'another health worker'}. Only they can record this visit.`
+  return 'This family hasn’t been called into the vaccination room yet. Press Call Next on the Dashboard first.'
 })
 const timeline    = ref([])
 const history     = ref([])
@@ -299,7 +297,7 @@ const givenThisVisit = ref([])
 
 onMounted(async () => {
   if (!queueId.value || !childId.value) {
-    loadError.value = 'Missing queue or patient reference — go back to the Queue and start vaccinating from there.'
+    loadError.value = 'Missing queue or patient reference — go back to the Dashboard and start vaccinating from the Vaccination Room card.'
     loading.value = false
     return
   }
@@ -325,7 +323,7 @@ onMounted(async () => {
     await Promise.all([loadTimeline(), loadHistory(), loadVaccines()])
   } catch (e) {
     console.error('load visit:', e)
-    loadError.value = 'Could not load this patient. Go back to the Queue and try again.'
+    loadError.value = 'Could not load this patient. Go back to the Dashboard and try again.'
   } finally {
     loading.value = false
   }
@@ -443,7 +441,7 @@ async function submitDose() {
       doseNumber: Number(f.doseNumber),
       vaccinationDate: f.date,
       inventoryID: Number(f.inventoryId),
-      administeredByUserID: user.UserID,
+      administeredByUserID: user.UserID,   // the server uses the signed-in Nurse
       nurseObservation: f.remarks || null,
     })
 
@@ -474,7 +472,7 @@ async function submitDose() {
 
 // ─────────────────────────────────────────────────────────────
 // COMPLETE VISIT — closes the queue entry (the whole family's visit)
-// and lets the Admission Staff call the next patient.
+// so the Nurse can call the next family.
 // ─────────────────────────────────────────────────────────────
 const completing = ref(false)
 
@@ -485,7 +483,7 @@ async function completeVisit() {
   try {
     await axios.patch(`${API}/api/Queue/${queueId.value}/complete`)
     showToast('Visit completed')
-    setTimeout(() => router.push('/healthcare/queue'), 700)
+    setTimeout(() => router.push('/staff/dashboard'), 700)
   } catch (e) {
     console.error('completeVisit:', e)
     showToast('Could not complete the visit. Please try again.')

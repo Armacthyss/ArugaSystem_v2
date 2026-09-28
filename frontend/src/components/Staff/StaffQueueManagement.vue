@@ -98,7 +98,7 @@
                         class="text-[12px] font-medium rounded-full pl-2.5 pr-6 py-1 border-none outline-none cursor-pointer disabled:opacity-50"
                         :class="statusStyle[q.status] || 'bg-stone-100 text-stone-600'"
                       >
-                        <!-- "In Progress" = at a station; that's set with Assign Station on the Dashboard -->
+                        <!-- "In Progress" = called into the vaccination room; that is set with Call Next on the Dashboard -->
                         <option v-for="s in availableStatuses" :key="s" :value="s" :disabled="s === 'InProgress' && q.status !== 'InProgress'">{{ statusLabel(s) }}</option>
                       </select>
                     </td>

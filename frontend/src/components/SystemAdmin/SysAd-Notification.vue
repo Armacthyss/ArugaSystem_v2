@@ -240,7 +240,7 @@ const reminderSchedule = {
       <!-- Top navbar -->
       <AppHeader
   title="Notification Logs"
-  breadcrumb="System Administration / Notification Logs"
+  breadcrumb="Admin / Notification Logs"
   user-initials="RM"
 />
 
@@ -645,8 +645,8 @@ const reminderSchedule = {
                 <li>"Record updated" to the parent (app, email and SMS) when a child's details are changed, so they can report a mistake</li>
                 <li>"Temporarily unavailable" to parents of children due for a vaccine that ran out, and "available again" once it's restocked</li>
                 <li>"Health center closed" to every parent when a closed day is added under Operating Hours (by email and SMS too for families with a child due that day, with the new date)</li>
-                <li>Low-stock alerts to healthcare workers and the Admission Staff when a batch drops below its minimum</li>
-                <li>Weekly stock check every Wednesday to the Admission Staff and the Administrator</li>
+                <li>Low-stock alerts to the Doctor and Nurses when a batch drops below its minimum</li>
+                <li>Weekly stock check every Wednesday to the Doctor and Nurses</li>
               </ul>
             </div>
           </div>

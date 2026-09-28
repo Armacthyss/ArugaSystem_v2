@@ -499,7 +499,7 @@ onMounted(() => {
       <!-- Top navbar -->
       <AppHeader
   title="Operating Hours"
-  breadcrumb="System Administration / Operating Hours"
+  breadcrumb="Admin / Operating Hours"
   user-initials="RM"
 />
       <!-- Page content -->

@@ -6,6 +6,7 @@ import { useFloatingMenu } from '@/utils/floatingMenu'
 import axios from 'axios'
 import AppSidebar from './Components/AppSidebar.vue'
 import AppHeader from './Components/AppHeader.vue'
+import InventorySummary from '@/components/Shared/InventorySummary.vue'
 
 /* =========================================================================
    API LAYER
@@ -59,6 +60,7 @@ const vaccines = ref([])    // raw Vaccine rows
 const isLoading = ref(false)
 const isSaving = ref(false)
 const error = ref(null)
+const summaryKey = ref(0)   // reloads the Inventory Summary with the batches
 
 async function loadAll() {
   isLoading.value = true
@@ -74,6 +76,7 @@ async function loadAll() {
     error.value = 'Failed to load inventory. Please try again.'
   } finally {
     isLoading.value = false
+    summaryKey.value++
   }
 }
 onMounted(loadAll)
@@ -249,7 +252,8 @@ const summary = computed(() => {
   return {
     totalVaccineTypes: new Set(active.map(i => i.vaccineID)).size,
     totalBatches: active.length,
-    totalDoses: active.reduce((sum, i) => sum + (i.currentQuantity || 0), 0),
+    // Expired doses can't be given, so they aren't "available"
+    totalDoses: withStatus.filter(x => x.status !== 'Expired').reduce((sum, x) => sum + (x.i.currentQuantity || 0), 0),
     lowStock: withStatus.filter(x => x.status === 'Low Stock').length,
     expiringSoon: withStatus.filter(x => {
       const d = daysUntil(x.i.expirationDate)
@@ -456,7 +460,7 @@ async function setActiveState(item, nextActive) {
 
     <!-- ============================ MAIN ============================ -->
     <div class="flex-1 min-w-0 flex flex-col">
-      <AppHeader title="Inventory Management" breadcrumb="Dashboard / Inventory" />
+      <AppHeader title="Inventory Management" breadcrumb="Admin / Inventory" />
 
       <main class="p-6 space-y-5">
         <div v-if="error" class="rounded-lg bg-rose-50 border border-rose-200 px-4 py-3 text-sm text-rose-700 flex items-center justify-between">
@@ -499,6 +503,9 @@ async function setActiveState(item, nextActive) {
             </div>
           </div>
         </section>
+
+        <!-- ============ Inventory summary per vaccine ============ -->
+        <InventorySummary :refresh-key="summaryKey" />
 
         <!-- ============ Toolbar ============ -->
         <section class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">

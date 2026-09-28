@@ -80,6 +80,11 @@
         </div>
       </div>
     </nav>
+
+    <!-- On every parent page: the Data Privacy consent (asked once) and the
+         "It's your turn" alert when the Nurse presses Call Next -->
+    <PrivacyConsentGate v-if="parentData?.parentID" :parent-id="parentData.parentID" @decline="handleLogoutClick" />
+    <CalledAlert v-if="parentData?.parentID" :parent-id="parentData.parentID" :children="children" />
   </div>
 </template>
 
@@ -87,6 +92,8 @@
 import { ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import logoIcon from '@/assets/logo-icon.svg'
+import CalledAlert from './CalledAlert.vue'
+import PrivacyConsentGate from './PrivacyConsentGate.vue'
 
 // ── Props / Emits ─────────────────────────────────────────────────────────
 // parentData, children, and unreadCount are all owned/fetched by whichever

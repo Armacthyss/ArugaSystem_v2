@@ -567,7 +567,7 @@ async function save() {
       <!-- Top navbar -->
         <AppHeader
   title="Vaccine Management"
-  breadcrumb="System Administration / Vaccine Management"
+  breadcrumb="Admin / Vaccine Management"
   user-initials="RM"
 />
 

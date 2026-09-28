@@ -28,6 +28,14 @@ namespace AndroidWebAPI.Models
 
     public DateTime? LastLogin { get; set; }
 
+    // Data Privacy Act (RA 10173) consent:
+    //  ConsentRecordedAt - staff ticked "the parent/guardian agreed" when
+    //                      registering them at the health center
+    //  PrivacyConsentAt  - the parent accepted the Data Privacy Notice
+    //                      themselves in the app (asked at first sign-in)
+    public DateTime? ConsentRecordedAt { get; set; }
+    public DateTime? PrivacyConsentAt { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.Now;
     public DateTime? UpdatedAt { get; set; }
 

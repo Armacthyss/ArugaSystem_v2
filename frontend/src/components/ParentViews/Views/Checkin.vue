@@ -429,9 +429,7 @@ const ticketMessage = computed(() => {
   const s = myStatus.value
   if (!s) return ''
   if (isDone.value) return 'Thank you for visiting Leveriza Health Center! See the Records page for today’s vaccines.'
-  if (isAtStation.value) {
-    return `Please go to ${s.stationName || 'the station you were called to'}${s.workerName ? ` (${s.workerName})` : ''}.`
-  }
+  if (isAtStation.value) return 'Please go inside the vaccination room now.'
   if (s.positionInLine === 1) return 'You’re next! Please stay nearby.'
   if (s.positionInLine) return `There ${s.positionInLine - 1 === 1 ? 'is 1 family' : `are ${s.positionInLine - 1} families`} ahead of you. Please wait to be called.`
   return 'Please wait to be called.'

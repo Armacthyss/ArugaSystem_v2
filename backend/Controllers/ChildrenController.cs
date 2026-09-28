@@ -114,6 +114,18 @@ namespace AndroidWebAPI.Controllers
                     lastVaccine = last != null ? $"{last.Vaccine?.VaccineName} (Dose {last.DoseNumber})" : null,
                     nextVaccine = next != null ? $"{next.Vaccine?.VaccineName} (Dose {next.DoseNumber})" : null,
                     nextDueDate = next?.ScheduledDate,
+                    // Doses not given yet, for the progress-bar pop-up on
+                    // Patient Management (e.g. 14/15 -> "MMR Dose 2, due Mar 3")
+                    remainingDoses = notGiven
+                        .OrderBy(t => t.ScheduledDate)
+                        .Select(t => new
+                        {
+                            vaccineName = t.Vaccine?.VaccineName ?? $"Vaccine {t.VaccineID}",
+                            abbreviation = t.Vaccine?.Abbreviation,
+                            doseNumber = t.DoseNumber,
+                            scheduledDate = t.ScheduledDate,
+                            overdue = t.ScheduledDate.Date < today,
+                        }),
                 };
             });
 
@@ -147,6 +159,8 @@ namespace AndroidWebAPI.Controllers
                 return BadRequest(new { message = "At least one parent link is required." });
             if (CheckBirthMeasurements(dto.BirthWeight, dto.BirthHeight) is string measurementError)
                 return BadRequest(new { message = measurementError });
+            if (!AndroidWebAPI.Services.Barangays.IsServed(dto.Barangay))
+                return BadRequest(new { message = AndroidWebAPI.Services.Barangays.Error });
 
             try
             {
@@ -209,6 +223,10 @@ namespace AndroidWebAPI.Controllers
                 var before = await _context.Children.AsNoTracking().FirstOrDefaultAsync(c => c.ChildID == id);
                 if (before == null)
                     return NotFound(new { message = "Child not found." });
+
+                // Only a changed barangay is checked, so older records can still be edited
+                if (dto.Barangay != before.Barangay && !AndroidWebAPI.Services.Barangays.IsServed(dto.Barangay))
+                    return BadRequest(new { message = AndroidWebAPI.Services.Barangays.Error });
 
                 var updated = await _repository.UpdateChildAsync(id, dto);
 

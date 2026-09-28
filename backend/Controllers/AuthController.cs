@@ -562,7 +562,9 @@ namespace AndroidWebAPI.Controllers
                         email = parent.Email,
                         contactNo = parent.ContactNo,
                         barangayNo = parent.BarangayNo,
-                        address = parent.Address
+                        address = parent.Address,
+                        // null until the parent accepts the Data Privacy Notice
+                        privacyConsentAt = parent.PrivacyConsentAt
                     },
 
                     mustChangePassword =
@@ -597,8 +599,7 @@ if (account.AccountType == "Personnel")
         });
     }
 
-    // Position decides the portal: Staff, SystemAdmin, or Healthcare
-    // (Doctor / Nurse).
+    // Position decides the portal: Doctor -> Admin, Nurse -> Staff.
     string role = RoleForPosition(user.Position);
 
     var token = GenerateJwtToken(
@@ -692,12 +693,8 @@ if (account.AccountType == "SystemAdmin")
             });
         }
 
-        private static string RoleForPosition(string? position)
-        {
-            if (string.Equals(position, "Staff", StringComparison.OrdinalIgnoreCase)) return "Staff";
-            if (string.Equals(position, "Administrator", StringComparison.OrdinalIgnoreCase)) return "SystemAdmin";
-            return "Healthcare";
-        }
+        private static string RoleForPosition(string? position) =>
+            AndroidWebAPI.Services.Roles.ForPosition(position);
 
         // =========================================================
         // JWT

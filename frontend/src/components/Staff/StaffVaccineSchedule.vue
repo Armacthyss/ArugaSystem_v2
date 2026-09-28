@@ -13,7 +13,7 @@ import { API_BASE, ageLabel, formatDate, toISODate, downloadCSV } from "@/utils/
 import { useFloatingMenu } from "@/utils/floatingMenu";
 
 /* ---------------------------------------------------------
-   Aruga Pediatric System — Vaccine Schedule (Admission Staff)
+   Aruga Pediatric System — Vaccine Schedule (Staff / Nurse)
    Built from each child's vaccination timeline
    (GET /api/VaccinationTimeline/schedule). One row per child visit:
    every dose the child is due on the same day is grouped together,

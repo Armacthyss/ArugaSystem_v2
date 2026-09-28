@@ -13,7 +13,7 @@ const statusMeta = {
 }
 const metaFor = status => statusMeta[status] || statusMeta.Success
 
-const roleOptions = ['Parent', 'Admission Staff', 'Healthcare Worker', 'System Admin']
+const roleOptions = ['Parent', 'Staff / Nurse', 'Admin / Doctor']
 const moduleOptions = computed(() => [...new Set(logs.value.map(l => l.module))].sort())
 const actionOptions = computed(() => [...new Set(logs.value.map(l => l.action))].sort())
 
@@ -125,7 +125,7 @@ const timeline = computed(() => logs.value.slice(0, 6))
       <!-- Top navbar -->
       <AppHeader
   title="Audit Logs"
-  breadcrumb="System Administration / Audit Logs"
+  breadcrumb="Admin / Audit Logs"
   user-initials="RM"
 />
 

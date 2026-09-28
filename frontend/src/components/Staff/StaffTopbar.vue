@@ -3,7 +3,7 @@
   ================
   Shared top bar for every Staff*.vue page.
 
-  Bell    -> families checked in today who are still waiting for a station,
+  Bell    -> families checked in today who are still waiting to be called in,
              from GET /api/Queue/today (same endpoint as the dashboard's queue
              table). The red dot shows when someone has waited 15+ minutes.
              Self-contained, so it works on every Staff*.vue page.
@@ -30,7 +30,7 @@
     <div class="flex items-center gap-3">
       <slot />
 
-      <!-- Bell: stock alerts + families still waiting for a station -->
+      <!-- Bell: stock alerts + families still waiting to be called in -->
       <div class="relative">
         <button
           @click.stop="toggle('bell')"
@@ -66,7 +66,7 @@
           </template>
 
           <div class="flex items-center justify-between px-4 py-3 border-b border-stone-100">
-            <p class="text-[13px] font-semibold">Waiting for a Station</p>
+            <p class="text-[13px] font-semibold">Waiting to be Called</p>
             <span class="text-[11px] text-stone-400">{{ waitingQueue.length }} waiting</span>
           </div>
           <div class="max-h-72 overflow-y-auto">
@@ -85,7 +85,7 @@
               </div>
             </button>
             <p v-if="!loadingLate && waitingQueue.length === 0" class="px-4 py-6 text-center text-[12px] text-stone-400">
-              Nobody is waiting for a station right now.
+              Nobody is waiting right now.
             </p>
             <p v-if="loadingLate && waitingQueue.length === 0" class="px-4 py-6 text-center text-[12px] text-stone-400">
               Loading…
@@ -184,7 +184,7 @@ const closeAll = (event) => {
   open.value = null;
 };
 
-// Families checked in today who haven't been sent to a station yet.
+// Families checked in today who haven't been called into the room yet.
 // Self-fetched from the same Queue/today endpoint the dashboard uses, so
 // the bell is accurate on every Staff*.vue page, not just the dashboard.
 const waitingQueue = ref([]);

@@ -114,13 +114,12 @@ public async Task<IActionResult> CreatePersonnelAccount(
     if (string.IsNullOrWhiteSpace(dto.Role))
         return BadRequest(new { message = "Role is required." });
 
-    var validRoles = new[] { "Doctor", "Nurse", "Staff" };
-
-    if (!validRoles.Contains(dto.Role))
+    // Doctor = Admin level, Nurse = Staff level
+    if (!AndroidWebAPI.Services.Roles.Positions.Contains(dto.Role))
     {
         return BadRequest(new
         {
-            message = "Role must be Doctor, Nurse, or Staff."
+            message = "Role must be Doctor (Admin) or Nurse (Staff)."
         });
     }
 

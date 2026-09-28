@@ -124,6 +124,19 @@ builder.Services.AddScoped<IQueueQRCodeService, QueueQRCodeService>();
 // ── Build ─────────────────────────────────────────────────────
 var app = builder.Build();
 
+// New columns this version needs (added only if missing)
+using (var scope = app.Services.CreateScope())
+{
+    try
+    {
+        await SchemaUpgrades.ApplyAsync(scope.ServiceProvider.GetRequiredService<AppDbContext>());
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogError(ex, "Could not update the database structure at startup.");
+    }
+}
+
 // Every child needs a vaccination schedule, and no upcoming dose may sit on
 // a day the clinic is closed (e.g. after the clinic hours were changed).
 using (var scope = app.Services.CreateScope())

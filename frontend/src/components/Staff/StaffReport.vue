@@ -98,6 +98,9 @@
             </div>
           </div>
 
+          <!-- 4. INVENTORY SUMMARY -->
+          <InventorySummary class="print:break-inside-avoid" />
+
         </div>
       </main>
     </div>
@@ -110,6 +113,7 @@ import axios from 'axios'
 import { Syringe, FileDown, BarChart3, CalendarDays } from 'lucide-vue-next'
 import StaffSidebar from './StaffSidebar.vue'
 import StaffTopbar from './StaffTopbar.vue'
+import InventorySummary from '@/components/Shared/InventorySummary.vue'
 import { API_BASE } from '@/utils/format'
 
 // Every chart is computed from GET /api/VaccinationRecords/all (doses

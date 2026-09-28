@@ -97,19 +97,16 @@ function redirectForRole(role) {
       router.push("/ParentOverview")
       break
 
-    // Doctors and Nurses share the Healthcare Worker portal.
-    case "Healthcare":
-    case "Doctor":
-    case "Nurse":
-      router.push("/healthcare/home")
-      break
-
+    // Staff / Nurse
     case "Staff":
+    case "Nurse":
     case "Admission":
       router.push("/staff/dashboard")
       break
 
+    // Admin / Doctor
     case "SystemAdmin":
+    case "Doctor":
     case "Administrator":
       router.push("/system-admin/home")
       break

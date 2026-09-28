@@ -10,16 +10,15 @@
      schedules and today's queue are all computed from the day you run it,
      so run it on the morning of the demo to get a live "today".
    • Only touches its own rows. Every demo person uses an ID starting with
-     A2A1…A2A7, every demo vaccine batch a lot number starting DEMO-,
-     and the demo health workers are put in Room 1 / 2 / 3.
+     A2A1…A2A7 and every demo vaccine batch a lot number starting DEMO-.
      Your existing records are never modified or deleted.
+   • Demo families live in Barangays 19 and 21–40, the only barangays
+     Leveriza Health Center serves.
    • To remove everything again, run DemoSeed_Remove.sql.
 
    DEMO LOGINS  (password for ALL of them:  Aruga@2026)
-     Administrator ........ demo.admin
-     Doctor ............... demo.doctor
-     Nurse ................ demo.nurse   /  demo.nurse2
-     Admission Staff ...... demo.staff
+     Admin / Doctor ....... demo.doctor   (demo.admin: an older "Administrator" account, same level)
+     Staff / Nurse ........ demo.nurse  /  demo.nurse2  (demo.staff: an older "Staff" account, same level)
      Parents .............. e.g. maria.santos@demo.aruga.ph
                             (any parent email listed below)
      Grandmother .......... lourdes.luna@demo.aruga.ph (Isabela Cruz's
@@ -128,10 +127,10 @@ WHEN MATCHED THEN UPDATE SET
     FirstName = s.FirstName, MiddleName = s.MiddleName, LastName = s.LastName,
     Username = s.Username, PasswordHash = @Pwd, ContactNo = s.ContactNo,
     UserType = s.UserType, Position = s.Position, PRCNo = s.PRCNo,
-    AccountStatus = 'Active', Email = s.Email, Address = N'Leveriza St., Malate, Manila'
+    AccountStatus = 'Active', Email = s.Email, Address = N'Leveriza St., Pasay City'
 WHEN NOT MATCHED THEN INSERT
     (UserID, FirstName, MiddleName, LastName, Username, PasswordHash, ContactNo, UserType, PRCNo, AccountStatus, Email, Address, CreatedAt, Position)
-    VALUES (s.UserID, s.FirstName, s.MiddleName, s.LastName, s.Username, @Pwd, s.ContactNo, s.UserType, s.PRCNo, 'Active', s.Email, N'Leveriza St., Malate, Manila', DATEADD(day, -45, @Now), s.Position);
+    VALUES (s.UserID, s.FirstName, s.MiddleName, s.LastName, s.Username, @Pwd, s.ContactNo, s.UserType, s.PRCNo, 'Active', s.Email, N'Leveriza St., Pasay City', DATEADD(day, -45, @Now), s.Position);
 
 MERGE Accounts AS t
 USING @Staff AS s ON t.AccountID = s.AccountID
@@ -154,21 +153,21 @@ DECLARE @AdminU uniqueidentifier = 'A2A10000-0000-0000-0000-000000000005';
 
 DECLARE @Par TABLE (N int, ParentID uniqueidentifier, FirstName nvarchar(50), MiddleName nvarchar(50), LastName nvarchar(50), Email nvarchar(255), ContactNo nvarchar(20), BarangayNo nvarchar(20), Address nvarchar(255));
 INSERT @Par VALUES
- ( 1,'A2A20000-0000-0000-0000-000000000001',N'Maria',   N'Dela Paz', N'Santos',   'maria.santos@demo.aruga.ph',    '09181110001','719',N'1122 Leveriza St., Malate, Manila'),
- ( 2,'A2A20000-0000-0000-0000-000000000002',N'Cardo',   N'Reyes',    N'Dalisay',  'cardo.dalisay@demo.aruga.ph',   '09181110002','720',N'45 Dagonoy St., Malate, Manila'),
- ( 3,'A2A20000-0000-0000-0000-000000000003',N'Liza',    N'Manalo',   N'Reyes',    'liza.reyes@demo.aruga.ph',      '09181110003','719',N'18 San Andres St., Malate, Manila'),
- ( 4,'A2A20000-0000-0000-0000-000000000004',N'Joel',    N'Santiago', N'Garcia',   'joel.garcia@demo.aruga.ph',     '09181110004','721',N'301 Estrada St., Malate, Manila'),
- ( 5,'A2A20000-0000-0000-0000-000000000005',N'Rowena',  N'Luna',     N'Cruz',     'rowena.cruz@demo.aruga.ph',     '09181110005','719',N'7 Pedro Gil St., Malate, Manila'),
- ( 6,'A2A20000-0000-0000-0000-000000000006',N'Dennis',  N'Abad',     N'Torres',   'dennis.torres@demo.aruga.ph',   '09181110006','722',N'88 Singalong St., Malate, Manila'),
- ( 7,'A2A20000-0000-0000-0000-000000000007',N'Carmela', N'Rivera',   N'Villareal','carmela.villareal@demo.aruga.ph','09181110007','720',N'210 Leveriza St., Malate, Manila'),
- ( 8,'A2A20000-0000-0000-0000-000000000008',N'Arnel',   N'Ocampo',   N'Mercado',  'arnel.mercado@demo.aruga.ph',   '09181110008','721',N'5 Zobel Roxas St., Malate, Manila'),
- ( 9,'A2A20000-0000-0000-0000-000000000009',N'Jenny',   N'Tolentino',N'Navarro',  'jenny.navarro@demo.aruga.ph',   '09181110009','719',N'64 Taft Ave., Malate, Manila'),
- (10,'A2A20000-0000-0000-0000-000000000010',N'Paolo',   N'Sy',       N'Lim',      'paolo.lim@demo.aruga.ph',       '09181110010','722',N'12 Vito Cruz St., Malate, Manila'),
- (11,'A2A20000-0000-0000-0000-000000000011',N'Teresa',  N'Gomez',    N'Soriano',  'teresa.soriano@demo.aruga.ph',  '09181110011','720',N'140 Dagonoy St., Malate, Manila'),
- (12,'A2A20000-0000-0000-0000-000000000012',N'Ramil',   N'Castro',   N'Flores',   'ramil.flores@demo.aruga.ph',    '09181110012','721',N'77 Leveriza St., Malate, Manila'),
- (13,'A2A20000-0000-0000-0000-000000000013',N'Kristel', N'Aquino',   N'Castillo', 'kristel.castillo@demo.aruga.ph','09181110013','719',N'9 Harrison St., Malate, Manila'),
+ ( 1,'A2A20000-0000-0000-0000-000000000001',N'Maria',   N'Dela Paz', N'Santos',   'maria.santos@demo.aruga.ph',    '09181110001','24',N'1122 Leveriza St., Pasay City'),
+ ( 2,'A2A20000-0000-0000-0000-000000000002',N'Cardo',   N'Reyes',    N'Dalisay',  'cardo.dalisay@demo.aruga.ph',   '09181110002','21',N'45 Libertad St., Pasay City'),
+ ( 3,'A2A20000-0000-0000-0000-000000000003',N'Liza',    N'Manalo',   N'Reyes',    'liza.reyes@demo.aruga.ph',      '09181110003','24',N'18 Dolores St., Pasay City'),
+ ( 4,'A2A20000-0000-0000-0000-000000000004',N'Joel',    N'Santiago', N'Garcia',   'joel.garcia@demo.aruga.ph',     '09181110004','33',N'301 Protacio St., Pasay City'),
+ ( 5,'A2A20000-0000-0000-0000-000000000005',N'Rowena',  N'Luna',     N'Cruz',     'rowena.cruz@demo.aruga.ph',     '09181110005','24',N'7 Leveriza St., Pasay City'),
+ ( 6,'A2A20000-0000-0000-0000-000000000006',N'Dennis',  N'Abad',     N'Torres',   'dennis.torres@demo.aruga.ph',   '09181110006','19',N'88 Cuneta Ave., Pasay City'),
+ ( 7,'A2A20000-0000-0000-0000-000000000007',N'Carmela', N'Rivera',   N'Villareal','carmela.villareal@demo.aruga.ph','09181110007','21',N'210 Leveriza St., Pasay City'),
+ ( 8,'A2A20000-0000-0000-0000-000000000008',N'Arnel',   N'Ocampo',   N'Mercado',  'arnel.mercado@demo.aruga.ph',   '09181110008','33',N'5 Protacio St., Pasay City'),
+ ( 9,'A2A20000-0000-0000-0000-000000000009',N'Jenny',   N'Tolentino',N'Navarro',  'jenny.navarro@demo.aruga.ph',   '09181110009','24',N'64 Taft Ave., Pasay City'),
+ (10,'A2A20000-0000-0000-0000-000000000010',N'Paolo',   N'Sy',       N'Lim',      'paolo.lim@demo.aruga.ph',       '09181110010','19',N'12 Cuneta Ave., Pasay City'),
+ (11,'A2A20000-0000-0000-0000-000000000011',N'Teresa',  N'Gomez',    N'Soriano',  'teresa.soriano@demo.aruga.ph',  '09181110011','21',N'140 Libertad St., Pasay City'),
+ (12,'A2A20000-0000-0000-0000-000000000012',N'Ramil',   N'Castro',   N'Flores',   'ramil.flores@demo.aruga.ph',    '09181110012','33',N'77 Leveriza St., Pasay City'),
+ (13,'A2A20000-0000-0000-0000-000000000013',N'Kristel', N'Aquino',   N'Castillo', 'kristel.castillo@demo.aruga.ph','09181110013','24',N'9 Harrison St., Pasay City'),
  -- Isabela Cruz's grandmother (see the extra guardian link in section 4)
- (14,'A2A20000-0000-0000-0000-000000000014',N'Lourdes', N'Santos',   N'Luna',     'lourdes.luna@demo.aruga.ph',    '09181110014','719',N'7 Pedro Gil St., Malate, Manila');
+ (14,'A2A20000-0000-0000-0000-000000000014',N'Lourdes', N'Santos',   N'Luna',     'lourdes.luna@demo.aruga.ph',    '09181110014','24',N'7 Leveriza St., Pasay City');
 
 MERGE Parents AS t
 USING @Par AS s ON t.ParentID = s.ParentID
@@ -228,13 +227,13 @@ MERGE Children AS t
 USING (SELECT k.*, p.Address, p.BarangayNo FROM @Kid k JOIN @Par p ON p.N = k.ParentN) AS s ON t.ChildID = s.ChildID
 WHEN MATCHED THEN UPDATE SET
     FirstName = s.FirstName, MiddleName = s.MiddleName, LastName = s.LastName,
-    BirthDate = DATEADD(day, -s.AgeDays, @Today), PlaceOfBirth = N'Philippine General Hospital, Manila',
+    BirthDate = DATEADD(day, -s.AgeDays, @Today), PlaceOfBirth = N'Pasay City General Hospital',
     Address = LEFT(s.Address, 70), HealthCenter = N'Leveriza Health Center', Barangay = TRY_CAST(s.BarangayNo AS int),
     FamilyNo = N'FN-' + RIGHT('000' + CAST(s.ParentN AS varchar(3)), 3),
     Sex = s.Sex, Allergies = s.Allergies, BirthWeight = s.BirthWeight, BirthHeight = s.BirthHeight, UpdatedAt = @Now
 WHEN NOT MATCHED THEN INSERT
     (ChildID, FirstName, MiddleName, LastName, BirthDate, PlaceOfBirth, Address, HealthCenter, Barangay, FamilyNo, Sex, CreatedAt, UpdatedAt, Allergies, BirthHeight, BirthWeight)
-    VALUES (s.ChildID, s.FirstName, s.MiddleName, s.LastName, DATEADD(day, -s.AgeDays, @Today), N'Philippine General Hospital, Manila',
+    VALUES (s.ChildID, s.FirstName, s.MiddleName, s.LastName, DATEADD(day, -s.AgeDays, @Today), N'Pasay City General Hospital',
             LEFT(s.Address, 70), N'Leveriza Health Center', TRY_CAST(s.BarangayNo AS int), N'FN-' + RIGHT('000' + CAST(s.ParentN AS varchar(3)), 3), s.Sex,
             DATEADD(day, -s.AgeDays, @Now), @Now, s.Allergies, s.BirthHeight, s.BirthWeight);
 
@@ -341,7 +340,7 @@ INSERT VaccinationRecords (VaccinationRecordID, RecordCode, ChildID, VaccineID, 
 SELECT NEWID(),
        'VR-DEMO-' + RIGHT('00000' + CAST(g.RowN AS varchar(6)), 5),
        t.ChildID, t.VaccineID, mi.InventoryID, t.TimelineID, t.DoseNumber, g.GivenOn,
-       CASE g.RowN % 3 WHEN 0 THEN @Doctor WHEN 1 THEN @Nurse1 ELSE @Nurse2 END,
+       CASE g.RowN % 2 WHEN 0 THEN @Nurse1 ELSE @Nurse2 END,   -- the Nurses vaccinate
        CHOOSE(g.RowN % 7 + 1,
               N'No adverse reaction observed.',
               N'Mild redness and swelling at the injection site.',
@@ -369,48 +368,37 @@ JOIN @Inv i ON i.LotNumber = v.LotNumber
 OUTER APPLY (SELECT COUNT(*) AS Used FROM VaccinationRecords r WHERE r.InventoryID = v.InventoryID) u;
 
 /* =====================================================================
-   7. STATIONS — one per demo health worker
-   The Admission Staff can change who is at each station from their
-   dashboard; this is just today's starting line-up.
+   7. VACCINATION ROOM
+   Leveriza has one vaccination room and one person vaccinating: the
+   Nurse calls each family in with Call Next, so there are no stations
+   to set up. (Older versions of this script put the demo health workers
+   in Room 1 / 2 / 3; that is cleared here.)
    ===================================================================== */
 
-DECLARE @St TABLE (RoomNumber nvarchar(50), WorkerID uniqueidentifier);
-INSERT @St VALUES (N'Room 1', @Doctor), (N'Room 2', @Nurse1), (N'Room 3', @Nurse2);
-
--- A worker can only be at one station: take the demo workers off any other
--- station that isn't busy right now.
 UPDATE ClinicRooms SET AssignedDoctorID = NULL
-WHERE AssignedDoctorID IN (@Doctor, @Nurse1, @Nurse2)
-  AND RoomNumber NOT IN (SELECT RoomNumber FROM @St)
-  AND IsOccupied = 0;
-
-MERGE ClinicRooms AS t
-USING @St AS s ON t.RoomNumber = s.RoomNumber
-WHEN MATCHED THEN UPDATE SET AssignedDoctorID = s.WorkerID, IsOccupied = 0, CurrentChildID = NULL
-WHEN NOT MATCHED THEN INSERT (RoomNumber, AssignedDoctorID, IsOccupied, CurrentChildID)
-    VALUES (s.RoomNumber, s.WorkerID, 0, NULL);
+WHERE AssignedDoctorID IN (@Doctor, @Nurse1, @Nurse2) AND IsOccupied = 0;
 
 /* =====================================================================
    8. TODAY'S QUEUE
-   #1 Dalisay family — finished this morning in Room 1 (Doctor)
-   #2 Reyes — in Room 2 with Nurse Mark Anthony right now
+   #1 Dalisay family — finished this morning
+   #2 Reyes — inside the vaccination room right now (called by Call Next)
    #3 Santos (newborn), #4 Garcia, #5 Navarro (catch-up) — waiting for
-      the Admission Staff to send them to a station
+      the Nurse to call them in
    ===================================================================== */
 
 DECLARE @QBase int = ISNULL((SELECT MAX(QueueNumber) FROM Queues WHERE QueueDate = @Today), 0);
 
-DECLARE @Q TABLE (N int, QueueID uniqueidentifier, ParentN int, Status nvarchar(20), MinutesAgo int, Station nvarchar(50));
+DECLARE @Q TABLE (N int, QueueID uniqueidentifier, ParentN int, Status nvarchar(20), MinutesAgo int);
 INSERT @Q VALUES
- (1,'A2A60000-0000-0000-0000-000000000001', 2,'Completed', 150, N'Room 1'),
- (2,'A2A60000-0000-0000-0000-000000000002', 3,'InProgress',100, N'Room 2'),
- (3,'A2A60000-0000-0000-0000-000000000003', 1,'Waiting',    70, NULL),
- (4,'A2A60000-0000-0000-0000-000000000004', 4,'Waiting',    45, NULL),
- (5,'A2A60000-0000-0000-0000-000000000005', 9,'Waiting',    20, NULL);
+ (1,'A2A60000-0000-0000-0000-000000000001', 2,'Completed', 150),
+ (2,'A2A60000-0000-0000-0000-000000000002', 3,'InProgress',100),
+ (3,'A2A60000-0000-0000-0000-000000000003', 1,'Waiting',    70),
+ (4,'A2A60000-0000-0000-0000-000000000004', 4,'Waiting',    45),
+ (5,'A2A60000-0000-0000-0000-000000000005', 9,'Waiting',    20);
 
 INSERT Queues (QueueID, ParentID, QueueNumber, QueueDate, Status, AssignedRoomID, CreatedAt, UpdatedAt)
 SELECT q.QueueID, p.ParentID, @QBase + q.N, @Today, q.Status,
-       (SELECT RoomID FROM ClinicRooms WHERE RoomNumber = q.Station),
+       NULL,
        DATEADD(minute, -q.MinutesAgo, GETDATE()),
        CASE WHEN q.Status <> 'Waiting' THEN DATEADD(minute, -q.MinutesAgo + 25, GETDATE()) END
 FROM @Q q JOIN @Par p ON p.N = q.ParentN;
@@ -421,12 +409,6 @@ SELECT CAST('A2A70000-0000-0000-0000-' + RIGHT('000000000000' + CAST(k.N AS varc
        q.QueueID, k.ChildID, DATEADD(minute, -q.MinutesAgo, GETDATE())
 FROM @Q q JOIN @Kid k ON k.ParentN = q.ParentN
 WHERE NOT (q.N = 5 AND k.N = 18);
-
--- Room 2 is busy with Mia (queue #2)
-UPDATE ClinicRooms
-SET IsOccupied = 1,
-    CurrentChildID = (SELECT ChildID FROM @Kid WHERE N = 4)
-WHERE RoomNumber = N'Room 2';
 
 /* =====================================================================
    9. NOTIFICATIONS
@@ -458,7 +440,7 @@ SELECT NEWID(), p.ParentID, 'Announcement',
        CASE WHEN p.N % 3 = 0 THEN 1 ELSE 0 END, DATEADD(day, -2, @Now)
 FROM @Par p;
 
--- Low-stock bell alert for the healthcare workers
+-- Low-stock bell alert for the Doctor and Nurses
 INSERT Notifications (NotificationID, UserID, VaccineID, Type, Title, Message, IsRead, CreatedAt)
 SELECT NEWID(), u.UserID, @IPV, 'LowStock',
        N'Low stock — Inactivated Polio Vaccine',
@@ -482,17 +464,17 @@ INSERT @A VALUES
  (60*24*5+190, @StaffU, NULL, 'Staff',       'Patient Management','Create',           N'Child – Kyle Santos',              'Registered a new child and generated the vaccination timeline.',  'Success','192.168.1.21','Chrome on Windows', NULL, NULL),
  (60*24*4+400, NULL, N'Unknown', 'Parent',   'Authentication',    'Login',            N'Account – jenny.navaro@demo.aruga.ph','Login attempt with an unknown username or email.',            'Failed', '203.177.42.9','Chrome on Android', NULL, NULL),
  (60*24*4+395, NULL, N'Jenny Navarro','Parent','Authentication',  'Login',            N'Account – jenny.navarro@demo.aruga.ph','Signed in successfully.',                                     'Success','203.177.42.9','Chrome on Android', NULL, NULL),
- (60*24*3+240, @Nurse1, NULL, 'Healthcare',  'Authentication',    'Login',            N'Account – demo.nurse',             'Signed in successfully.',                                         'Success','192.168.1.31','Safari on iOS', NULL, NULL),
+ (60*24*3+240, @Nurse1, NULL, 'Staff',       'Authentication',    'Login',            N'Account – demo.nurse',             'Signed in successfully.',                                         'Success','192.168.1.31','Safari on iOS', NULL, NULL),
  (60*24*3+120, @AdminU, NULL, 'SystemAdmin', 'Inventory',         'Adjust Inventory', N'Batch DEMO-HEPB-2509',             'Flagged expired batch — kept for records, not for use.',         'Warning','192.168.1.10','Chrome on Windows', 'Remaining: 15, Active: True', 'Remaining: 15, Active: True'),
  (60*24*2+300, @AdminU, NULL, 'SystemAdmin', 'Notifications',     'Create',           N'Announcement – Measles-Rubella catch-up week','Sent an announcement to 13 parent(s).',           'Success','192.168.1.10','Chrome on Windows', NULL, NULL),
- (60*24*1+200, @Doctor, NULL, 'Healthcare',  'Authentication',    'Login',            N'Account – demo.doctor',            'Signed in successfully.',                                         'Success','192.168.1.33','Chrome on Windows', NULL, NULL),
- (60*24*1+180, @Doctor, NULL, 'Healthcare',  'User Management',   'Update',           N'Profile – Elena Villanueva',       'Updated own profile information.',                                'Success','192.168.1.33','Chrome on Windows', NULL, NULL),
+ (60*24*1+200, @Doctor, NULL, 'SystemAdmin', 'Authentication',    'Login',            N'Account – demo.doctor',            'Signed in successfully.',                                         'Success','192.168.1.33','Chrome on Windows', NULL, NULL),
+ (60*24*1+180, @Doctor, NULL, 'SystemAdmin', 'User Management',   'Update',           N'Profile – Elena Villanueva',       'Updated own profile information.',                                'Success','192.168.1.33','Chrome on Windows', NULL, NULL),
  (200,         @StaffU, NULL, 'Staff',       'Authentication',    'Login',            N'Account – demo.staff',             'Signed in successfully.',                                         'Success','192.168.1.21','Chrome on Windows', NULL, NULL),
- (180,         @Nurse1, NULL, 'Healthcare',  'Authentication',    'Login',            N'Account – demo.nurse',             'Signed in successfully.',                                         'Success','192.168.1.31','Safari on iOS', NULL, NULL);
+ (180,         @Nurse1, NULL, 'Staff',       'Authentication',    'Login',            N'Account – demo.nurse',             'Signed in successfully.',                                         'Success','192.168.1.31','Safari on iOS', NULL, NULL);
 
 -- One "Vaccinate Child" entry per dose given in the last 7 days
 INSERT @A
-SELECT DATEDIFF(minute, vr.VaccinationDate, GETDATE()), vr.AdministeredByUserID, NULL, 'Healthcare', 'Vaccination', 'Vaccinate Child',
+SELECT DATEDIFF(minute, vr.VaccinationDate, GETDATE()), vr.AdministeredByUserID, NULL, CASE WHEN vr.AdministeredByUserID = @Doctor THEN 'SystemAdmin' ELSE 'Staff' END, 'Vaccination', 'Vaccinate Child',
        k.FirstName + N' ' + k.LastName + N' – ' + v.VaccineName + N' Dose ' + CAST(vr.DoseNumber AS nvarchar(5)),
        ISNULL(N'Recorded an administered vaccine dose. Remarks: ' + vr.NurseObservation, N'Recorded an administered vaccine dose.'),
        'Success', '192.168.1.3' + CAST(vr.DoseNumber AS nvarchar(2)), 'Chrome on Windows', NULL, N'Record ' + vr.RecordCode

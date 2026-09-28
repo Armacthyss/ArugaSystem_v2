@@ -93,19 +93,14 @@ namespace AndroidWebAPI.Controllers
             return Ok(result);
         }
 
-        private static string RoleFor(string? position) => position switch
-        {
-            "Administrator" => "SystemAdmin",
-            "Staff" => "Staff",
-            _ => "Healthcare",
-        };
+        private static string RoleFor(string? position) => Roles.ForPosition(position);
 
         // JWT role values -> labels the admin page shows.
         private static string? FriendlyRole(string? role) => role switch
         {
-            "SystemAdmin" => "System Admin",
-            "Healthcare" => "Healthcare Worker",
-            "Staff" => "Admission Staff",
+            "SystemAdmin" => "Admin / Doctor",
+            "Healthcare" => "Staff / Nurse",   // entries from before the 3-level change
+            "Staff" => "Staff / Nurse",
             _ => role,
         };
     }

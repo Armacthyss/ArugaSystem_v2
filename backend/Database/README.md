@@ -18,6 +18,7 @@ Notes
 - SSMS shows "Caution: Changing any part of an object name could break scripts..." while `Cleanup_2026-09.sql` gives constraints readable names. That is expected.
 - From the command line, add `-I` so SQL Server accepts the scripts:
   `sqlcmd -S localhost -E -I -d ArugaSystemDB -i DemoSeed.sql`
-- Demo logins (password **Aruga@2026**): `demo.admin`, `demo.doctor`, `demo.nurse`, `demo.nurse2`, `demo.staff`, and parents such as `maria.santos@demo.aruga.ph`. `lourdes.luna@demo.aruga.ph` is Isabela Cruz's grandmother (a second guardian), to show a relative bringing the child.
+- Demo logins (password **Aruga@2026**): Admin / Doctor `demo.doctor` (and `demo.admin`), Staff / Nurse `demo.nurse`, `demo.nurse2` (and `demo.staff`), and parents such as `maria.santos@demo.aruga.ph`. Each parent is asked to accept the Data Privacy Notice the first time they sign in.
+- The API adds any new columns it needs by itself when it starts (e.g. the Data Privacy consent dates, Sep 2026), so an older database doesn't need a script for them. `lourdes.luna@demo.aruga.ph` is Isabela Cruz's grandmother (a second guardian), to show a relative bringing the child.
 - Parents can only check in on a vaccination day (Mon, Wed, Fri) from 8:00 to 11:00 AM, and nothing is "due today" on other days. If the demo is on another day or later in the day, first add that date under System Admin → Operating Hours → Add Exception as **open**, with hours that cover the demo, then run `DemoSeed.sql`. The script prints a note when today is not a vaccination day.
 - Children added straight into the database (not through the app) get their vaccination schedule automatically the next time the API starts.

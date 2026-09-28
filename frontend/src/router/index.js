@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { isLoggedIn, getRole } from '@/utils/auth'
+import { isLoggedIn, getRole, logout } from '@/utils/auth'
 
 // ── Login / Change Password ─────────────────────────────────
 
@@ -17,7 +17,6 @@ import ParentRecords from '@/components/ParentViews/Views/Record.vue'
 // ── Staff pages (formerly split across Admin/ and Staff/) ────
 
 import StaffCalendar from '@/components/Staff/StaffCalendar.vue'
-import StaffDoctorNurse from '@/components/Staff/StaffDoctorNurse.vue'
 import StaffReport from '@/components/Staff/StaffReport.vue'
 import StaffVaccineInventory from '@/components/Staff/StaffVaccineInventory.vue'
 import StaffQueueManagement from '@/components/Staff/StaffQueueManagement.vue'
@@ -36,7 +35,6 @@ import SystemAuditlogs from '@/components/SystemAdmin/SysAd-Auditlogs.vue'
 import TestAPI from '@/components/SystemAdmin/TestAPI.vue'
 import VaccineSchedule from '@/components/SystemAdmin/VaccineSchedule.vue'
 import SystemOperatingHours from '@/components/SystemAdmin/SysAd-Operating_hours.vue'
-import SystemRooms from '@/components/SystemAdmin/SysAd-Rooms.vue'
 
 // ── Staff ────────────────────────────────────────────────────
 
@@ -44,17 +42,8 @@ import StaffDashboard from '@/components/Staff/StaffDashboard.vue'
 import StaffAccountSettings from '@/components/Staff/StaffAccountSettings.vue'
 import StaffPatientRecords from '@/components/Staff/StaffPatientRecords.vue'
 import StaffVaccineSchedule from '@/components/Staff/StaffVaccineSchedule.vue'
-
-// ── Healthcare Worker (Doctor & Nurse share one portal) ─────
-
-import HealthCareHome from '@/components/Healthcare/HealthcareHome.vue'
-import HealthCareQueue from '@/components/Healthcare/HealthcareQueue.vue'
-import HealthCareCalendar from '@/components/Healthcare/HealthcareCalendar.vue'
-import HealthcarePatient from '@/components/Healthcare/HealthcarePatient.vue'
-import HealthcareReports from '@/components/Healthcare/HealthcareReports.vue'
-import HealthcareAccounts from '@/components/Healthcare/HealthcareAccounts.vue'
-import HealthcareVaccinationRecords from '@/components/Healthcare/HealthcareVaccinationRecords.vue'
-import HealthcareVaccination from '@/components/Healthcare/HealthcareVaccination.vue'
+import StaffVaccinationVisit from '@/components/Staff/StaffVaccinationVisit.vue'
+import StaffVaccinationRecords from '@/components/Staff/StaffVaccinationRecords.vue'
 import VaccinationCard from '@/components/Shared/VaccinationCard.vue'
 
 
@@ -113,100 +102,38 @@ const routes = [
   },
 
 
-  // ── Healthcare ─────────────────────────────────────────────
+  // ── Staff / Nurse ──────────────────────────────────────────
+  // Leveriza has three user levels: Admin / Doctor, Staff / Nurse and
+  // Parent. The Nurse checks families in, calls them into the one
+  // vaccination room (Call Next) and records the vaccines.
 
+  // Read-only list of the doses this Nurse gave. Declared BEFORE the
+  // dynamic /staff/vaccination/:queueId route below.
   {
-    path: '/healthcare/home',
-    component: HealthCareHome,
+    path: '/staff/vaccination-records',
+    component: StaffVaccinationRecords,
     meta: {
       requiresAuth: true,
-      role: 'Healthcare'
+      role: 'Staff'
     }
   },
 
+  // Recording flow — reached from the Dashboard's Vaccination Room card
+  // ("Start Vaccinating"): /staff/vaccination/:queueId?child=<childID>
   {
-    path: '/healthcare/queue',
-    component: HealthCareQueue,
+    path: '/staff/vaccination/:queueId',
+    component: StaffVaccinationVisit,
     meta: {
       requiresAuth: true,
-      role: 'Healthcare'
+      role: 'Staff'
     }
   },
 
-  {
-    path: '/healthcare/calendar',
-    component: HealthCareCalendar,
-    meta: {
-      requiresAuth: true,
-      role: 'Healthcare'
-    }
-  },
-
-  {
-    path: '/healthcare/patients',
-    component: HealthcarePatient,
-    meta: {
-      requiresAuth: true,
-      role: 'Healthcare'
-    }
-  },
-
-  // Read-only records list (sidebar item). Declared BEFORE the
-  // dynamic /healthcare/vaccination/:queueId route below.
-  {
-    path: '/healthcare/vaccination-records',
-    name: 'HealthcareVaccinationRecords',
-    component: HealthcareVaccinationRecords,
-    meta: {
-      requiresAuth: true,
-      role: 'Healthcare'
-    }
-  },
-
-  // Recording flow — reached from Queue → "Start Vaccinating",
-  // which pushes /healthcare/vaccination/:queueId?child=<childID>
-  {
-    path: '/healthcare/vaccination/:queueId',
-    name: 'HealthcareVaccination',
-    component: HealthcareVaccination,
-    meta: {
-      requiresAuth: true,
-      role: 'Healthcare'
-    }
-  },
-
-  {
-    path: '/healthcare/reports',
-    component: HealthcareReports,
-    meta: {
-      requiresAuth: true,
-      role: 'Healthcare'
-    }
-  },
-
-  {
-    path: '/healthcare/accounts',
-    component: HealthcareAccounts,
-    meta: {
-      requiresAuth: true,
-      role: 'Healthcare'
-    }
-  },
-
-
-  // ── Old /doctor/* links ────────────────────────────────────
-  // Doctors and Nurses now share the Healthcare Worker portal. Old
-  // bookmarks keep working by forwarding to the matching page.
-
-  { path: '/doctor/home',     redirect: '/healthcare/home' },
-  { path: '/doctor/queue',    redirect: '/healthcare/queue' },
-  { path: '/doctor/patients', redirect: '/healthcare/patients' },
-  { path: '/doctor/calendar', redirect: '/healthcare/calendar' },
-  { path: '/doctor/records',  redirect: '/healthcare/vaccination-records' },
-  { path: '/doctor/reports',  redirect: '/healthcare/reports' },
-  { path: '/doctor/account',  redirect: '/healthcare/accounts' },
-
-  // ── Staff ──────────────────────────────────────────────────
+  // Old links from the separate Doctor/Nurse portal (removed)
+  { path: '/healthcare/vaccination/:queueId', redirect: to => `/staff/vaccination/${to.params.queueId}` },
+  { path: '/healthcare/vaccination-records', redirect: '/staff/vaccination-records' },
+  { path: '/healthcare/:rest(.*)*', redirect: '/staff/dashboard' },
+  { path: '/doctor/:rest(.*)*', redirect: '/staff/dashboard' },
 
   {
     path: '/staff/dashboard',
@@ -257,14 +184,7 @@ const routes = [
   // Children and Parents are tabs on Patient Records now
   { path: '/staff/children', redirect: '/staff/patient-records?tab=children' },
 
-  {
-    path: '/staff/doctor-staff',
-    component: StaffDoctorNurse,
-    meta: {
-      requiresAuth: true,
-      role: 'Staff'
-    }
-  },
+  { path: '/staff/doctor-staff', redirect: '/staff/dashboard' },
 
   { path: '/staff/parents', redirect: '/staff/patient-records?tab=parents' },
 
@@ -406,14 +326,8 @@ const routes = [
     }
   },
 
-  {
-    path: '/system-admin/rooms',
-    component: SystemRooms,
-    meta: {
-      requiresAuth: true,
-      role: 'SystemAdmin'
-    }
-  },
+  // One vaccination room only (beneficiary revision), so the room list is gone
+  { path: '/system-admin/rooms', redirect: '/system-admin/home' },
 
   {
     path: '/system-admin/operating-hours',
@@ -459,8 +373,6 @@ function homeFor(role) {
   switch (role) {
     case 'Parent':
       return '/ParentOverview'
-    case 'Healthcare':
-      return '/healthcare/home'
     case 'Staff':
       return '/staff/dashboard'
     case 'SystemAdmin':
@@ -477,8 +389,15 @@ function homeFor(role) {
 
 router.beforeEach((to) => {
 
-  const loggedIn = isLoggedIn()
+  let loggedIn = isLoggedIn()
   const role = getRole()
+
+  // A sign-in from before the three user levels (e.g. the old
+  // "Healthcare" portal) has no home any more: sign in again.
+  if (loggedIn && homeFor(role) === '/') {
+    logout()
+    loggedIn = false
+  }
 
 
   // ----------------------------------------------------------

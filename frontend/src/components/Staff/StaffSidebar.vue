@@ -22,7 +22,7 @@
       </div>
       <div v-if="!collapsed" class="leading-tight">
         <p class="font-semibold text-[15px]">Aruga Pediatric System</p>
-        <p class="text-[11px] text-stone-500">Staff Portal</p>
+        <p class="text-[11px] text-stone-500">Staff / Nurse Portal</p>
       </div>
     </div>
 
@@ -73,9 +73,10 @@
 import { ref, computed } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { getAccount, logout } from "@/utils/auth";
+import { userLevel } from "@/utils/format";
 import logoIcon from "@/assets/logo-icon.svg";
 import {
-  Home, Stethoscope, Syringe, Package, CalendarDays,
+  Home, Syringe, Package, CalendarDays, FileCheck2,
   ClipboardList, BarChart2, Contact, LogOut, ChevronLeft, ChevronRight, QrCode,
 } from "lucide-vue-next";
 
@@ -91,10 +92,12 @@ const collapsed = ref(false);
 // clutter. "Audit Log" was dropped too — that's a System Admin capability,
 // not something Staff accounts should see at all (belongs in the Admin
 // portal's own nav, if/when that exists separately).
+// The Dashboard holds the Vaccination Room card (Call Next / Start
+// Vaccinating); vaccination visit pages count as part of it.
 const NAV_ITEMS = [
-  { icon: Home,          label: "Dashboard",       path: "/staff/dashboard" },
+  { icon: Home,          label: "Dashboard",       path: "/staff/dashboard", also: "/staff/vaccination/" },
   { icon: Contact,       label: "Patient Records", path: "/staff/patient-records" },
-  { icon: Stethoscope,   label: "Doctor / Nurse",  path: "/staff/doctor-staff" },
+  { icon: FileCheck2,    label: "My Vaccination Records", path: "/staff/vaccination-records" },
   { icon: Syringe,       label: "Vaccine Schedule",path: "/staff/vaccine-schedule" },
   { icon: Package,       label: "Inventory",       path: "/staff/vaccine-inventory" },
   { icon: CalendarDays,  label: "Calendar",        path: "/staff/calendar" },
@@ -105,7 +108,8 @@ const NAV_ITEMS = [
 
 const navItems = NAV_ITEMS;
 
-const isActive = (item) => !!item.path && route.path === item.path;
+const isActive = (item) =>
+  !!item.path && (route.path === item.path || (!!item.also && route.path.startsWith(item.also)));
 
 const goTo = (item) => {
   if (item.disabled || !item.path) return;
@@ -123,7 +127,7 @@ const staffName = computed(() =>
   [user.firstName || user.FirstName, user.lastName || user.LastName].filter(Boolean).join(" ") ||
   user.username || user.Username || "Staff"
 );
-const staffRole = computed(() => user.position || user.Position || user.jobTitle || account.role || "Staff");
+const staffRole = computed(() => userLevel(user.UserType || user.position || account.role || "Staff"));
 const staffInitials = computed(() =>
   staffName.value
     .split(" ")

@@ -1,10 +1,10 @@
 <script setup>
-import { ref, computed, reactive, onMounted } from 'vue'
+import { ref, computed, reactive, watch, onMounted } from 'vue'
 import axios from 'axios'
 import AppSidebar from './Components/AppSidebar.vue'
 import AppHeader from './Components/AppHeader.vue'
 import {
-  API_BASE, ageLabel, formatDate, formatDateTime, toISODate, downloadCSV, summarizeStock,
+  API_BASE, ageLabel, formatDate, formatDateTime, toISODate, downloadCSV, summarizeStock, userLevel,
 } from '@/utils/format'
 
 /* -------------------------------- Source data -------------------------------- */
@@ -41,6 +41,8 @@ onMounted(async () => {
     load('schedule', '/VaccinationTimeline/schedule', { from: toISODate(), to: toISODate(inSixtyDays), includeOverdue: true }),
   ])
   loading.value = false
+  // Show the selected report straight away instead of an empty preview
+  generateReport()
 })
 
 const completed = computed(() => data.records.filter(r => (r.status ?? 'Completed') === 'Completed'))
@@ -70,10 +72,10 @@ const summary = computed(() => {
 const categories = [
   { name: 'Patient Reports', icon: '🧒', reports: ['Registered Children', 'Children by Vaccination Status', 'Parent-Child Relationship Report'] },
   { name: 'Vaccination Reports', icon: '💉', reports: ['Vaccinations Performed', 'Vaccinations by Month', 'Vaccinations by Vaccine', 'Children Fully Vaccinated', 'Delayed Vaccinations', 'Upcoming Vaccinations'] },
-  { name: 'Inventory Reports', icon: '📦', reports: ['Current Inventory', 'Low Stock Vaccines', 'Expired & Expiring Batches'] },
+  { name: 'Inventory Reports', icon: '📦', reports: ['Inventory Summary', 'Current Inventory', 'Stock Received', 'Low Stock Vaccines', 'Expired & Expiring Batches'] },
   { name: 'Queue Reports', icon: '🎫', reports: ['Daily Queue Summary'] },
   { name: 'Notification Reports', icon: '🔔', reports: ['Notifications Sent', 'Announcement History'] },
-  { name: 'User Reports', icon: '👥', reports: ['Registered Parents', 'Healthcare Workers & Staff'] },
+  { name: 'User Reports', icon: '👥', reports: ['Registered Parents', 'Doctors & Nurses'] },
   { name: 'Audit Reports', icon: '📋', reports: ['Audit Logs', 'Login History'] },
 ]
 
@@ -83,7 +85,6 @@ const toggleCategory = (name) => (expandedCategory.value = expandedCategory.valu
 const selectedReport = ref('Vaccinations by Month')
 const selectReport = (name) => {
   selectedReport.value = name
-  generatedReport.value = null
 }
 
 /* -------------------------------- Filters -------------------------------- */
@@ -165,6 +166,43 @@ function countChart(items, keyFn, title) {
   const map = {}
   items.forEach(i => { const k = keyFn(i) || '—'; map[k] = (map[k] || 0) + 1 })
   return { title, points: Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([label, value]) => ({ label, value })) }
+}
+
+// Totals shown above an inventory report
+function inventoryTiles(batches) {
+  const today = toISODate()
+  const usable = batches.filter(i => i.status && String(i.expirationDate).slice(0, 10) >= today)
+  const days = i => (new Date(i.expirationDate) - new Date()) / 86400000
+  return [
+    { label: 'Doses On Hand', value: usable.reduce((s, i) => s + i.currentQuantity, 0) },
+    { label: 'Batches In Stock', value: usable.filter(i => i.currentQuantity > 0).length },
+    { label: 'Low / Out of Stock Batches', value: usable.filter(i => i.currentQuantity < i.minimumStock).length },
+    { label: 'Doses Expiring ≤30 Days', value: usable.filter(i => days(i) <= 30).reduce((s, i) => s + i.currentQuantity, 0) },
+    { label: 'Expired Doses on Shelf', value: batches.filter(i => i.status && String(i.expirationDate).slice(0, 10) < today).reduce((s, i) => s + i.currentQuantity, 0) },
+  ]
+}
+
+// Inventory Summary: per vaccine, from GET /api/VaccineInventory/summary
+async function buildInventorySummary(range) {
+  const to = new Date(range.end); to.setDate(to.getDate() - 1)
+  const from = range.start.getFullYear() < 2001 ? new Date(2020, 0, 1) : range.start
+  const res = await axios.get(`${API_BASE}/VaccineInventory/summary`, { params: { from: toISODate(from), to: toISODate(to) } })
+  const lines = res.data.lines.filter(l => vaccinePasses(l.vaccineName))
+  const t = res.data.totals
+  const lasts = l => l.weeksLeft == null ? (l.onHand ? 'No recent use' : '—') : l.weeksLeft < 1 ? 'Under 1 week' : l.weeksLeft > 52 ? 'Over 1 year' : `${Math.floor(l.weeksLeft)} week(s)`
+  return {
+    tiles: [
+      { label: 'Doses On Hand', value: t.onHand },
+      { label: 'Received in Period', value: t.received },
+      { label: 'Used in Period', value: t.used },
+      { label: 'Expiring ≤30 Days', value: t.expiringSoon },
+      { label: 'Expired on Shelf', value: t.expiredOnShelf },
+      { label: 'Low / Out of Stock Vaccines', value: t.lowOrOut },
+    ],
+    columns: ['Vaccine', 'On Hand', 'Minimum', 'Received', 'Used', 'Expiring ≤30d', 'Expired', 'Avg / Week', 'Lasts About', 'Next Expiry', 'Status'],
+    rows: lines.map(l => [l.vaccineName, l.onHand, l.minimumStock, l.receivedInPeriod, l.usedInPeriod, l.expiringSoon, l.expiredOnShelf, l.averageWeeklyUse, lasts(l), l.nextExpiry ? formatDate(l.nextExpiry) : '—', l.status]),
+    chart: { title: 'Doses On Hand per Vaccine', points: lines.map(l => ({ label: l.abbreviation || l.vaccineName, value: l.onHand })) },
+  }
 }
 
 function buildReport(name, range) {
@@ -260,9 +298,29 @@ function buildReport(name, range) {
       if (name === 'Expired & Expiring Batches') list = list.filter(i => (new Date(i.expirationDate) - new Date()) / 86400000 <= 30)
       const statusOf = i => String(i.expirationDate).slice(0, 10) < today ? 'Expired' : !i.status ? 'Inactive' : i.currentQuantity === 0 ? 'Out of Stock' : i.currentQuantity < i.minimumStock ? 'Low Stock' : 'Good'
       return {
+        tiles: inventoryTiles(data.inventory.filter(i => vaccinePasses(vname[i.vaccineID]))),
         columns: ['Vaccine', 'Lot No.', 'Remaining', 'Initial', 'Minimum', 'Received', 'Expires', 'Status'],
         rows: list.map(i => [vname[i.vaccineID] || i.vaccineID, i.lotNumber, i.currentQuantity, i.initialQuantity, i.minimumStock, formatDate(i.receivedDate), formatDate(i.expirationDate), statusOf(i)]),
         chart: { title: 'Doses Remaining per Vaccine', points: summarizeStock(data.inventory, data.vaccines).filter(s => vaccinePasses(s.name)).map(s => ({ label: s.abbreviation || s.name, value: s.stock })) },
+      }
+    }
+    case 'Stock Received': {
+      const vname = Object.fromEntries(data.vaccines.map(v => [v.vaccineID, v.vaccineName]))
+      const list = data.inventory.filter(i => vaccinePasses(vname[i.vaccineID]) && inPeriod(i.receivedDate, range))
+        .sort((a, b) => new Date(b.receivedDate) - new Date(a.receivedDate))
+      return {
+        tiles: [
+          { label: 'Batches Received', value: list.length },
+          { label: 'Doses Received', value: list.reduce((s, i) => s + i.initialQuantity, 0) },
+          { label: 'Still On Hand', value: list.reduce((s, i) => s + i.currentQuantity, 0) },
+        ],
+        columns: ['Received', 'Vaccine', 'Lot No.', 'Doses Received', 'Remaining', 'Supplier', 'Manufactured', 'Expires'],
+        rows: list.map(i => [formatDate(i.receivedDate), vname[i.vaccineID] || i.vaccineID, i.lotNumber, i.initialQuantity, i.currentQuantity, i.supplier || '—', i.manufacturingDate ? formatDate(i.manufacturingDate) : '—', formatDate(i.expirationDate)]),
+        chart: {
+          title: 'Doses Received per Vaccine',
+          points: Object.entries(list.reduce((m, i) => { const k = vname[i.vaccineID] || i.vaccineID; m[k] = (m[k] || 0) + i.initialQuantity; return m }, {}))
+            .sort((a, b) => b[1] - a[1]).map(([label, value]) => ({ label, value })),
+        },
       }
     }
     case 'Daily Queue Summary': {
@@ -300,12 +358,12 @@ function buildReport(name, range) {
         chart: monthlyChart(list.map(a => a.createdAt), 'New Parent Accounts per Month'),
       }
     }
-    case 'Healthcare Workers & Staff': {
+    case 'Doctors & Nurses': {
       const list = data.accounts.filter(a => a.role !== 'Parent')
       return {
-        columns: ['Name', 'Role', 'Username', 'Contact', 'Status', 'Last Login'],
-        rows: list.map(a => [`${a.firstName} ${a.lastName}`, a.role, a.username, a.contactNo || '—', a.status, a.lastLogin ? formatDateTime(a.lastLogin) : 'Never']),
-        chart: countChart(list, a => a.role, 'Accounts by Role'),
+        columns: ['Name', 'User Level', 'Position', 'Username', 'Contact', 'Status', 'Last Login'],
+        rows: list.map(a => [`${a.firstName} ${a.lastName}`, userLevel(a.role), a.role, a.username, a.contactNo || '—', a.status, a.lastLogin ? formatDateTime(a.lastLogin) : 'Never']),
+        chart: countChart(list, a => userLevel(a.role), 'Accounts by User Level'),
       }
     }
     case 'Audit Logs':
@@ -332,28 +390,45 @@ const pageSize = 15
 const preparedBy = (() => {
   try {
     const u = JSON.parse(localStorage.getItem('account') || '{}').user || {}
-    return [u.FirstName, u.LastName].filter(Boolean).join(' ') || 'System Administrator'
-  } catch { return 'System Administrator' }
+    return [u.FirstName, u.LastName].filter(Boolean).join(' ') || 'Administrator'
+  } catch { return 'Administrator' }
 })()
 
+const reportError = ref('')
+let generation = 0
 const generateReport = () => {
+  if (loading.value) return
+  const mine = ++generation
   isGenerating.value = true
+  reportError.value = ''
   page.value = 1
   // Let the spinner paint before computing large reports.
-  setTimeout(() => {
+  setTimeout(async () => {
     const range = periodRange()
-    const result = buildReport(selectedReport.value, range)
-    generatedReport.value = {
-      name: selectedReport.value,
-      dateGenerated: formatDateTime(new Date()),
-      preparedBy,
-      dateRange: range.label,
-      totalRecords: result.rows.length,
-      ...result,
+    try {
+      const result = selectedReport.value === 'Inventory Summary'
+        ? await buildInventorySummary(range)
+        : buildReport(selectedReport.value, range)
+      if (mine !== generation) return   // a newer report was asked for meanwhile
+      generatedReport.value = {
+        name: selectedReport.value,
+        dateGenerated: formatDateTime(new Date()),
+        preparedBy,
+        dateRange: range.label,
+        totalRecords: result.rows.length,
+        ...result,
+      }
+    } catch (e) {
+      console.error('generateReport:', e)
+      if (mine === generation) { generatedReport.value = null; reportError.value = 'Could not build this report. Check that the API is running, then try again.' }
+    } finally {
+      if (mine === generation) isGenerating.value = false
     }
-    isGenerating.value = false
   }, 150)
 }
+
+// The preview follows the selected report and filters by itself
+watch([selectedReport, () => JSON.stringify(filters)], generateReport)
 
 const maxChartValue = computed(() => Math.max(1, ...(generatedReport.value?.chart?.points || []).map(p => p.value)))
 const totalPages = computed(() => Math.max(1, Math.ceil((generatedReport.value?.rows.length || 0) / pageSize)))
@@ -363,6 +438,7 @@ const exportExcel = () => {
   const r = generatedReport.value
   downloadCSV(`${r.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${toISODate()}.csv`, [
     [r.name], [`Period: ${r.dateRange}`], [`Generated: ${r.dateGenerated} by ${r.preparedBy}`], [],
+    ...(r.tiles?.length ? [...r.tiles.map(t => [t.label, t.value]), []] : []),
     r.columns, ...r.rows,
   ])
 }
@@ -380,7 +456,7 @@ const printReport = () => {
     <div class="print:hidden contents"><AppSidebar /></div>
 
     <div class="flex-1 min-w-0 flex flex-col">
-      <div class="print:hidden"><AppHeader title="Reports" breadcrumb="System Administration / Reports" /></div>
+      <div class="print:hidden"><AppHeader title="Reports" breadcrumb="Admin / Reports" /></div>
 
       <main class="p-6 space-y-6 print:p-0">
         <div v-if="loadErrors.length" class="print:hidden bg-amber-50 border border-amber-100 text-amber-800 text-sm rounded-xl px-4 py-3">
@@ -452,7 +528,7 @@ const printReport = () => {
               </div>
               <div class="flex items-center gap-2 pt-1">
                 <button @click="generateReport" :disabled="loading" class="flex-1 text-sm font-semibold px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50">
-                  {{ loading ? 'Loading data...' : 'Generate Report' }}
+                  {{ loading ? 'Loading data...' : 'Refresh Report' }}
                 </button>
                 <button @click="resetFilters" class="text-sm font-semibold px-4 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50">Reset</button>
               </div>
@@ -477,7 +553,7 @@ const printReport = () => {
             <div v-if="!generatedReport && !isGenerating" class="flex flex-col items-center justify-center text-center py-24 px-6">
               <div class="w-14 h-14 rounded-xl bg-slate-50 flex items-center justify-center text-2xl mb-4">📄</div>
               <p class="text-sm font-semibold text-slate-700">No report generated yet</p>
-              <p class="text-xs text-slate-400 mt-1 max-w-xs">Select a report from the categories panel, set your filters, then click Generate Report.</p>
+              <p class="text-xs max-w-xs mt-1" :class="reportError ? 'text-rose-600' : 'text-slate-400'">{{ reportError || (loading ? 'Loading the clinic data…' : 'Select a report from the categories panel.') }}</p>
             </div>
 
             <div v-else-if="isGenerating" class="flex flex-col items-center justify-center text-center py-24 px-6">
@@ -492,6 +568,13 @@ const printReport = () => {
                 <div><p class="text-xs text-slate-500">Prepared By</p><p class="text-sm font-semibold text-slate-900 mt-0.5">{{ generatedReport.preparedBy }}</p></div>
                 <div><p class="text-xs text-slate-500">Date Range</p><p class="text-sm font-semibold text-slate-900 mt-0.5">{{ generatedReport.dateRange }}</p></div>
                 <div><p class="text-xs text-slate-500">Total Records</p><p class="text-sm font-semibold text-slate-900 mt-0.5">{{ generatedReport.totalRecords }}</p></div>
+              </div>
+
+              <div v-if="generatedReport.tiles?.length" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                <div v-for="t in generatedReport.tiles" :key="t.label" class="rounded-lg border border-slate-200 px-4 py-3">
+                  <p class="text-[10.5px] font-semibold uppercase tracking-wide text-slate-500">{{ t.label }}</p>
+                  <p class="text-xl font-extrabold text-slate-900 mt-0.5">{{ t.value }}</p>
+                </div>
               </div>
 
               <div v-if="generatedReport.chart?.points?.length">

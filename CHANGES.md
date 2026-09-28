@@ -1,7 +1,53 @@
 # Aruga: what changed (September 2026)
 
 A plain-language list of everything that was changed, fixed or added, grouped
-by who uses it. The work is on the `Aruga-Polished` git branch.
+by who uses it. The work up to Sep 27 is on the `Aruga-Polished` git branch;
+the beneficiary revision below is on `Aruga-Revision`.
+
+---
+
+## Beneficiary revision (Sep 28, 2026)
+
+Changes asked for by Leveriza Health Center and by City Hall.
+
+**Three user levels instead of four**
+- **Admin / Doctor.** The Doctor is the highest authority, so a Doctor account now signs in to the Admin portal (all the admin pages).
+- **Staff / Nurse.** A Nurse account signs in to the Staff portal, which now also does the vaccinating. The separate Doctor/Nurse portal is gone; old links to it open the Staff Dashboard.
+- **Parent** is unchanged.
+- Admin → User Management: new accounts are "Staff / Nurse" or "Admin / Doctor". Older accounts keep working: an "Administrator" account is Admin level, a "Staff" account is Staff level.
+- Labels everywhere (sidebars, Audit Logs, Reports, dashboard counts) use the three level names.
+
+**One vaccination room, with Call Next**
+- Leveriza has one vaccination room and one person vaccinating, so stations and room assignment were removed (Admin → Vaccination Rooms and Staff → Doctor / Nurse are gone).
+- Staff Dashboard → **Vaccination Room** card: **Call Next** calls the next family in line. The parent's phone shows a full-screen "It's your turn!" alert with a chime (and a vibration on Android) on any parent page, plus one SMS. The call is also in the parent's notifications.
+- For the family inside: **Start Vaccinating** (per child), **Call Again** (alerts the phone again, no second SMS), **Not Here** (back to waiting, same number) and **Complete Visit**. The megaphone button on a waiting row calls that family out of turn.
+- Only one family can be inside at a time. Today's vaccines can only be recorded for a family that was called in, and only a Staff / Nurse account can record them. The dose is always saved under the Nurse who is signed in.
+
+**Each health worker sees only their own vaccination records**
+- Staff → **My Vaccination Records** lists only the vaccines that Nurse gave. A child's full history is still on the child's record, and the Admin's Patient Management and Reports still count every dose.
+
+**Barangays 19 and 21–40 only**
+- Every barangay field is now a dropdown of Barangays 19 and 21–40 (Staff Patient Records, Admin Patient Management, Admin Add User). Families from other barangays can't be registered; the system refuses them even if typed in some other way.
+- Older records with a barangay outside this list still open and can be edited; the old barangay is shown as "(outside Leveriza's area)" until someone picks a new one.
+- The demo data now uses Barangays 19, 21, 24 and 33, with Pasay City addresses (Leveriza Health Center is in Pasay City).
+
+**Admin → Patient Management: progress pop-up**
+- Hovering (or tapping) the progress bar, e.g. 14/15, shows which vaccines the child hasn't had yet, with the due date, and overdue ones in red.
+
+**Inventory summaries and working Reports**
+- New **Inventory Summary** on Admin → Inventory, Staff → Inventory and Staff → Clinic Reports: per vaccine, doses on hand, minimum, received and used this month (or last month, this year, or any dates), expiring within 30 days, expired doses still on the shelf, average doses used per week and about how long the stock will last. It can be exported to Excel.
+- Admin → Reports now shows the selected report right away and updates by itself when you pick another report or change a filter (before, it stayed empty until "Generate Report" was clicked, so it looked like it did nothing).
+- New inventory reports: **Inventory Summary** and **Stock Received**. Inventory reports now show totals at the top (doses on hand, batches, low stock, expiring, expired).
+- The "Available Doses" count on Admin → Inventory no longer includes expired doses.
+
+**Data Privacy consent — Data Privacy Act of 2012 (Republic Act No. 10173), asked by City Hall**
+- Registering a parent/guardian (Staff Patient Records, Admin Patient Management, Admin Add User) needs a ticked **Data Privacy consent** box. "Read the notice" shows the full Data Privacy Notice. The system refuses a registration without it, and the date is saved.
+- The first time a parent signs in, they must read the notice and tick **I agree** before using the portal (or sign out). This is asked once; the date is saved and appears in the Audit Logs.
+- The notice says plainly that the health center shares the information with Aruga and its student developers, what is kept, why, who can see it, and the parent's rights under the Data Privacy Act.
+
+**For the team**
+- The database gets two new columns (`Parents.ConsentRecordedAt`, `Parents.PrivacyConsentAt`). The API adds them by itself the first time it starts, so no script needs to be run. `Schema.sql` has them for new databases.
+- Checked on a copy of the database: 40 API checks (levels, Call Next, recording rules, own records, barangays, consent, inventory summary) and a browser walk-through of the Nurse, the parent on a phone, and the Admin / Doctor.
 
 ---
 

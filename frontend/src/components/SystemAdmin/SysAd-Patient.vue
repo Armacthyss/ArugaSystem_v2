@@ -5,6 +5,8 @@ import axios from 'axios'
 import AppHeader from './Components/AppHeader.vue'
 import AppSidebar from './Components/AppSidebar.vue'
 import { API_BASE, ageLabel, formatDate, isSameDay, toISODate, downloadCSV } from '@/utils/format'
+import { barangayChoices, BARANGAY_HINT } from '@/utils/barangays'
+import PrivacyConsentCheckbox from '@/components/Shared/PrivacyConsentCheckbox.vue'
 
 /* -------------------------------- Status meta -------------------------------- */
 const vaccMeta = {
@@ -98,6 +100,25 @@ const exportPatients = () => {
   ])
 }
 
+/* --------------------- Progress pop-up (hover the 14/15 bar) --------------------- */
+// Shows which vaccines the child hasn't had yet. Teleported to <body> so the
+// table's horizontal scroll doesn't clip it; also opens on tap / keyboard focus.
+const progressTip = ref(null) // { patient, style }
+function showProgress(patient, event) {
+  const r = event.currentTarget.getBoundingClientRect()
+  const width = 300
+  const below = r.bottom + 8 + 260 < window.innerHeight
+  progressTip.value = {
+    patient,
+    style: {
+      left: `${Math.max(8, Math.min(r.left, window.innerWidth - width - 8))}px`,
+      ...(below ? { top: `${r.bottom + 8}px` } : { bottom: `${window.innerHeight - r.top + 8}px` }),
+      width: `${width}px`,
+    },
+  }
+}
+const hideProgress = () => { progressTip.value = null }
+
 /* ------------------------------ Row actions menu ---------------------------- */
 const { openMenuId, menuStyle, toggleMenu, closeMenu } = useFloatingMenu()
 
@@ -174,7 +195,7 @@ const blankRegister = () => ({
   birthWeight: '', birthHeight: '', placeOfBirth: '', address: '', allergies: '', familyNo: '', barangay: '',
   parentSearch: '', selectedParent: null,
   newParentFirstName: '', newParentLastName: '', newParentContact: '', newParentEmail: '',
-  relationship: 'Mother',
+  relationship: 'Mother', privacyConsent: false,
 })
 const registerForm = reactive(blankRegister())
 
@@ -202,6 +223,11 @@ const registerPatient = async () => {
         saving.value = false
         return
       }
+      if (!registerForm.privacyConsent) {
+        formError.value = 'The parent/guardian must agree to the Data Privacy Notice before they can be registered.'
+        saving.value = false
+        return
+      }
       const hasEmail = !!registerForm.newParentEmail.trim()
       const res = await axios.post(`${API_BASE}/Parents`, {
         firstName: registerForm.newParentFirstName,
@@ -209,7 +235,9 @@ const registerPatient = async () => {
         contactNo: registerForm.newParentContact,
         email: hasEmail ? registerForm.newParentEmail : null,
         address: registerForm.address || null,
+        barangayNo: registerForm.barangay || null,
         createLogin: hasEmail,
+        privacyConsent: registerForm.privacyConsent,
       })
       parentId = res.data.parentID ?? res.data.parent?.parentID ?? res.data.ParentID
       newParentPassword = res.data.temporaryPassword || ''
@@ -261,7 +289,7 @@ const openEditModal = (patient) => {
     firstName: patient.firstName, middleName: patient.middleName || '', lastName: patient.lastName,
     birthDate: String(patient.birthDate).slice(0, 10), sex: patient.sex || 'Male',
     placeOfBirth: patient.placeOfBirth || '', address: patient.address || '', allergies: patient.allergies || '',
-    birthWeight: patient.birthWeight ?? '', birthHeight: patient.birthHeight ?? '', barangay: patient.barangay, familyNo: patient.familyNo || '',
+    birthWeight: patient.birthWeight ?? '', birthHeight: patient.birthHeight ?? '', barangay: patient.barangay == null ? '' : String(patient.barangay), familyNo: patient.familyNo || '',
   })
   showEditModal.value = true
 }
@@ -335,10 +363,10 @@ const saveLink = async () => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-slate-50 flex text-slate-900" @click="closeMenu">
+  <div class="min-h-screen bg-slate-50 flex text-slate-900" @click="closeMenu(); hideProgress()">
     <AppSidebar />
     <div class="flex-1 min-w-0 flex flex-col">
-      <AppHeader title="Patient Management" breadcrumb="System Administration / Patient Management" />
+      <AppHeader title="Patient Management" breadcrumb="Admin / Patient Management" />
 
       <main class="p-6 space-y-6">
         <div v-if="toast" class="bg-emerald-50 border border-emerald-100 text-emerald-800 text-sm rounded-xl px-4 py-3">{{ toast }}</div>
@@ -424,10 +452,14 @@ const saveLink = async () => {
                     </span>
                   </td>
                   <td class="px-3 py-3 whitespace-nowrap">
-                    <div class="flex items-center gap-2">
+                    <button type="button" class="flex items-center gap-2 rounded-md py-1 -my-1 cursor-help focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      :aria-label="`${patient.completedDoses} of ${patient.totalDoses} doses given. Show vaccines not yet given.`"
+                      @mouseenter="showProgress(patient, $event)" @mouseleave="hideProgress"
+                      @focus="showProgress(patient, $event)" @blur="hideProgress"
+                      @click.stop="progressTip?.patient === patient ? hideProgress() : showProgress(patient, $event)">
                       <div class="w-16 h-1.5 rounded-full bg-slate-100 overflow-hidden"><div class="h-full bg-emerald-500 rounded-full" :style="{ width: patient.completion + '%' }"></div></div>
                       <span class="text-xs text-slate-500">{{ patient.completedDoses }}/{{ patient.totalDoses }}</span>
-                    </div>
+                    </button>
                   </td>
                   <td class="px-3 py-3 text-slate-500 whitespace-nowrap">{{ patient.lastVaccination }}</td>
                   <td class="px-5 py-3 text-right relative">
@@ -454,6 +486,27 @@ const saveLink = async () => {
         </section>
       </main>
     </div>
+
+    <!-- Progress pop-up: the vaccines this child hasn't had yet -->
+    <Teleport to="body">
+      <div v-if="progressTip" :style="progressTip.style" role="tooltip"
+        class="fixed z-50 rounded-xl border border-slate-200 bg-white p-4 shadow-lg pointer-events-none">
+        <p class="text-sm font-bold text-slate-900">{{ progressTip.patient.firstName }} {{ progressTip.patient.lastName }}</p>
+        <p class="text-xs text-slate-500">{{ progressTip.patient.completedDoses }} of {{ progressTip.patient.totalDoses }} doses given</p>
+        <template v-if="progressTip.patient.remainingDoses?.length">
+          <p class="mt-3 mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Not yet given ({{ progressTip.patient.remainingDoses.length }})</p>
+          <ul class="space-y-1.5 max-h-52 overflow-hidden">
+            <li v-for="d in progressTip.patient.remainingDoses.slice(0, 8)" :key="d.vaccineName + d.doseNumber" class="flex items-start justify-between gap-3 text-xs">
+              <span class="font-medium text-slate-800">{{ d.vaccineName }} — Dose {{ d.doseNumber }}</span>
+              <span class="shrink-0" :class="d.overdue ? 'font-semibold text-rose-600' : 'text-slate-500'">{{ d.overdue ? 'Overdue · ' : 'Due ' }}{{ formatDate(d.scheduledDate) }}</span>
+            </li>
+          </ul>
+          <p v-if="progressTip.patient.remainingDoses.length > 8" class="mt-1.5 text-[11px] text-slate-400">+ {{ progressTip.patient.remainingDoses.length - 8 }} more — open the profile to see all.</p>
+        </template>
+        <p v-else-if="progressTip.patient.totalDoses" class="mt-3 text-xs font-semibold text-emerald-700">All scheduled vaccines have been given.</p>
+        <p v-else class="mt-3 text-xs text-slate-500">No vaccination schedule yet.</p>
+      </div>
+    </Teleport>
 
     <!-- ============================ PATIENT PROFILE DRAWER ============================ -->
     <transition name="fade">
@@ -567,7 +620,7 @@ const saveLink = async () => {
                 <div><label class="block text-xs font-semibold text-slate-500 mb-1.5">Birth Length (cm)</label><input v-model="registerForm.birthHeight" v-digits.decimal type="number" step="0.1" min="25" max="65" placeholder="e.g. 50" class="field" /></div>
                 <div><label class="block text-xs font-semibold text-slate-500 mb-1.5">Allergies</label><input v-model="registerForm.allergies" type="text" class="field" /></div>
                 <div><label class="block text-xs font-semibold text-slate-500 mb-1.5">Family No.</label><input v-model="registerForm.familyNo" type="text" class="field" /></div>
-                <div><label class="block text-xs font-semibold text-slate-500 mb-1.5">Barangay</label><input v-model="registerForm.barangay" v-digits type="number" class="field" /></div>
+                <div><label class="block text-xs font-semibold text-slate-500 mb-1.5">Barangay</label><select v-model="registerForm.barangay" :title="BARANGAY_HINT" class="field"><option value="">Select barangay</option><option v-for="b in barangayChoices()" :key="b.value" :value="b.value">{{ b.label }}</option></select></div>
                 <div class="sm:col-span-3"><label class="block text-xs font-semibold text-slate-500 mb-1.5">Address</label><input v-model="registerForm.address" type="text" maxlength="70" class="field" /></div>
               </div>
             </div>
@@ -598,6 +651,7 @@ const saveLink = async () => {
                 <div><label class="block text-xs font-semibold text-slate-500 mb-1.5">Last Name *</label><input v-model="registerForm.newParentLastName" type="text" class="field" /></div>
                 <div><label class="block text-xs font-semibold text-slate-500 mb-1.5">Contact Number *</label><input v-model="registerForm.newParentContact" v-digits type="text" class="field" /></div>
                 <div><label class="block text-xs font-semibold text-slate-500 mb-1.5">Email (for portal login)</label><input v-model="registerForm.newParentEmail" type="email" class="field" /></div>
+                <div class="sm:col-span-2"><PrivacyConsentCheckbox v-model="registerForm.privacyConsent" /></div>
               </div>
 
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
@@ -637,7 +691,7 @@ const saveLink = async () => {
             <div><label class="block text-xs font-semibold text-slate-500 mb-1.5">Birth Length (cm)</label><input v-model="editForm.birthHeight" v-digits.decimal type="number" step="0.1" min="25" max="65" placeholder="e.g. 50" class="field" /></div>
             <div><label class="block text-xs font-semibold text-slate-500 mb-1.5">Allergies</label><input v-model="editForm.allergies" type="text" class="field" /></div>
             <div><label class="block text-xs font-semibold text-slate-500 mb-1.5">Family No.</label><input v-model="editForm.familyNo" type="text" class="field" /></div>
-            <div><label class="block text-xs font-semibold text-slate-500 mb-1.5">Barangay</label><input v-model="editForm.barangay" v-digits type="number" class="field" /></div>
+            <div><label class="block text-xs font-semibold text-slate-500 mb-1.5">Barangay</label><select v-model="editForm.barangay" :title="BARANGAY_HINT" class="field"><option value="">Select barangay</option><option v-for="b in barangayChoices(editForm.barangay)" :key="b.value" :value="b.value">{{ b.label }}</option></select></div>
             <div class="sm:col-span-3"><label class="block text-xs font-semibold text-slate-500 mb-1.5">Address</label><input v-model="editForm.address" type="text" maxlength="70" class="field" /></div>
             <p v-if="formError" class="sm:col-span-3 text-xs text-rose-500">{{ formError }}</p>
           </div>

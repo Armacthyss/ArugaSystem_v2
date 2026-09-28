@@ -232,6 +232,7 @@ public async Task<Parent> CreateAsync(Parent parent)
             PasswordHash,
             MustChangePassword,
             TemporaryPasswordExpiresAt,
+            ConsentRecordedAt,
             CreatedAt,
             UpdatedAt
         )
@@ -248,6 +249,7 @@ public async Task<Parent> CreateAsync(Parent parent)
             @PasswordHash,
             @MustChangePassword,
             @TemporaryPasswordExpiresAt,
+            @ConsentRecordedAt,
             GETDATE(),
             GETDATE()
         )";

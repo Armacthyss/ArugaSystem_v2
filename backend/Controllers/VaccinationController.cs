@@ -8,14 +8,14 @@ namespace AndroidWebAPI.Controllers
 {
     // Vaccination stations (dbo.ClinicRooms).
     //
-    // Clinic flow: the Admission Staff puts a Doctor or Nurse at each
-    // station for the day (SetWorker), then sends each checked-in patient
-    // to a station (AssignRoom). The health worker at that station is the
-    // only one who can record that child's vaccination.
+    // NOT USED since the beneficiary revision (Sep 2026): Leveriza has one
+    // vaccination room and one person vaccinating, so the Nurse calls each
+    // family in with Call Next (QueueController) instead of sending them to
+    // a station. These endpoints and the ClinicRooms table are kept so older
+    // databases and scripts keep working.
     //
-    // ClinicRooms.AssignedDoctorID holds the stationed worker — the column
-    // name predates Nurses sharing the Healthcare Worker role, but it is
-    // any Doctor or Nurse.
+    // ClinicRooms.AssignedDoctorID holds the stationed worker (any Doctor or
+    // Nurse).
     [ApiController]
     [Route("api/[controller]")]
     public class VaccinationController : ControllerBase

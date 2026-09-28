@@ -109,8 +109,45 @@ namespace AndroidWebAPI.Controllers
             });
         }
 
+        // ========================================
+        // INVENTORY SUMMARY
+        // GET: api/VaccineInventory/summary?from=2026-09-01&to=2026-09-30
+        // Per vaccine: on hand, received and used in the period, expiring,
+        // expired, average weekly use and weeks of stock left
+        // (see Services/InventorySummary.cs). Default period: this month.
+        // ========================================
+        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.ClinicTeam)]
+        [HttpGet("summary")]
+        public async Task<IActionResult> GetSummary(
+            [FromServices] AppDbContext context,
+            [FromQuery] DateTime? from,
+            [FromQuery] DateTime? to)
+        {
+            var start = from ?? new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+            var end = to ?? DateTime.Today;
+            if (end < start) return BadRequest(new { message = "The end date is before the start date." });
+
+            var lines = await AndroidWebAPI.Services.InventorySummary.BuildAsync(context, start, end);
+            return Ok(new
+            {
+                from = start.Date,
+                to = end.Date,
+                generatedAt = DateTime.Now,
+                totals = new
+                {
+                    onHand = lines.Sum(l => l.OnHand),
+                    received = lines.Sum(l => l.ReceivedInPeriod),
+                    used = lines.Sum(l => l.UsedInPeriod),
+                    expiringSoon = lines.Sum(l => l.ExpiringSoon),
+                    expiredOnShelf = lines.Sum(l => l.ExpiredOnShelf),
+                    lowOrOut = lines.Count(l => l.Status != "Good"),
+                },
+                lines,
+            });
+        }
+
         // POST: api/VaccineInventory/stock-check/send
-        // Sends the check to the Admission Staff and Administrator now
+        // Sends the check to every Doctor and Nurse now
         // (it also goes out by itself every check day at 8:00 AM).
         [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.StaffOrAdmin)]
         [HttpPost("stock-check/send")]

@@ -83,9 +83,8 @@ const userBreakdown = computed(() => {
   const count = roles => accounts.value.filter(a => roles.includes(a.role)).length
   return [
     { role: 'Parent / Guardian', count: count(['Parent']) },
-    { role: 'Doctor / Nurse', count: count(['Doctor', 'Nurse', 'Healthcare']) },
-    { role: 'Admission Staff', count: count(['Staff', 'Admission']) },
-    { role: 'Administrator', count: count(['Administrator']) },
+    { role: 'Staff / Nurse', count: count(['Nurse', 'Staff', 'Admission', 'Healthcare']) },
+    { role: 'Admin / Doctor', count: count(['Doctor', 'Administrator']) },
   ]
 })
 const maxUserCount = computed(() => Math.max(1, ...userBreakdown.value.map(u => u.count)))
@@ -170,7 +169,7 @@ const todaysActivity = computed(() => [
     <AppSidebar />
 
     <div class="flex-1 min-w-0 flex flex-col">
-      <AppHeader title="Dashboard" breadcrumb="System Administration / Dashboard" />
+      <AppHeader title="Dashboard" breadcrumb="Admin / Dashboard" />
 
       <main class="p-6 space-y-6">
         <!-- Welcome / system status -->

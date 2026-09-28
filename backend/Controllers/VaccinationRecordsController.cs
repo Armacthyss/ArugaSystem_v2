@@ -56,6 +56,20 @@ namespace AndroidWebAPI.Controllers
             return Ok(ShapeRecords(records));
         }
 
+        // GET /api/VaccinationRecords/mine
+        // "Vaccination Records" page: only the doses the signed-in Doctor or
+        // Nurse gave. Health workers don't see each other's lists
+        // (beneficiary request); a child's own card still shows every dose.
+        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.ClinicTeam)]
+        [HttpGet("mine")]
+        public async Task<IActionResult> GetMine()
+        {
+            var me = AccessGuard.CallerId(User);
+            if (me == null) return Ok(Array.Empty<object>());
+            var records = (await _repository.GetAllAsync()).Where(r => r.AdministeredByUserID == me);
+            return Ok(ShapeRecords(records));
+        }
+
         // GetAllAsync() returns raw VaccinationRecord entities, which serialize
         // with the bare PascalCase model properties (ChildID, VaccineID, etc.)
         // instead of the childName/vaccineName/administeredByName shape the
@@ -114,13 +128,16 @@ namespace AndroidWebAPI.Controllers
             return Ok(await _repository.GetByChildAsync(childId));
         }
 
-        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.Healthcare)]
+        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.Staff)]
         [HttpPost]
         public async Task<IActionResult> RecordVaccination([FromBody] RecordVaccinationDto dto)
         {
-            var stationError = await CheckStationAsync(dto.ChildID, dto.AdministeredByUserID, dto.VaccinationDate);
-            if (stationError != null)
-                return BadRequest(new { message = stationError });
+            // The signed-in Nurse is the one giving the dose
+            dto.AdministeredByUserID = AccessGuard.CallerId(User) ?? dto.AdministeredByUserID;
+
+            var roomError = await CheckCalledInAsync(dto.ChildID, dto.VaccinationDate);
+            if (roomError != null)
+                return BadRequest(new { message = roomError });
 
             var record = new VaccinationRecord
             {
@@ -160,7 +177,7 @@ namespace AndroidWebAPI.Controllers
             }
         }
 
-        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.Healthcare)]
+        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.Staff)]
         [HttpPatch("{id}/complete")]
         public async Task<IActionResult> CompleteVaccination(Guid id, [FromBody] CompleteVaccinationDto dto)
         {
@@ -193,7 +210,7 @@ namespace AndroidWebAPI.Controllers
         // (Vaccinationrecords.NurseObservation) are what health workers
         // check for complications/adverse reactions before the next dose.
         // Every change is kept in the audit log (old -> new).
-        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.Healthcare)]
+        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.StaffOrAdmin)]
         [HttpPatch("{id}/remarks")]
         public async Task<IActionResult> UpdateRemarks(Guid id, [FromBody] UpdateRemarksDto dto)
         {
@@ -222,32 +239,23 @@ namespace AndroidWebAPI.Controllers
             });
         }
 
-        // Today's doses can only be recorded by the health worker at the
-        // station the Admission Staff sent the child to. Doses dated in
-        // the past are allowed (encoding a dose that wasn't recorded on
-        // the day), so this only applies to today's date.
-        private async Task<string?> CheckStationAsync(Guid childId, Guid? workerId, DateTime vaccinationDate)
+        // Today's doses can only be recorded for a child whose family was
+        // called into the vaccination room (Call Next). Doses dated in the
+        // past are allowed (encoding a dose that wasn't recorded on the
+        // day), so this only applies to today's date.
+        private async Task<string?> CheckCalledInAsync(Guid childId, DateTime vaccinationDate)
         {
             var today = DateTime.Today;
             if (vaccinationDate.Date != today) return null;
 
-            if (!workerId.HasValue)
-                return "The health worker giving the vaccine is required.";
+            bool inRoom = await _context.Queues
+                .AnyAsync(q => q.QueueDate >= today && q.QueueDate < today.AddDays(1)
+                            && q.Status == "InProgress"
+                            && q.QueueChildren.Any(qc => qc.ChildID == childId));
 
-            var visit = await _context.Queues
-                .Where(q => q.QueueDate >= today && q.QueueDate < today.AddDays(1)
-                            && q.Status == "InProgress" && q.AssignedRoomID != null
-                            && q.QueueChildren.Any(qc => qc.ChildID == childId))
-                .FirstOrDefaultAsync();
-
-            if (visit == null)
-                return "This child hasn't been sent to a station yet. The Admission Staff must assign them to your station before today's vaccination can be recorded.";
-
-            var room = await _context.ClinicRooms.FindAsync(visit.AssignedRoomID!.Value);
-            if (room?.AssignedDoctorID != workerId)
-                return $"This child is at {room?.RoomNumber ?? "another station"}, which is assigned to a different health worker.";
-
-            return null;
+            return inRoom
+                ? null
+                : "This child hasn't been called into the vaccination room yet. Press Call Next on the Dashboard first.";
         }
 
         // Tells the child's parents (in-app + email) that a dose was given, and

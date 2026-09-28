@@ -150,7 +150,7 @@ const staffName = computed(() => {
 });
 const staffRole = computed(() => {
   const position = profile.value.position || user.UserType;
-  return position === "Staff" ? "Admission Staff" : position || "Staff";
+  return position === "Nurse" || position === "Staff" ? "Staff / Nurse" : position || "Staff / Nurse";
 });
 const staffInitials = computed(() =>
   staffName.value.split(" ").filter(Boolean).slice(0, 2).map(w => w[0]?.toUpperCase()).join("") || "S"

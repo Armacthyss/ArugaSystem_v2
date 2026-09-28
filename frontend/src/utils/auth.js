@@ -25,11 +25,10 @@ export function getUser() {
   return getAccount()?.user || null
 }
 
-// UserType is the job title inside `user` — 'Doctor' | 'Nurse' | 'Staff' |
-// 'Administrator'. `role` (above) is the coarse value the route guard checks
-// against `meta.role` ('Staff' | 'Healthcare' | 'Parent' | 'SystemAdmin').
-// Doctors and Nurses both have role 'Healthcare' and use the same portal;
-// UserType is only used for display.
+// UserType is the job title inside `user` — 'Doctor' | 'Nurse' (older
+// accounts may say 'Administrator' or 'Staff'). `role` (above) is the coarse
+// value the route guard checks against `meta.role`: 'SystemAdmin' (Admin /
+// Doctor), 'Staff' (Staff / Nurse) or 'Parent'. UserType is only for display.
 export function getUserType() {
   return getUser()?.UserType || null
 }

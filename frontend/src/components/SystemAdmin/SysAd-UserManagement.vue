@@ -5,6 +5,9 @@ import { useFloatingMenu } from '@/utils/floatingMenu'
 import axios from 'axios'
 import AppSidebar from './Components/AppSidebar.vue'
 import AppHeader from './Components/AppHeader.vue'
+import PrivacyConsentCheckbox from '@/components/Shared/PrivacyConsentCheckbox.vue'
+import { userLevel } from '@/utils/format'
+import { barangayChoices, BARANGAY_HINT } from '@/utils/barangays'
 
 const API_BASE_URL = `${API_ORIGIN}/api`
 
@@ -19,15 +22,15 @@ function handleLogout() {
 }
 
 /* -------------------------------- Role meta -------------------------------- */
-// Matches the backend's actual roles. "Parent" comes from AccountType = Parent,
-// the rest come from Users.UserType for AccountType = Personnel.
-const roleMeta = {
-  Parent: { tint: 'bg-teal-50', text: 'text-teal-700' },
-  Doctor: { tint: 'bg-emerald-50', text: 'text-emerald-700' },
-  Nurse: { tint: 'bg-sky-50', text: 'text-sky-700' },
-  Staff: { tint: 'bg-amber-50', text: 'text-amber-700' },
-  Administrator: { tint: 'bg-violet-50', text: 'text-violet-700' },
+// Three user levels: Parent, Staff / Nurse, Admin / Doctor. "Parent" comes
+// from AccountType = Parent; personnel have Users.Position Doctor or Nurse
+// (older accounts: Administrator = Admin level, Staff = Staff level).
+const levelMeta = {
+  'Parent': { tint: 'bg-teal-50', text: 'text-teal-700' },
+  'Staff / Nurse': { tint: 'bg-sky-50', text: 'text-sky-700' },
+  'Admin / Doctor': { tint: 'bg-violet-50', text: 'text-violet-700' },
 }
+const levelStyle = (role) => { const m = levelMeta[userLevel(role)]; return m ? [m.tint, m.text] : [] }
 
 const statusMeta = {
   Active: { tint: 'bg-emerald-50', text: 'text-emerald-700', dot: 'bg-emerald-500' },
@@ -96,7 +99,7 @@ const filteredUsers = computed(() =>
       `${u.firstName} ${u.lastName}`.toLowerCase().includes(q) ||
       u.username.toLowerCase().includes(q) ||
       u.email.toLowerCase().includes(q)
-    const matchesRole = roleFilter.value === 'All Users' || u.role === roleFilter.value
+    const matchesRole = roleFilter.value === 'All Users' || userLevel(u.role) === roleFilter.value
     const matchesStatus = statusFilter.value === 'All' || u.status === statusFilter.value
     return matchesSearch && matchesRole && matchesStatus
   })
@@ -272,6 +275,7 @@ const addForm = reactive({
   contactNo: '',
   address: '',
   barangayNo: '',
+  privacyConsent: false,
 })
 
 const isPersonnelRole = computed(() => addForm.role !== 'Parent')
@@ -288,6 +292,7 @@ const openAddModal = () => {
   contactNo: '',
   address: '',
   barangayNo: '',
+  privacyConsent: false,
 })
   createError.value = ''
   showAddModal.value = true
@@ -296,6 +301,7 @@ const openAddModal = () => {
 const canCreate = computed(() => {
   if (!addForm.firstName.trim() || !addForm.lastName.trim()) return false
   if (!addForm.email.trim() || !addForm.contactNo.trim()) return false
+  if (addForm.role === 'Parent' && !addForm.privacyConsent) return false
   return true
 })
 
@@ -325,6 +331,7 @@ let texted = false
         contactNo: addForm.contactNo,
         barangayNo: addForm.barangayNo || null,
         address: addForm.address || null,
+        privacyConsent: addForm.privacyConsent,
       })
       temporaryPassword = response.data.temporaryPassword
       generatedUsername = addForm.email
@@ -382,7 +389,7 @@ texted = !!response.data.texted
 
     <!-- ============================ MAIN ============================ -->
     <div class="flex-1 min-w-0 flex flex-col">
-      <AppHeader title="User Management" breadcrumb="Dashboard / User Management" />
+      <AppHeader title="User Management" breadcrumb="Admin / User Management" />
 
       <!-- Content -->
       <main class="p-6 space-y-6">
@@ -448,10 +455,8 @@ texted = !!response.data.texted
             >
               <option>All Users</option>
               <option>Parent</option>
-              <option>Doctor</option>
-              <option>Nurse</option>
-              <option>Staff</option>
-              <option>Administrator</option>
+              <option>Staff / Nurse</option>
+              <option>Admin / Doctor</option>
             </select>
 
             <select
@@ -512,8 +517,8 @@ texted = !!response.data.texted
                   <td class="px-3 py-3 font-semibold text-slate-900 whitespace-nowrap">{{ user.firstName }} {{ user.lastName }}</td>
                   <td class="px-3 py-3 text-slate-500 whitespace-nowrap">{{ user.username || '—' }}</td>
                   <td class="px-3 py-3">
-                    <span :class="[roleMeta[user.role]?.tint, roleMeta[user.role]?.text]" class="text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap">
-                      {{ user.role }}
+                    <span :class="levelStyle(user.role)" class="text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap">
+                      {{ userLevel(user.role) }}
                     </span>
                   </td>
                   <td class="px-3 py-3">
@@ -577,8 +582,8 @@ texted = !!response.data.texted
             </div>
             <div>
               <p class="text-base font-bold text-slate-900">{{ selectedUser.firstName }} {{ selectedUser.lastName }}</p>
-              <span :class="[roleMeta[selectedUser.role]?.tint, roleMeta[selectedUser.role]?.text]" class="mt-1 inline-block text-xs font-semibold px-2.5 py-1 rounded-full">
-                {{ selectedUser.role }}
+              <span :class="levelStyle(selectedUser.role)" class="mt-1 inline-block text-xs font-semibold px-2.5 py-1 rounded-full">
+                {{ userLevel(selectedUser.role) }}
               </span>
             </div>
           </div>
@@ -633,7 +638,7 @@ texted = !!response.data.texted
           <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200">
             <div>
               <h2 class="text-base font-bold text-slate-900">Edit Profile</h2>
-              <p class="text-xs text-slate-500">{{ editForm.role }} account</p>
+              <p class="text-xs text-slate-500">{{ userLevel(editForm.role) }} account</p>
             </div>
             <button @click="showEditModal = false" class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-50 transition-colors">✕</button>
           </div>
@@ -688,12 +693,11 @@ texted = !!response.data.texted
 
           <div class="p-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div class="sm:col-span-2">
-              <label class="block text-xs font-semibold text-slate-500 mb-1.5">Role</label>
+              <label class="block text-xs font-semibold text-slate-500 mb-1.5">User Level</label>
               <select v-model="addForm.role" class="w-full text-sm rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-colors">
-                <option>Parent</option>
-                <option>Doctor</option>
-                <option>Nurse</option>
-                <option>Staff</option>
+                <option value="Parent">Parent</option>
+                <option value="Nurse">Staff / Nurse</option>
+                <option value="Doctor">Admin / Doctor</option>
               </select>
             </div>
 
@@ -730,12 +734,20 @@ texted = !!response.data.texted
             <!-- Parent-only: Barangay -->
             <div v-if="!isPersonnelRole">
               <label class="block text-xs font-semibold text-slate-500 mb-1.5">Barangay No.</label>
-              <input v-model="addForm.barangayNo" v-digits type="text" class="w-full text-sm rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-colors" />
+              <select v-model="addForm.barangayNo" class="w-full text-sm rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-colors">
+                <option value="">Select barangay</option>
+                <option v-for="b in barangayChoices(addForm.barangayNo)" :key="b.value" :value="b.value">{{ b.label }}</option>
+              </select>
+              <p class="text-[11px] text-slate-400 mt-1">{{ BARANGAY_HINT }}</p>
             </div>
 
             <div :class="isPersonnelRole ? 'sm:col-span-2' : ''">
               <label class="block text-xs font-semibold text-slate-500 mb-1.5">Address</label>
               <input v-model="addForm.address" type="text" class="w-full text-sm rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-colors" />
+            </div>
+
+            <div v-if="!isPersonnelRole" class="sm:col-span-2">
+              <PrivacyConsentCheckbox v-model="addForm.privacyConsent" />
             </div>
 
             <div v-if="createError" class="sm:col-span-2 rounded-lg bg-red-50 border border-red-200 px-3.5 py-2.5">

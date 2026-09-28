@@ -54,6 +54,14 @@ public async Task<IActionResult> CreateParent(
         if (string.IsNullOrWhiteSpace(dto.ContactNo))
             return BadRequest(new { message = "ContactNo is required." });
 
+        if (!AndroidWebAPI.Services.Barangays.IsServed(dto.BarangayNo))
+            return BadRequest(new { message = AndroidWebAPI.Services.Barangays.Error });
+
+        // Data Privacy Act (RA 10173): the parent/guardian must agree to
+        // their information being kept in Aruga before it is saved.
+        if (!dto.PrivacyConsent)
+            return BadRequest(new { message = "The parent or guardian must agree to the Data Privacy Notice before they can be registered." });
+
         // Email (and therefore login) is only required when this
         // guardian is meant to have portal access.
         if (dto.CreateLogin && string.IsNullOrWhiteSpace(dto.Email))
@@ -128,6 +136,8 @@ public async Task<IActionResult> CreateParent(
             // Null for a contact-only guardian (CreateLogin = false).
             PasswordHash = passwordHash,
 
+            ConsentRecordedAt = DateTime.Now,
+
             MustChangePassword = mustChangePassword,
             TemporaryPasswordExpiresAt = temporaryPasswordExpiresAt
         };
@@ -191,7 +201,8 @@ public async Task<IActionResult> CreateParent(
 
         await audit.LogAsync("Patient Management", "Create",
             $"Parent – {created.FirstName} {created.LastName}",
-            dto.CreateLogin ? "Registered a parent/guardian with a portal login." : "Registered a parent/guardian (contact only, no login).");
+            (dto.CreateLogin ? "Registered a parent/guardian with a portal login." : "Registered a parent/guardian (contact only, no login).")
+            + " They agreed to the Data Privacy Notice (Data Privacy Act of 2012, RA 10173).");
 
         return CreatedAtAction(
             nameof(GetParentById),
@@ -266,9 +277,40 @@ public async Task<IActionResult> CreateParent(
 
                 lastLogin = parent.LastLogin,
 
+                consentRecordedAt = parent.ConsentRecordedAt,
+                privacyConsentAt = parent.PrivacyConsentAt,
+
                 role = "Parent"
 
             });
+        }
+
+        // ── POST /api/Parents/{id}/privacy-consent ────────────────
+        // The parent ticks "I agree" on the Data Privacy Notice (RA 10173)
+        // the first time they sign in. Until then the parent portal only
+        // shows the notice.
+        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.Parent)]
+        [HttpPost("{id:guid}/privacy-consent")]
+        public async Task<IActionResult> AcceptPrivacyNotice(
+            Guid id,
+            [FromServices] AndroidWebAPI.Data.AppDbContext context,
+            [FromServices] AndroidWebAPI.Services.AuditService audit)
+        {
+            if (!AndroidWebAPI.Services.AccessGuard.CanSeeParent(User, id)) return Forbid();
+            var parent = await context.Parents.FirstOrDefaultAsync(p => p.ParentID == id);
+            if (parent == null) return NotFound(new { message = "Parent not found." });
+
+            if (parent.PrivacyConsentAt == null)
+            {
+                parent.PrivacyConsentAt = DateTime.Now;
+                await context.SaveChangesAsync();
+                await audit.LogAsync("Patient Management", "Privacy Consent",
+                    $"Parent – {parent.FirstName} {parent.LastName}",
+                    "Agreed to the Data Privacy Notice (Data Privacy Act of 2012, RA 10173) in the parent portal.",
+                    userId: parent.ParentID);
+            }
+
+            return Ok(new { message = "Thank you. Your consent was recorded.", privacyConsentAt = parent.PrivacyConsentAt });
         }
 
         // ── READ: GET /api/Parents/all ────────────────────────────
@@ -325,6 +367,11 @@ public async Task<IActionResult> CreateParent(
                     return BadRequest(new { message = "FirstName is required." });
                 if (string.IsNullOrWhiteSpace(dto.LastName))
                     return BadRequest(new { message = "LastName is required." });
+                // Older records may still have a barangay from before the
+                // jurisdiction check; only a changed barangay is checked.
+                if (dto.BarangayNo != null && dto.BarangayNo != existing.BarangayNo
+                    && !AndroidWebAPI.Services.Barangays.IsServed(dto.BarangayNo))
+                    return BadRequest(new { message = AndroidWebAPI.Services.Barangays.Error });
 
                 var parent = new Parent
                 {

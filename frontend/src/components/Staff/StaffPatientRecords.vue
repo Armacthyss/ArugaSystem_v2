@@ -12,6 +12,8 @@ import axios from "axios";
 
 import StaffSidebar from "./StaffSidebar.vue";
 import StaffTopbar from "./StaffTopbar.vue";
+import PrivacyConsentCheckbox from "@/components/Shared/PrivacyConsentCheckbox.vue";
+import { barangayChoices, isServedBarangay, BARANGAY_HINT } from "@/utils/barangays";
 
 const route = useRoute();
 
@@ -746,13 +748,13 @@ async function confirmPicker() {
 const EDIT_FIELDS = {
   parent: [
     { key:"firstName", label:"First Name", group:"name" }, { key:"middleName", label:"Middle Name", group:"name" }, { key:"lastName", label:"Last Name", group:"name" },
-    { key:"contact", label:"Contact Number", group:"contact" }, { key:"barangay", label:"Barangay No.", group:"contact" },
+    { key:"contact", label:"Contact Number", group:"contact" }, { key:"barangay", label:"Barangay No.", type:"barangay", group:"contact" },
     { key:"email", label:"Email" }, { key:"address", label:"Address" },
   ],
   child: [
     { key:"firstName", label:"First Name", group:"name" }, { key:"middleName", label:"Middle Name", group:"name" }, { key:"lastName", label:"Last Name", group:"name" },
     { key:"birthDateInput", label:"Birth Date", type:"date", group:"birth" }, { key:"sex", label:"Sex", type:"select", options:["Male","Female"], group:"birth" },
-    { key:"familyNo", label:"Family No.", group:"family" }, { key:"barangayInput", label:"Barangay", type:"number", group:"family" },
+    { key:"familyNo", label:"Family No.", group:"family" }, { key:"barangayInput", label:"Barangay", type:"barangay", group:"family" },
     { key:"height", label:"Birth Height (cm)", type:"number", group:"metrics" }, { key:"weight", label:"Birth Weight (kg)", type:"number", group:"metrics" },
     { key:"allergies", label:"Allergies (leave blank if none)" },
     { key:"address", label:"Address" },
@@ -774,14 +776,14 @@ function openEdit(kind, item) {
     working.weight = raw.birthWeight ?? "";
     working.allergies = raw.allergies || "";
     working.familyNo = raw.familyNo || "";
-    working.barangayInput = raw.barangay ?? "";
+    working.barangayInput = raw.barangay == null ? "" : String(raw.barangay);
     working.address = raw.address || "";
   } else {
     working.firstName = raw.firstName || "";
     working.middleName = raw.middleName || "";
     working.lastName = raw.lastName || "";
     working.contact = raw.contactNo || "";
-    working.barangay = raw.barangayNo || "";
+    working.barangay = raw.barangayNo ? String(raw.barangayNo).trim() : "";
     working.email = raw.email || "";
     working.address = raw.address || "";
   }
@@ -870,11 +872,11 @@ function openRegisterModal(kind, ctx = {}) {
 const closeRegisterModal = () => { registerModal.value.open = false; };
 
 // ── PARENT FORM ─────────────────────────────────────────────────────
-const regParentForm = reactive({ GivenName:"", MiddleName:"", LastName:"", Email:"", ContactNo:"", BarangayNo:"", Address:"", CreateLogin:true });
+const regParentForm = reactive({ GivenName:"", MiddleName:"", LastName:"", Email:"", ContactNo:"", BarangayNo:"", Address:"", CreateLogin:true, PrivacyConsent:false });
 // Letters/spaces/hyphens/apostrophes/periods only — blocks digits in name fields (allows names like "St. Clair", "O'Brien").
 const lettersOnlyInput = (field) => (e) => { regParentForm[field] = e.target.value.replace(/[^a-zA-Z\s.'-]/g, ""); };
 function resetParentForm() {
-  Object.assign(regParentForm, { GivenName:"", MiddleName:"", LastName:"", Email:"", ContactNo:"", BarangayNo:"", Address:"", CreateLogin:true });
+  Object.assign(regParentForm, { GivenName:"", MiddleName:"", LastName:"", Email:"", ContactNo:"", BarangayNo:"", Address:"", CreateLogin:true, PrivacyConsent:false });
   regChildSearch.value = "";
   regLinkedChildren.value = [];
 }
@@ -909,6 +911,9 @@ async function submitParentRegister() {
       error.value = "Email is required to give this guardian a login."; return;
     }
   }
+  if (!regParentForm.PrivacyConsent) {
+    error.value = "The parent/guardian must agree to the Data Privacy Notice before they can be registered."; return;
+  }
 
   registerSubmitting.value = true;
   try {
@@ -923,6 +928,7 @@ async function submitParentRegister() {
       // Add User) and returns it once so staff can hand it to the parent.
       password: null,
       createLogin: regParentForm.CreateLogin,
+      privacyConsent: regParentForm.PrivacyConsent,
     });
 
     // NOTE: assumes ParentsController's POST returns the created parent's
@@ -1029,7 +1035,7 @@ function regLinkExistingParent(parent) {
   // them in from the parent (and an existing child) when still empty.
   const sibling = relationshipsOfParent(parent).map(r => children.value.find(c => c.id === r.childId)).find(Boolean);
   if (!regChildForm.FamilyNo && sibling?.familyNo) regChildForm.FamilyNo = sibling.familyNo;
-  if (!regChildForm.Barangay && parent.barangay) regChildForm.Barangay = String(parent.barangay);
+  if (!regChildForm.Barangay && parent.barangay && isServedBarangay(parent.barangay)) regChildForm.Barangay = String(parent.barangay).trim();
   if (!regChildForm.Address && parent.address) regChildForm.Address = parent.address;
 }
 function regClearParentRole(role) {
@@ -1558,13 +1564,18 @@ async function submitChildRegister() {
           <div class="grid grid-cols-3 gap-4">
             <div class="col-span-1 space-y-1">
               <label class="text-[10px] font-bold text-stone-400 uppercase ml-1">Barangay No</label>
-              <input v-model="regParentForm.BarangayNo" v-digits type="text" class="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:border-emerald-500 outline-none" />
+              <select v-model="regParentForm.BarangayNo" :title="BARANGAY_HINT" class="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:border-emerald-500 outline-none">
+                <option value="">Select barangay</option>
+                <option v-for="b in barangayChoices()" :key="b.value" :value="b.value">{{ b.label }}</option>
+              </select>
             </div>
             <div class="col-span-2 space-y-1">
               <label class="text-[10px] font-bold text-stone-400 uppercase ml-1">Complete Address</label>
               <input v-model="regParentForm.Address" type="text" class="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:border-emerald-500 outline-none" />
             </div>
           </div>
+
+          <PrivacyConsentCheckbox v-model="regParentForm.PrivacyConsent" />
 
           <div v-if="regParentForm.CreateLogin" class="space-y-1">
             <p class="text-[11px] text-stone-500 ml-1">A temporary password will be made automatically and shown after you register. Give it to the parent; they'll choose their own password the first time they sign in.</p>
@@ -1693,7 +1704,10 @@ async function submitChildRegister() {
               </div>
               <div class="space-y-1">
                 <label class="text-[11px] font-bold text-stone-500 ml-1">Barangay</label>
-                <input v-model="regChildForm.Barangay" v-digits type="text" placeholder="e.g. 704" class="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm outline-none" />
+                <select v-model="regChildForm.Barangay" :title="BARANGAY_HINT" class="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm outline-none">
+                  <option value="">Select barangay</option>
+                  <option v-for="b in barangayChoices()" :key="b.value" :value="b.value">{{ b.label }}</option>
+                </select>
               </div>
               <div class="space-y-1">
                 <label class="text-[11px] font-bold text-stone-500 ml-1">Family No.</label>
@@ -1759,7 +1773,7 @@ async function submitChildRegister() {
           <button @click="closeRegisterModal" class="rounded-xl px-4 py-2.5 text-[13px] font-medium text-stone-600 hover:bg-stone-50">Cancel</button>
           <button
             @click="registerModal.kind === 'parent' ? submitParentRegister() : submitChildRegister()"
-            :disabled="registerSubmitting"
+            :disabled="registerSubmitting || (registerModal.kind === 'parent' && !regParentForm.PrivacyConsent)"
             class="rounded-xl px-5 py-2.5 text-[13px] font-semibold text-white bg-emerald-700 hover:bg-emerald-800 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {{ registerSubmitting ? 'Saving...' : `Register ${registerModal.kind === 'parent' ? 'Parent' : 'Child'}` }}
@@ -1781,6 +1795,10 @@ async function submitChildRegister() {
               <label class="text-[11.5px] font-medium text-stone-500">{{ f.label }}</label>
               <select v-if="f.type === 'select'" v-model="editModal.item[f.key]" class="mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-[13px] outline-none focus:border-emerald-500">
                 <option v-for="o in f.options" :key="o">{{ o }}</option>
+              </select>
+              <select v-else-if="f.type === 'barangay'" v-model="editModal.item[f.key]" :title="BARANGAY_HINT" class="mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-[13px] outline-none focus:border-emerald-500">
+                <option value="">Select barangay</option>
+                <option v-for="b in barangayChoices(editModal.item[f.key])" :key="b.value" :value="b.value">{{ b.label }}</option>
               </select>
               <input v-else v-model="editModal.item[f.key]" :type="f.type || 'text'" :step="f.type === 'number' ? '0.01' : undefined" class="mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-[13px] outline-none focus:border-emerald-500" />
             </div>

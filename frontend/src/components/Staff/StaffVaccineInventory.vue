@@ -24,18 +24,21 @@
             </button>
           </div>
 
+          <!-- INVENTORY SUMMARY PER VACCINE -->
+          <InventorySummary :refresh-key="summaryKey" class="mb-6" />
+
           <!-- WEEKLY STOCK CHECK -->
           <div class="bg-white rounded-2xl border border-slate-200 shadow-sm mb-6 overflow-hidden">
             <div class="px-6 py-4 border-b border-slate-100 flex items-start justify-between gap-4 flex-wrap">
               <div>
                 <p class="text-sm font-bold text-slate-800">Weekly Stock Check</p>
                 <p class="text-[11.5px] text-slate-500 mt-0.5">
-                  Sent to the Admission Staff and the Administrator every {{ stockCheck.checkDay || 'Wednesday' }} at 8:00 AM.
+                  Sent to every Doctor and Nurse every {{ stockCheck.checkDay || 'Wednesday' }} at 8:00 AM.
                   Suggested orders cover two weeks plus the minimum stock, in case the pharmacy can only deliver next week.
                 </p>
               </div>
               <button @click="sendStockCheck" :disabled="sendingCheck" class="shrink-0 text-xs font-bold px-3.5 py-2 rounded-lg border border-emerald-200 text-emerald-700 hover:bg-emerald-50 disabled:opacity-50">
-                {{ sendingCheck ? 'Sending…' : 'Send to Staff & Admin now' }}
+                {{ sendingCheck ? 'Sending…' : 'Send to Doctor & Nurses now' }}
               </button>
             </div>
             <p v-if="stockCheckMessage" class="px-6 pt-3 text-xs font-semibold text-emerald-700">{{ stockCheckMessage }}</p>
@@ -278,6 +281,7 @@ import axios from 'axios'
 import { Plus, Package, AlertTriangle, Trash2, X, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-vue-next'
 import StaffSidebar from './StaffSidebar.vue'
 import StaffTopbar from './StaffTopbar.vue'
+import InventorySummary from '@/components/Shared/InventorySummary.vue'
 
 // Same API_BASE convention as the rest of the project.
 const API_BASE = `${API_ORIGIN}/api`
@@ -334,8 +338,10 @@ const fetchInventory = async () => {
     console.error('Fetch inventory error:', err)
   } finally {
     isLoading.value = false
+    summaryKey.value++
   }
 }
+const summaryKey = ref(0)   // reloads the Inventory Summary with the batches
 
 // Vaccine catalog is a separate table (VaccineInventory only stores a VaccineID FK,
 // not a name) — same catalog endpoint the Doctor-side vaccine pickers use.

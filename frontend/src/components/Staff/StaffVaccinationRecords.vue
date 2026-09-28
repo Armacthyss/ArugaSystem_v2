@@ -1,13 +1,13 @@
 <template>
-  <div class="flex h-screen bg-slate-50 font-sans antialiased text-slate-900">
+  <div class="flex h-screen bg-stone-50 antialiased text-slate-900" style="font-family: 'Inter','Segoe UI',sans-serif;">
 
-    <HealthcareSidebar />
+    <StaffSidebar />
 
     <!-- MAIN -->
     <div class="flex flex-col flex-1 overflow-hidden">
 
       <!-- TOP BAR -->
-      <HealthcareHeader />
+      <StaffTopbar title="My Vaccination Records" breadcrumb="Aruga / My Vaccination Records" />
 
       <!-- PAGE CONTENT -->
       <main class="flex-1 overflow-y-auto p-6">
@@ -15,8 +15,10 @@
         <!-- PAGE HEADER -->
         <div class="flex items-center justify-between mb-6">
           <div>
-            <h1 class="text-2xl font-bold text-slate-800">Vaccination Records</h1>
-            <p class="text-sm text-slate-500 mt-1">View and manage vaccination history</p>
+            <p class="text-sm text-slate-500">
+              Only the vaccines <strong class="text-slate-700">you</strong> gave are listed here. Other health workers' records stay private;
+              a child's full history is on their record in Patient Records.
+            </p>
           </div>
         </div>
 
@@ -27,28 +29,28 @@
               <Syringe class="w-5 h-5 text-emerald-600" />
             </div>
             <p class="text-3xl font-bold text-slate-800">{{ stats.total }}</p>
-            <p class="text-xs text-slate-400 mt-1">Total Records</p>
+            <p class="text-xs text-slate-400 mt-1">Doses I Gave (all time)</p>
           </div>
           <div class="bg-white rounded-xl border border-slate-200 p-5">
             <div class="flex items-center justify-between mb-3">
               <CheckCircle class="w-5 h-5 text-emerald-500" />
             </div>
-            <p class="text-3xl font-bold text-slate-800">{{ stats.completed }}</p>
-            <p class="text-xs text-slate-400 mt-1">Completed</p>
+            <p class="text-3xl font-bold text-slate-800">{{ stats.today }}</p>
+            <p class="text-xs text-slate-400 mt-1">Today</p>
           </div>
           <div class="bg-white rounded-xl border border-slate-200 p-5">
             <div class="flex items-center justify-between mb-3">
               <Clock class="w-5 h-5 text-amber-500" />
             </div>
-            <p class="text-3xl font-bold text-slate-800">{{ stats.pending }}</p>
-            <p class="text-xs text-slate-400 mt-1">Pending</p>
+            <p class="text-3xl font-bold text-slate-800">{{ stats.month }}</p>
+            <p class="text-xs text-slate-400 mt-1">This Month</p>
           </div>
           <div class="bg-white rounded-xl border border-slate-200 p-5">
             <div class="flex items-center justify-between mb-3">
-              <AlertCircle class="w-5 h-5 text-red-500" />
+              <AlertCircle class="w-5 h-5 text-amber-500" />
             </div>
-            <p class="text-3xl font-bold text-slate-800">{{ stats.missed }}</p>
-            <p class="text-xs text-slate-400 mt-1">Missed / Overdue</p>
+            <p class="text-3xl font-bold text-slate-800">{{ stats.withRemarks }}</p>
+            <p class="text-xs text-slate-400 mt-1">With Remarks / Reactions</p>
           </div>
         </div>
 
@@ -61,15 +63,6 @@
               placeholder="Search by child name, vaccine, or batch number..."
               class="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white" />
           </div>
-
-          <!-- Status filter -->
-          <select v-model="statusFilter"
-            class="text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white text-slate-600">
-            <option value="">All Status</option>
-            <option value="Completed">Completed</option>
-            <option value="Pending">Pending</option>
-            <option value="Missed">Missed</option>
-          </select>
 
           <!-- Vaccine filter -->
           <select v-model="vaccineFilter"
@@ -435,15 +428,14 @@
   </div>
 </template>
 
-<!-- DoctorVaccinationRecords.vue -->
-<!-- ONLY THE <script setup> SECTION IS CHANGED — replace your existing one -->
-<!-- The <template> and <style> sections are identical to what you already have -->
+<!-- StaffVaccinationRecords.vue — /staff/vaccination-records
+     The signed-in Nurse's own doses (GET /api/VaccinationRecords/mine). -->
 
 <script setup>
 import { API_ORIGIN } from '@/utils/apiBase'
 import { getUser } from '@/utils/auth'
-import HealthcareSidebar from './Components/HealthcareSidebar.vue'
-import HealthcareHeader from './Components/HealthcareHeader.vue'
+import StaffSidebar from './StaffSidebar.vue'
+import StaffTopbar from './StaffTopbar.vue'
 import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import axios from 'axios'
@@ -494,13 +486,12 @@ const VACCINE_MASTER = [
 const records = ref([])
 const loading = ref(false)
 
-// FIX: fetchRecords now actually calls the API instead of using mock data.
-// It calls GET /api/VaccinationRecords/all which returns all records
-// across all children with child name and parent name already joined.
+// Only the doses this health worker gave (beneficiary request: health
+// workers don't see each other's vaccination lists).
 async function fetchRecords() {
   loading.value = true
   try {
-    const res = await axios.get(`${API}/api/VaccinationRecords/all`)
+    const res = await axios.get(`${API}/api/VaccinationRecords/mine`)
     records.value = res.data.map(r => ({
       recordId:           r.vaccinationRecordID ?? r.recordID ?? r.RecordID,
       childId:            r.childID    ?? r.ChildID,
@@ -529,12 +520,16 @@ async function fetchRecords() {
 }
 
 // ── STATS ─────────────────────────────────────────────────────────
-const stats = computed(() => ({
-  total:     records.value.length,
-  completed: records.value.filter(r => r.status === 'Completed').length,
-  pending:   records.value.filter(r => r.status === 'Pending').length,
-  missed:    records.value.filter(r => r.status === 'Missed').length,
-}))
+const stats = computed(() => {
+  const now = new Date()
+  const given = records.value.filter(r => r.dateAdministered).map(r => new Date(r.dateAdministered))
+  return {
+    total: records.value.length,
+    today: given.filter(d => d.toDateString() === now.toDateString()).length,
+    month: given.filter(d => d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()).length,
+    withRemarks: records.value.filter(r => r.remarks && !/no (adverse )?reaction/i.test(r.remarks)).length,
+  }
+})
 
 // ── FILTERS ───────────────────────────────────────────────────────
 const searchQuery   = ref('')

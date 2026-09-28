@@ -71,41 +71,134 @@ namespace AndroidWebAPI.Controllers
             return Ok(board);
         }
 
-        // PATCH /api/Queue/call-next
-        // Doctor button: bring the next Waiting visit into a room.
-        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.ClinicTeam)]
-        [HttpPatch("call-next")]
-        public async Task<IActionResult> CallNext([FromQuery] int? roomId)
-        {
-            var current = await _context.Queues
-                .FirstOrDefaultAsync(q => q.QueueDate >= TodayStart && q.QueueDate < TodayEnd && q.Status == "InProgress");
-            if (current != null)
-            {
-                // Only one "now serving" visit at a time — finish it first.
-                return Ok(new { message = "A visit is already in progress.", queueID = current.QueueID });
-            }
+        // ── Call Next ────────────────────────────────────────────────
+        // Leveriza has one vaccination room and one person vaccinating. The
+        // Nurse presses "Call Next": the next family in line becomes
+        // "InProgress" (= called into the room) and the parent who checked
+        // in is alerted on their phone (a banner with a sound on the
+        // Check-in page, an in-app notification, and one SMS).
 
+        // PATCH /api/Queue/call-next
+        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.StaffOrAdmin)]
+        [HttpPatch("call-next")]
+        public async Task<IActionResult> CallNext(
+            [FromServices] AndroidWebAPI.Services.ParentNotifier notifier,
+            [FromServices] AndroidWebAPI.Services.AuditService audit)
+        {
             var next = await _context.Queues
                 .Where(q => q.QueueDate >= TodayStart && q.QueueDate < TodayEnd && q.Status == "Waiting")
                 .OrderBy(q => q.QueueNumber)
                 .FirstOrDefaultAsync();
 
-            if (next == null) return Ok(new { message = "No one waiting." });
+            if (next == null) return NotFound(new { message = "Nobody is waiting right now." });
+            return await CallAsync(next, notifier, audit);
+        }
 
-            next.Status = "InProgress";
-            next.AssignedRoomID = roomId;
-            next.UpdatedAt = DateTime.Now;
+        // PATCH /api/Queue/{queueId}/call
+        // Calls one family out of order (e.g. the next in line stepped out),
+        // or, for the family already in the room, alerts them again
+        // ("Call Again": in-app alert only, no second SMS).
+        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.StaffOrAdmin)]
+        [HttpPatch("{queueId:guid}/call")]
+        public async Task<IActionResult> Call(
+            Guid queueId,
+            [FromServices] AndroidWebAPI.Services.ParentNotifier notifier,
+            [FromServices] AndroidWebAPI.Services.AuditService audit)
+        {
+            var visit = await _context.Queues.FirstOrDefaultAsync(q => q.QueueID == queueId);
+            if (visit == null) return NotFound(new { message = "Queue entry not found." });
+            if (visit.QueueDate < TodayStart || visit.QueueDate >= TodayEnd)
+                return BadRequest(new { message = "Only today's queue can be called." });
+            if (visit.Status == "Completed")
+                return BadRequest(new { message = "This visit is already completed." });
+            return await CallAsync(visit, notifier, audit);
+        }
+
+        private async Task<IActionResult> CallAsync(
+            Queue visit,
+            AndroidWebAPI.Services.ParentNotifier notifier,
+            AndroidWebAPI.Services.AuditService audit)
+        {
+            bool again = visit.Status == "InProgress";
+
+            // One family in the room at a time
+            if (!again)
+            {
+                var inRoom = await _context.Queues
+                    .Where(q => q.QueueDate >= TodayStart && q.QueueDate < TodayEnd
+                                && q.Status == "InProgress" && q.QueueID != visit.QueueID)
+                    .Select(q => q.QueueNumber)
+                    .FirstOrDefaultAsync();
+                if (inRoom != 0)
+                    return Conflict(new { message = $"Queue #{inRoom} is still in the vaccination room. Press Complete Visit for them first." });
+            }
+
+            visit.Status = "InProgress";
+            visit.UpdatedAt = DateTime.Now;
+
+            var parent = await _context.Parents.FirstOrDefaultAsync(p => p.ParentID == visit.ParentID);
+            var children = await _context.QueueChildren
+                .Where(qc => qc.QueueID == visit.QueueID)
+                .Select(qc => qc.Child!.FirstName)
+                .ToListAsync();
+            string names = children.Count == 0 ? "your child" : string.Join(" and ", children);
+
+            if (parent != null)
+            {
+                var tally = new AndroidWebAPI.Services.ParentNotifier.Delivery();
+                await notifier.NotifyAsync(parent, new Notification
+                {
+                    Type = "Called",
+                    Title = $"Queue #{visit.QueueNumber}: it's your turn",
+                    Message = $"Please bring {names} inside the vaccination room now.",
+                    ScheduledDate = DateTime.Today,
+                    IsRead = false,
+                }, tally,
+                email: false,
+                sms: !again,
+                smsText: $"Leveriza Health Center: Queue #{visit.QueueNumber}, it's your turn. Please bring {names} inside the vaccination room now.");
+            }
+
             await _context.SaveChangesAsync();
-            return Ok(next);
+
+            await audit.LogAsync("Queue", again ? "Call Again" : "Call Next",
+                $"Queue #{visit.QueueNumber} – {string.Join(", ", children)}",
+                again ? "Alerted the family again to come into the vaccination room." : "Called the family into the vaccination room.");
+
+            return Ok(new
+            {
+                message = again ? $"Queue #{visit.QueueNumber} was alerted again." : $"Queue #{visit.QueueNumber} was called in.",
+                queueID = visit.QueueID,
+                queueNumber = visit.QueueNumber,
+            });
+        }
+
+        // PATCH /api/Queue/{queueId}/back-to-waiting
+        // The called family didn't come in (e.g. stepped out): put them back
+        // in line so the Nurse can call the next one.
+        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.StaffOrAdmin)]
+        [HttpPatch("{queueId:guid}/back-to-waiting")]
+        public async Task<IActionResult> BackToWaiting(Guid queueId, [FromServices] AndroidWebAPI.Services.AuditService audit)
+        {
+            var visit = await _context.Queues.FirstOrDefaultAsync(q => q.QueueID == queueId);
+            if (visit == null) return NotFound(new { message = "Queue entry not found." });
+            if (visit.Status != "InProgress")
+                return BadRequest(new { message = "Only the family in the room can be sent back to waiting." });
+
+            visit.Status = "Waiting";
+            visit.AssignedRoomID = null;
+            visit.UpdatedAt = DateTime.Now;
+            await _context.SaveChangesAsync();
+
+            await audit.LogAsync("Queue", "Update", $"Queue #{visit.QueueNumber}",
+                "Sent the family back to waiting (they did not come in when called).");
+            return Ok(new { message = $"Queue #{visit.QueueNumber} is waiting again." });
         }
 
         // PATCH /api/Queue/{queueId}/complete
-        // Health worker's "Complete Visit": marks the visit done and frees
-        // the station so the Admission Staff can send the next patient.
-        // (It used to auto-pull the next Waiting visit into the same room;
-        // with staff assigning each patient to a station, that would put a
-        // child in front of a worker nobody sent them to.)
-        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.ClinicTeam)]
+        // "Complete Visit": marks the visit done so the Nurse can call the
+        // next family, and texts each child's parents what was given.
+        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.StaffOrAdmin)]
         [HttpPatch("{queueId}/complete")]
         public async Task<IActionResult> Complete(Guid queueId, [FromServices] AndroidWebAPI.Services.ParentNotifier notifier)
         {
@@ -269,18 +362,9 @@ public async Task<IActionResult> GetAll()
                 position = todays.Count(q => q.Status == "Waiting" && q.QueueNumber < mine.QueueNumber) + 1;
             }
 
-            // Where to go once the Admission Staff send them to a station
-            string? station = null, worker = null;
-            if (mine?.AssignedRoomID != null && mine.Status == "InProgress")
-            {
-                var room = await _context.ClinicRooms.FindAsync(mine.AssignedRoomID.Value);
-                station = room?.RoomNumber;
-                if (room?.AssignedDoctorID != null)
-                {
-                    var u = await _context.Users.FindAsync(room.AssignedDoctorID.Value);
-                    if (u != null) worker = $"{(u.Position == "Doctor" ? "Dr." : "Nurse")} {u.FirstName} {u.LastName}";
-                }
-            }
+            // Called in by the Nurse (Call Next). calledAt changes on every
+            // "Call Again", so the Check-in page knows to sound the alert again.
+            bool called = mine?.Status == "InProgress";
 
             var childIds = mine == null
                 ? new List<Guid>()
@@ -293,8 +377,9 @@ public async Task<IActionResult> GetAll()
                 myStatus = mine?.Status,
                 nowServingNumber = serving?.QueueNumber,
                 positionInLine = position,
-                stationName = station,
-                workerName = worker,
+                called,
+                calledAt = called ? mine!.UpdatedAt : null,
+                stationName = called ? "the vaccination room" : null,
                 childIDs = childIds,
             });
         }
@@ -327,7 +412,7 @@ public async Task<IActionResult> GetAll()
             [FromServices] AndroidWebAPI.Services.IQueueQRCodeService qrService,
             [FromServices] IQueueQRSettingRepository qrSettings)
         {
-            if (!AndroidWebAPI.Services.AccessGuard.CanSeeParent(User, request.ParentID) || User.IsInRole(AndroidWebAPI.Services.Roles.Healthcare)) return Forbid();
+            if (!AndroidWebAPI.Services.AccessGuard.CanSeeParent(User, request.ParentID)) return Forbid();
             if (request.ChildIDs == null || request.ChildIDs.Count == 0)
             {
                 return BadRequest(new
@@ -432,13 +517,13 @@ public async Task<IActionResult> GetAll()
 
             bool finishing = request.Status == "Completed" && queue.Status != "Completed";
 
-            // "In Progress" means "at a station with a health worker", so it
-            // can only be set by sending the visit to a station.
-            if (request.Status == "InProgress" && queue.Status != "InProgress" && queue.AssignedRoomID == null)
+            // "In Progress" means "called into the vaccination room", which
+            // also alerts the parent, so it is only set by Call Next.
+            if (request.Status == "InProgress" && queue.Status != "InProgress")
             {
                 return BadRequest(new
                 {
-                    message = "To start a visit, send the patient to a station with Assign Station on the Dashboard."
+                    message = "To bring a family into the vaccination room, use Call Next (or Call) on the Dashboard."
                 });
             }
 

@@ -21,4 +21,8 @@ public class CreateParentDto
     // Defaults to true so existing callers that don't send this field
     // keep today's behavior.
     public bool CreateLogin { get; set; } = true;
+
+    // Staff confirm the parent/guardian agreed to the Data Privacy Notice
+    // (RA 10173). Registration is refused without it.
+    public bool PrivacyConsent { get; set; }
 }

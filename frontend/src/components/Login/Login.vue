@@ -54,11 +54,7 @@ function redirectForRole(role) {
       router.push("/ParentOverview")
       break
 
-    case "Healthcare":
-      // Doctors and Nurses share the same Healthcare Worker portal.
-      router.push("/healthcare/home")
-      break
-
+    // Staff / Nurse (a Doctor signs in to the SystemAdmin portal)
     case "Staff":
       router.push("/staff/dashboard")
       break
@@ -129,7 +125,7 @@ const handleLogin = async () => {
       // Administrator); UserType is a legacy column, used only as a fallback.
       const userType = u.position || u.userType
 
-      // The backend already computes the coarse role (Staff vs Healthcare)
+      // The backend already computes the coarse role (Staff vs SystemAdmin)
       // from the user's Position — trust that instead of re-deriving it
       // here, so the two can never disagree.
       const role = data.role
