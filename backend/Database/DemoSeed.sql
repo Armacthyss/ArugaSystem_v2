@@ -17,8 +17,8 @@
    • To remove everything again, run DemoSeed_Remove.sql.
 
    DEMO LOGINS  (password for ALL of them:  Aruga@2026)
-     Admin / Doctor ....... demo.doctor   (demo.admin: an older "Administrator" account, same level)
-     Staff / Nurse ........ demo.nurse  /  demo.nurse2  (demo.staff: an older "Staff" account, same level)
+     Admin / Doctor ....... demo.doctor
+     Staff / Nurse ........ demo.nurse  /  demo.nurse2
      Parents .............. e.g. maria.santos@demo.aruga.ph
                             (any parent email listed below)
      Grandmother .......... lourdes.luna@demo.aruga.ph (Isabela Cruz's
@@ -104,6 +104,18 @@ DELETE FROM ChildParentRelationship WHERE ChildID IN (SELECT ChildID FROM @DemoC
 -- Demo audit entries written by a previous run of this script
 DELETE FROM AuditLogs WHERE ActionPerformed LIKE '%"Demo":true%';
 
+-- demo.staff and demo.admin: the old "Staff" and "Administrator" levels,
+-- replaced by Staff / Nurse and Admin / Doctor (older runs created them)
+DECLARE @OldDemoUser TABLE (UserID uniqueidentifier PRIMARY KEY);
+INSERT @OldDemoUser SELECT UserID FROM Users
+WHERE UserID IN ('A2A10000-0000-0000-0000-000000000004', 'A2A10000-0000-0000-0000-000000000005');
+UPDATE ClinicRooms SET AssignedDoctorID = NULL WHERE AssignedDoctorID IN (SELECT UserID FROM @OldDemoUser);
+UPDATE VaccinationRecords SET AdministeredByUserID = NULL WHERE AdministeredByUserID IN (SELECT UserID FROM @OldDemoUser);
+DELETE FROM AuditLogs WHERE UserID IN (SELECT UserID FROM @OldDemoUser);
+DELETE FROM AccountOTPs WHERE AccountID IN (SELECT AccountID FROM Accounts WHERE ReferenceID IN (SELECT UserID FROM @OldDemoUser));
+DELETE FROM Accounts WHERE ReferenceID IN (SELECT UserID FROM @OldDemoUser);
+DELETE FROM Users WHERE UserID IN (SELECT UserID FROM @OldDemoUser);
+
 /* =====================================================================
    2. PERSONNEL  (Users + Accounts)
    ===================================================================== */
@@ -117,9 +129,7 @@ DECLARE @Staff TABLE (
 INSERT @Staff VALUES
  ('A2A10000-0000-0000-0000-000000000001','A2A40000-0000-0000-0000-000000000001','demo.doctor', N'Elena',       N'Marquez', N'Villanueva','Doctor',   'Doctor',        'PRC-0112233','elena.villanueva@demo.aruga.ph','09171230001'),
  ('A2A10000-0000-0000-0000-000000000002','A2A40000-0000-0000-0000-000000000002','demo.nurse',  N'Mark Anthony',N'Ramos',   N'Bautista',  'Nurse',    'Nurse',         'PRC-0445566','mark.bautista@demo.aruga.ph',   '09171230002'),
- ('A2A10000-0000-0000-0000-000000000003','A2A40000-0000-0000-0000-000000000003','demo.nurse2', N'Kristine Joy',N'Lopez',   N'Ramos',     'Nurse',    'Nurse',         'PRC-0778899','kristine.ramos@demo.aruga.ph',  '09171230003'),
- ('A2A10000-0000-0000-0000-000000000004','A2A40000-0000-0000-0000-000000000004','demo.staff',  N'Grace',       N'Tan',     N'Mendoza',   'Admission','Staff',         NULL,         'grace.mendoza@demo.aruga.ph',   '09171230004'),
- ('A2A10000-0000-0000-0000-000000000005','A2A40000-0000-0000-0000-000000000005','demo.admin',  N'Ramon',       N'Cruz',    N'Aquino',    'Admission','Administrator', NULL,         'ramon.aquino@demo.aruga.ph',    '09171230005');
+ ('A2A10000-0000-0000-0000-000000000003','A2A40000-0000-0000-0000-000000000003','demo.nurse2', N'Kristine Joy',N'Lopez',   N'Ramos',     'Nurse',    'Nurse',         'PRC-0778899','kristine.ramos@demo.aruga.ph',  '09171230003');
 
 MERGE Users AS t
 USING @Staff AS s ON t.UserID = s.UserID
@@ -144,8 +154,6 @@ WHEN NOT MATCHED THEN INSERT
 DECLARE @Doctor uniqueidentifier = 'A2A10000-0000-0000-0000-000000000001';
 DECLARE @Nurse1 uniqueidentifier = 'A2A10000-0000-0000-0000-000000000002';
 DECLARE @Nurse2 uniqueidentifier = 'A2A10000-0000-0000-0000-000000000003';
-DECLARE @StaffU uniqueidentifier = 'A2A10000-0000-0000-0000-000000000004';
-DECLARE @AdminU uniqueidentifier = 'A2A10000-0000-0000-0000-000000000005';
 
 /* =====================================================================
    3. PARENTS / GUARDIANS  (Parents + Accounts, login = email)
@@ -457,19 +465,19 @@ DECLARE @A TABLE (MinutesAgo int, UserID uniqueidentifier, UserName nvarchar(100
                   OldValue nvarchar(200), NewValue nvarchar(200));
 
 INSERT @A VALUES
- (60*24*6+300, @AdminU, NULL, 'SystemAdmin', 'Authentication',    'Login',            N'Account – demo.admin',             'Signed in successfully.',                                         'Success','192.168.1.10','Chrome on Windows', NULL, NULL),
- (60*24*6+290, @AdminU, NULL, 'SystemAdmin', 'User Management',   'Create',           N'Nurse Account – Kristine Joy Ramos','Created a new Nurse account (username demo.nurse2).',               'Success','192.168.1.10','Chrome on Windows', NULL, 'Status: Active, Role: Nurse'),
- (60*24*6+280, @AdminU, NULL, 'SystemAdmin', 'Inventory',         'Receive Stock',    N'Batch DEMO-MMR-2604',              'Received a new vaccine batch of 80 dose(s).',                    'Success','192.168.1.10','Chrome on Windows', NULL, 'Remaining: 80'),
- (60*24*5+200, @StaffU, NULL, 'Staff',       'Authentication',    'Login',            N'Account – demo.staff',             'Signed in successfully.',                                         'Success','192.168.1.21','Chrome on Windows', NULL, NULL),
- (60*24*5+190, @StaffU, NULL, 'Staff',       'Patient Management','Create',           N'Child – Kyle Santos',              'Registered a new child and generated the vaccination timeline.',  'Success','192.168.1.21','Chrome on Windows', NULL, NULL),
+ (60*24*6+300, @Doctor, NULL, 'SystemAdmin', 'Authentication',    'Login',            N'Account – demo.doctor',            'Signed in successfully.',                                         'Success','192.168.1.10','Chrome on Windows', NULL, NULL),
+ (60*24*6+290, @Doctor, NULL, 'SystemAdmin', 'User Management',   'Create',           N'Nurse Account – Kristine Joy Ramos','Created a new Nurse account (username demo.nurse2).',               'Success','192.168.1.10','Chrome on Windows', NULL, 'Status: Active, Role: Nurse'),
+ (60*24*6+280, @Doctor, NULL, 'SystemAdmin', 'Inventory',         'Receive Stock',    N'Batch DEMO-MMR-2604',              'Received a new vaccine batch of 80 dose(s).',                    'Success','192.168.1.10','Chrome on Windows', NULL, 'Remaining: 80'),
+ (60*24*5+200, @Nurse2, NULL, 'Staff',       'Authentication',    'Login',            N'Account – demo.nurse2',            'Signed in successfully.',                                         'Success','192.168.1.21','Chrome on Windows', NULL, NULL),
+ (60*24*5+190, @Nurse2, NULL, 'Staff',       'Patient Management','Create',           N'Child – Kyle Santos',              'Registered a new child and generated the vaccination timeline.',  'Success','192.168.1.21','Chrome on Windows', NULL, NULL),
  (60*24*4+400, NULL, N'Unknown', 'Parent',   'Authentication',    'Login',            N'Account – jenny.navaro@demo.aruga.ph','Login attempt with an unknown username or email.',            'Failed', '203.177.42.9','Chrome on Android', NULL, NULL),
  (60*24*4+395, NULL, N'Jenny Navarro','Parent','Authentication',  'Login',            N'Account – jenny.navarro@demo.aruga.ph','Signed in successfully.',                                     'Success','203.177.42.9','Chrome on Android', NULL, NULL),
  (60*24*3+240, @Nurse1, NULL, 'Staff',       'Authentication',    'Login',            N'Account – demo.nurse',             'Signed in successfully.',                                         'Success','192.168.1.31','Safari on iOS', NULL, NULL),
- (60*24*3+120, @AdminU, NULL, 'SystemAdmin', 'Inventory',         'Adjust Inventory', N'Batch DEMO-HEPB-2509',             'Flagged expired batch — kept for records, not for use.',         'Warning','192.168.1.10','Chrome on Windows', 'Remaining: 15, Active: True', 'Remaining: 15, Active: True'),
- (60*24*2+300, @AdminU, NULL, 'SystemAdmin', 'Notifications',     'Create',           N'Announcement – Measles-Rubella catch-up week','Sent an announcement to 13 parent(s).',           'Success','192.168.1.10','Chrome on Windows', NULL, NULL),
+ (60*24*3+120, @Doctor, NULL, 'SystemAdmin', 'Inventory',         'Adjust Inventory', N'Batch DEMO-HEPB-2509',             'Flagged expired batch — kept for records, not for use.',         'Warning','192.168.1.10','Chrome on Windows', 'Remaining: 15, Active: True', 'Remaining: 15, Active: True'),
+ (60*24*2+300, @Doctor, NULL, 'SystemAdmin', 'Notifications',     'Create',           N'Announcement – Measles-Rubella catch-up week','Sent an announcement to 13 parent(s).',           'Success','192.168.1.10','Chrome on Windows', NULL, NULL),
  (60*24*1+200, @Doctor, NULL, 'SystemAdmin', 'Authentication',    'Login',            N'Account – demo.doctor',            'Signed in successfully.',                                         'Success','192.168.1.33','Chrome on Windows', NULL, NULL),
  (60*24*1+180, @Doctor, NULL, 'SystemAdmin', 'User Management',   'Update',           N'Profile – Elena Villanueva',       'Updated own profile information.',                                'Success','192.168.1.33','Chrome on Windows', NULL, NULL),
- (200,         @StaffU, NULL, 'Staff',       'Authentication',    'Login',            N'Account – demo.staff',             'Signed in successfully.',                                         'Success','192.168.1.21','Chrome on Windows', NULL, NULL),
+ (200,         @Nurse2, NULL, 'Staff',       'Authentication',    'Login',            N'Account – demo.nurse2',            'Signed in successfully.',                                         'Success','192.168.1.21','Chrome on Windows', NULL, NULL),
  (180,         @Nurse1, NULL, 'Staff',       'Authentication',    'Login',            N'Account – demo.nurse',             'Signed in successfully.',                                         'Success','192.168.1.31','Safari on iOS', NULL, NULL);
 
 -- One "Vaccinate Child" entry per dose given in the last 7 days

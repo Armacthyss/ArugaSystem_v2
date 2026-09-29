@@ -226,7 +226,7 @@ namespace AndroidWebAPI.Controllers
             await _audit.LogAsync("Vaccination", "Update Remarks",
                 await DescribeDoseAsync(record.ChildID, record.VaccineID, record.DoseNumber),
                 "Updated the remarks / adverse reaction notes on a vaccination record.",
-                userId: dto.UpdatedByUserID,
+                userId: AccessGuard.CallerId(User) ?? dto.UpdatedByUserID,
                 oldValue: before ?? "—",
                 newValue: record.NurseObservation ?? "—");
 
@@ -336,7 +336,15 @@ namespace AndroidWebAPI.Controllers
         [HttpPost("historical")]
         public async Task<IActionResult> RecordHistoricalVaccinations([FromBody] HistoricalVaccinationSubmissionDto submission)
         {
-            await _repository.RecordHistoricalVaccinationsAsync(submission);
+            try
+            {
+                await _repository.RecordHistoricalVaccinationsAsync(submission);
+            }
+            catch (Exception ex)
+            {
+                // e.g. a dose already on file, or a date before birth
+                return BadRequest(new { message = ex.Message });
+            }
 
             var child = await _context.Children.FindAsync(submission.ChildID);
             await _audit.LogAsync("Vaccination", "Create",

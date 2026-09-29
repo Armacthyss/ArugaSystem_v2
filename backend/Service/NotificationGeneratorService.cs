@@ -3,7 +3,8 @@
 // Register in Program.cs with:
 //   builder.Services.AddHostedService<NotificationGeneratorService>();
 //
-// Runs once at startup, then every day at DailyRunHour (server local time).
+// Runs once at startup (if it's between 8 AM and 8 PM), then every day at
+// DailyRunHour (server local time).
 // PRE-DUE:  reminders 14, 7, 5, 3 and 1 day(s) before each scheduled dose.
 // POST-DUE: overdue follow-ups 1, 5, 14 and 30 days after a missed dose.
 // STOCK:    if a vaccine is out of stock, parents of children due for it in
@@ -48,6 +49,10 @@ public class NotificationGeneratorService : BackgroundService
     // Hour of day (0-23, server local time) for the daily run
     private const int DailyRunHour = 8;
 
+    // From this hour until the next morning run, nothing is sent: when the API
+    // is (re)started at night, parents shouldn't get texts in the middle of it.
+    private const int QuietFromHour = 20;
+
     public NotificationGeneratorService(
         IServiceScopeFactory scopeFactory,
         ILogger<NotificationGeneratorService> logger)
@@ -62,7 +67,11 @@ public class NotificationGeneratorService : BackgroundService
         {
             try
             {
-                await GenerateNotificationsAsync();
+                int hour = DateTime.Now.Hour;
+                if (hour >= DailyRunHour && hour < QuietFromHour)
+                    await GenerateNotificationsAsync();
+                else
+                    await UpdateMissedAsync();   // messages wait for the morning run
             }
             catch (Exception ex)
             {
@@ -75,6 +84,12 @@ public class NotificationGeneratorService : BackgroundService
             if (next <= now) next = next.AddDays(1);
             await Task.Delay(next - now, stoppingToken);
         }
+    }
+
+    private async Task UpdateMissedAsync()
+    {
+        using var scope = _scopeFactory.CreateScope();
+        await scope.ServiceProvider.GetRequiredService<IVaccinationTimelineRepository>().UpdateMissedVaccinationsAsync();
     }
 
     private async Task GenerateNotificationsAsync()

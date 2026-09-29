@@ -322,6 +322,7 @@ async function fetchChildren() {
         placeOfBirth: child.placeOfBirth ?? child.PlaceOfBirth,
         sex: child.sex ?? child.Sex,
         barangay: child.barangay ?? child.Barangay,
+        familyNo: child.familyNo ?? child.FamilyNo,
         address: child.address ?? child.Address,
         healthCenter: child.healthCenter ?? child.HealthCenter,
         relationshipType,

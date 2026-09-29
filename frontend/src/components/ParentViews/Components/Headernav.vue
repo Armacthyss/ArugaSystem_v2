@@ -69,7 +69,7 @@
             <span class="text-lg">{{ child.sex === 'Female' ? '👧' : '👶' }}</span>
             <div>
               <p class="text-xs font-bold text-slate-800">{{ child.firstName }} {{ child.lastName }}</p>
-              <p class="text-[9px] text-slate-400 font-medium">ID: #{{ child.childID.slice(-8) }}</p>
+              <p v-if="child.familyNo" class="text-[9px] text-slate-400 font-medium">Family No. {{ child.familyNo }}</p>
             </div>
             <span class="ml-auto text-[9px] text-emerald-500 font-black uppercase">Select →</span>
           </button>

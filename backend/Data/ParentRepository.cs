@@ -180,6 +180,7 @@ namespace AndroidWebAPI.Data
             c.PlaceOfBirth,
             c.Sex,
             c.Barangay,
+            c.FamilyNo,
             c.Address,
             c.HealthCenter,
             c.BirthWeight,

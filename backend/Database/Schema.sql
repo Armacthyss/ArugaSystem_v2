@@ -8,11 +8,11 @@
      • vaccination days: Monday, Wednesday, Friday, 8:00 AM – 12:00 PM
        (check-in until 11 AM; change these in the app: System Admin >
        Operating Hours)
-     • 3 vaccination rooms (Room 1–3); staff pick who works in each today
      • QR check-in switched ON
-     • one administrator account:
+     • one Admin / Doctor account:
            username  admin
-           password  Admin@2026      (the system asks for a new one at first login)
+           password  Admin@2026      (the system asks for a new one at first login;
+                                      put the Doctor's real name on it in User Management)
 
    Use this on a NEW computer / empty SQL Server. For an existing
    ArugaSystemDB, run Cleanup_2026-09.sql instead: it upgrades the old
@@ -21,7 +21,7 @@
    Optional afterwards: DemoSeed.sql (sample patients for demos).
 
    Run in SSMS (open the file, press Execute), or:
-       sqlcmd -S <server> -E -i Schema.sql
+       sqlcmd -S <server> -E -I -i Schema.sql
    It is safe to run twice: anything that already exists is skipped.
    ===================================================================== */
 
@@ -523,14 +523,16 @@ IF NOT EXISTS (SELECT 1 FROM dbo.QueueQRSettings)
 IF NOT EXISTS (SELECT 1 FROM dbo.ClinicRooms)
     INSERT dbo.ClinicRooms (RoomNumber) VALUES (N'Room 1'), (N'Room 2'), (N'Room 3');
 
--- First administrator. Password: Admin@2026 (must be changed at first login)
-IF NOT EXISTS (SELECT 1 FROM dbo.Users WHERE Position = N'Administrator')
+-- First Admin / Doctor account (the Doctor is the admin level). Username admin,
+-- password Admin@2026 (must be changed at first login). Put the Doctor's real
+-- name and PRC license on it in User Management.
+IF NOT EXISTS (SELECT 1 FROM dbo.Users WHERE Position IN (N'Doctor', N'Administrator'))
 BEGIN
     DECLARE @AdminID uniqueidentifier = NEWID();
     DECLARE @AdminPwd nvarchar(100) = N'$2a$11$.SPOiqhQhzpsR9YqVizdeOWDIQXpDIxWElCtDvBfnBGNKcvqXAZ.G';
 
     INSERT dbo.Users (UserID, FirstName, LastName, Username, PasswordHash, UserType, Position, AccountStatus, Email)
-    VALUES (@AdminID, N'System', N'Administrator', N'admin', @AdminPwd, N'Administrator', N'Administrator', N'Active', NULL);
+    VALUES (@AdminID, N'Clinic', N'Doctor', N'admin', @AdminPwd, N'Doctor', N'Doctor', N'Active', NULL);
 
     IF NOT EXISTS (SELECT 1 FROM dbo.Accounts WHERE Username = N'admin')
         INSERT dbo.Accounts (Username, PasswordHash, AccountType, ReferenceID, Status, MustChangePassword)

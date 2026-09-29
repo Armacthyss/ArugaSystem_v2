@@ -6,6 +6,27 @@ the beneficiary revision below is on `Aruga-Revision`.
 
 ---
 
+## Check-up and fixes (Sep 30, 2026)
+
+**Old accounts removed**
+- The old "Administrator" and "Admission Staff" accounts (admin_rosa, staff_liza, demo.admin, demo.staff) were deleted, with their login history. The Doctors are the Admin level now and the Nurses the Staff level. None of these accounts had given a vaccine. (A backup from just before is in SQL Server's Backup folder: `ArugaSystemDB_before_old_accounts_removed_2026-09-30.bak`.)
+- DemoSeed.sql no longer creates demo.admin and demo.staff, and removes them from databases that still have them. A brand-new database (Schema.sql) starts with one Admin / Doctor account (admin / Admin@2026) instead of an "Administrator".
+
+**SMS and email checked**
+- Gmail sign-in works, and the TextBee phone is connected and switched on. Texts go through the phone's SIM, so it needs regular load for texting (a data-only promo doesn't cover SMS).
+
+**Fixes**
+- Reminders were sent whenever the backend was started, even at night (e.g. texts to parents at 1 AM). Now they only go out between 8 AM and 8 PM; when it starts at night, the reminders wait for the 8 AM run.
+- A dose could be recorded out of order (e.g. Penta 3 before Penta 2), for a dose number the vaccine doesn't have, or with a future date. The system now refuses these; an earlier dose given elsewhere is added first from the Yellow Book.
+- A birth date in the future, and Yellow Book dates in the future or before the birth date, are now refused (the date pickers on Staff → Patient Records also stop at today).
+- Adding Yellow Book doses that were already on file showed a server error; it now says which dose is already recorded.
+- Receive New Batch refuses a batch with no doses, a negative number, or an expiry date that has already passed.
+- An Admin can no longer deactivate their own account (it would lock them out).
+- The parent portal showed a "Patient ID" made from the database code (e.g. #00000002). It now shows the child's Family No. (and barangay), how Leveriza knows families.
+- Changes to vaccine remarks are logged under the person who is signed in.
+
+---
+
 ## Beneficiary revision (Sep 28, 2026)
 
 Changes asked for by Leveriza Health Center and by City Hall.

@@ -274,6 +274,9 @@ private static async Task<bool> TextTemporaryPasswordAsync(
                 return NotFound(new { message = "Account not found." });
             if (!User.IsInRole(AndroidWebAPI.Services.Roles.Admin) && account.AccountType != "Parent")
                 return Forbid();
+            // Deactivating yourself would lock you out of the Admin portal
+            if (!dto.Status && User.FindFirst("AccountID")?.Value == account.AccountID.ToString())
+                return BadRequest(new { message = "You can't deactivate your own account." });
 
             bool previous = account.Status;
             account.Status = dto.Status;
@@ -362,7 +365,8 @@ private static async Task<bool> TextTemporaryPasswordAsync(
     string username = baseUsername;
     int counter = 1;
 
-    while (await _context.Accounts.AnyAsync(a => a.Username == username))
+    while (await _context.Accounts.AnyAsync(a => a.Username == username) ||
+           await _context.Users.AnyAsync(u => u.Username == username))
     {
         username = $"{baseUsername}{counter:00}";
         counter++;

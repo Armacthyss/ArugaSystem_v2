@@ -188,11 +188,34 @@ public async Task RecordVaccinationAsync(VaccinationRecord record)
         // 3. Verify vaccine exists
         // ==========================================
 
-        var vaccineExists = await _context.Vaccines
-            .AnyAsync(v => v.VaccineID == record.VaccineID);
+        var vaccine = await _context.Vaccines
+            .FirstOrDefaultAsync(v => v.VaccineID == record.VaccineID);
 
-        if (!vaccineExists)
+        if (vaccine == null)
             throw new Exception("Vaccine not found.");
+
+        // ==========================================
+        // 3b. Doses go in order (Penta 3 can't be
+        //     given before Penta 2), never ahead
+        // ==========================================
+
+        if (record.DoseNumber < 1 ||
+            (vaccine.NumberOfRequiredDoses > 0 && record.DoseNumber > vaccine.NumberOfRequiredDoses))
+        {
+            throw new Exception(
+                $"{vaccine.VaccineName} has {vaccine.NumberOfRequiredDoses} dose(s); there is no Dose {record.DoseNumber}.");
+        }
+
+        if (record.DoseNumber > 1 &&
+            !await AlreadyVaccinatedAsync(record.ChildID, record.VaccineID, record.DoseNumber - 1))
+        {
+            throw new Exception(
+                $"Dose {record.DoseNumber - 1} of {vaccine.VaccineName} hasn't been recorded yet. " +
+                "If it was given elsewhere, add it from the child's Yellow Book (Patient Records) first.");
+        }
+
+        if (record.VaccinationDate.Date > DateTime.Today)
+            throw new Exception("The vaccination date can't be in the future.");
 
         // ==========================================
         // 4. Inventory is REQUIRED for clinic
@@ -321,10 +344,10 @@ public async Task RecordHistoricalVaccinationsAsync(
     try
     {
         // 1. Verify child exists
-        var childExists = await _context.Children
-            .AnyAsync(c => c.ChildID == submission.ChildID);
+        var child = await _context.Children
+            .FirstOrDefaultAsync(c => c.ChildID == submission.ChildID);
 
-        if (!childExists)
+        if (child == null)
             throw new Exception("Child not found.");
 
         // 2. Nothing to save
@@ -345,6 +368,11 @@ public async Task RecordHistoricalVaccinationsAsync(
             if (!vaccineExists)
                 throw new Exception(
                     $"Vaccine {item.VaccineID} not found.");
+
+            // A Yellow Book date lies between the birth date and today
+            if (item.VaccinationDate.Date > DateTime.Today || item.VaccinationDate.Date < child.BirthDate.Date)
+                throw new Exception(
+                    $"The date for vaccine {item.VaccineID} dose {item.DoseNumber} must be between the birth date and today.");
 
             // Prevent duplicate vaccine + dose for this child
             var alreadyExists = await AlreadyVaccinatedAsync(

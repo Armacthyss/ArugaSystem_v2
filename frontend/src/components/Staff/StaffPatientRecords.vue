@@ -14,8 +14,11 @@ import StaffSidebar from "./StaffSidebar.vue";
 import StaffTopbar from "./StaffTopbar.vue";
 import PrivacyConsentCheckbox from "@/components/Shared/PrivacyConsentCheckbox.vue";
 import { barangayChoices, isServedBarangay, BARANGAY_HINT } from "@/utils/barangays";
+import { toISODate } from "@/utils/format";
 
 const route = useRoute();
+// Birth dates and Yellow Book doses can't be in the future
+const todayISO = toISODate();
 
 onMounted(() => {
     loadAll();
@@ -557,6 +560,7 @@ async function submitHistoricalVaccinations() {
     if (!row.vaccineID) { m.error = "Every row needs a vaccine selected."; return; }
     if (!row.doseNumber || Number(row.doseNumber) <= 0) { m.error = "Dose number must be greater than 0."; return; }
     if (!row.vaccinationDate) { m.error = "Every row needs a vaccination date."; return; }
+    if (row.vaccinationDate > todayISO) { m.error = "A vaccination date can't be in the future."; return; }
   }
   // prevent obvious accidental duplicates: same vaccine + dose + date entered twice in this submission
   const seen = new Set();
@@ -1049,6 +1053,7 @@ function regClearParentRole(role) {
 async function submitChildRegister() {
   if (!regChildForm.FirstName || !regChildForm.LastName) { error.value = "Please enter the child's name."; return; }
   if (!regChildForm.BirthDate) { error.value = "Please enter a birth date."; return; }
+  if (regChildForm.BirthDate > todayISO) { error.value = "The birth date can't be in the future."; return; }
 
   const linkedParents = [];
   for (const role of ["Mother", "Father", "Guardian"]) {
@@ -1071,6 +1076,7 @@ async function submitChildRegister() {
       if (!row.vaccineID) { error.value = "Every prior vaccination row needs a vaccine selected."; return; }
       if (!row.doseNumber || Number(row.doseNumber) <= 0) { error.value = "Dose number must be greater than 0 for every prior vaccination row."; return; }
       if (!row.vaccinationDate) { error.value = "Every prior vaccination row needs a vaccination date."; return; }
+      if (row.vaccinationDate > todayISO || row.vaccinationDate < regChildForm.BirthDate) { error.value = "Prior vaccination dates must be between the birth date and today."; return; }
     }
     const seen = new Set();
     for (const row of rows) {
@@ -1674,7 +1680,7 @@ async function submitChildRegister() {
             <div class="grid grid-cols-3 gap-4">
               <div class="space-y-1">
                 <label class="text-[11px] font-bold text-stone-500 ml-1">Birth Date</label>
-                <input v-model="regChildForm.BirthDate" type="date" class="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm outline-none" />
+                <input v-model="regChildForm.BirthDate" type="date" :max="todayISO" class="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm outline-none" />
               </div>
               <div class="space-y-1">
                 <label class="text-[11px] font-bold text-stone-500 ml-1">Sex</label>
@@ -1758,7 +1764,7 @@ async function submitChildRegister() {
                   </div>
                   <div>
                     <label class="text-[11px] font-medium text-stone-500">Vaccination Date</label>
-                    <input v-model="row.vaccinationDate" type="date" class="mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-[13px] outline-none focus:border-emerald-500" />
+                    <input v-model="row.vaccinationDate" type="date" :max="todayISO" class="mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-[13px] outline-none focus:border-emerald-500" />
                   </div>
                 </div>
               </div>
@@ -1847,7 +1853,7 @@ async function submitChildRegister() {
               </div>
               <div>
                 <label class="text-[11px] font-medium text-stone-500">Vaccination Date</label>
-                <input v-model="row.vaccinationDate" type="date" class="mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-[13px] outline-none focus:border-emerald-500" />
+                <input v-model="row.vaccinationDate" type="date" :max="todayISO" class="mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-[13px] outline-none focus:border-emerald-500" />
               </div>
             </div>
           </div>

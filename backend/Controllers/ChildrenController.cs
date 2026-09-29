@@ -155,6 +155,8 @@ namespace AndroidWebAPI.Controllers
                 return BadRequest(new { message = "LastName is required." });
             if (dto.BirthDate == default)
                 return BadRequest(new { message = "BirthDate is required." });
+            if (dto.BirthDate.Date > DateTime.Today)
+                return BadRequest(new { message = "The birth date can't be in the future." });
             if (dto.Parents == null || !dto.Parents.Any())
                 return BadRequest(new { message = "At least one parent link is required." });
             if (CheckBirthMeasurements(dto.BirthWeight, dto.BirthHeight) is string measurementError)
@@ -215,6 +217,8 @@ namespace AndroidWebAPI.Controllers
                 return BadRequest(new { message = "FirstName is required." });
             if (string.IsNullOrWhiteSpace(dto.LastName))
                 return BadRequest(new { message = "LastName is required." });
+            if (dto.BirthDate.Date > DateTime.Today)
+                return BadRequest(new { message = "The birth date can't be in the future." });
             if (CheckBirthMeasurements(dto.BirthWeight, dto.BirthHeight) is string measurementError)
                 return BadRequest(new { message = measurementError });
 

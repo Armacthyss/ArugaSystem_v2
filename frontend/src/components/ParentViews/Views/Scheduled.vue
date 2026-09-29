@@ -305,6 +305,7 @@ onMounted(async () => {
         placeOfBirth: child.PlaceOfBirth ?? child.placeOfBirth,
         sex: child.Sex ?? child.sex,
         barangay: child.Barangay ?? child.barangay,
+        familyNo: child.FamilyNo ?? child.familyNo,
         address: child.Address ?? child.address,
         healthCenter: child.HealthCenter ?? child.healthCenter,
         relationshipType,

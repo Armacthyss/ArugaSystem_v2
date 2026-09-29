@@ -72,9 +72,9 @@
                   <p class="text-white font-bold text-lg leading-tight">{{ selectedChild.firstName }} {{ selectedChild.lastName }}</p>
                   <p class="text-emerald-200 text-[10px] font-bold uppercase mt-0.5">{{ selectedChild.healthCenter || 'Leveriza Health Center' }}</p>
                 </div>
-                <div class="ml-auto text-right hidden sm:block">
-                  <p class="text-[10px] text-white/60 font-black uppercase">Patient ID</p>
-                  <p class="text-white font-mono text-xs font-bold">#{{ selectedChild.childID.slice(-8).toUpperCase() }}</p>
+                <div v-if="selectedChild.familyNo" class="ml-auto text-right hidden sm:block">
+                  <p class="text-[10px] text-white/60 font-black uppercase">Family No.</p>
+                  <p class="text-white font-mono text-xs font-bold">{{ selectedChild.familyNo }}</p>
                 </div>
               </div>
               <div class="grid grid-cols-2 sm:grid-cols-3 divide-x divide-y divide-slate-50">
@@ -468,6 +468,10 @@ async function fetchChildren() {
           barangay:
             child.barangay ??
             child.Barangay,
+
+          familyNo:
+            child.familyNo ??
+            child.FamilyNo,
 
           address:
             child.address ??

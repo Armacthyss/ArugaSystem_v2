@@ -73,6 +73,20 @@ namespace AndroidWebAPI.Controllers
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
 
+            // A new batch: its doses are all still on hand
+            if (string.IsNullOrWhiteSpace(inventory.LotNumber))
+                return BadRequest(new { message = "Enter the lot number." });
+            if (inventory.InitialQuantity <= 0)
+                return BadRequest(new { message = "The number of doses received must be more than 0." });
+            if (inventory.MinimumStock < 0)
+                return BadRequest(new { message = "The minimum stock can't be negative." });
+            if (inventory.ExpirationDate.Date < DateTime.Today)
+                return BadRequest(new { message = "This batch has already expired. Check the expiration date." });
+            if (inventory.ManufacturingDate is DateTime made && made.Date > inventory.ExpirationDate.Date)
+                return BadRequest(new { message = "The manufacturing date must be before the expiration date." });
+            inventory.LotNumber = inventory.LotNumber.Trim();
+            inventory.CurrentQuantity = inventory.InitialQuantity;
+
             var created = await _repository.CreateAsync(inventory);
 
             await _audit.LogAsync("Inventory", "Receive Stock",
