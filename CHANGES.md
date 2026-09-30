@@ -37,6 +37,7 @@ Asked for by the technical adviser: Aruga is a public government website, so bot
 - Each picture works once and for 5 minutes; after a wrong answer (or a wrong password) a new picture appears. Upper or lower case both work.
 - The system itself checks the answer before it even looks at the password, so bots can't skip the picture.
 - On Forgot Password this also protects the SMS load: bots can't make the system send reset codes over and over.
+- The picture uses solid letters (from the free DejaVu Sans Bold font), each bent and tilted a little differently every time, on a soft background with a few thin lines, and fills the width of the form; "New picture" is next to the label. (First version, Sep 30: thin hand-drawn-looking lines, which looked odd.)
 - Made inside Aruga (no Google reCAPTCHA account or keys), so it works on the laptop, on phones using the laptop's address, and without internet. It can be switched off in `appsettings.json` with `"Captcha": { "Enabled": false }` (e.g. for automated tests); it is on by default.
 
 ## Check-up and fixes (Sep 30, 2026)

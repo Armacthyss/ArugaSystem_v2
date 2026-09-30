@@ -9,21 +9,21 @@
 -->
 <template>
   <div v-if="enabled" class="mb-5">
-    <label for="captcha" class="block mb-2 text-sm font-semibold text-gray-700">Type the characters you see</label>
-    <div class="flex items-center gap-2 mb-2">
-      <div class="h-16 w-[200px] shrink-0 rounded-xl border-2 border-[#dcccac] overflow-hidden bg-[#f7f3ea] flex items-center justify-center">
-        <img v-if="image" :src="image" alt="CAPTCHA picture: type the characters shown" class="h-full w-full" draggable="false" />
-        <span v-else class="text-xs text-gray-400">{{ error || 'Loading…' }}</span>
-      </div>
+    <div class="mb-2 flex items-center justify-between gap-2">
+      <label for="captcha" class="min-w-0 text-sm font-semibold text-gray-700">Type the characters below</label>
       <button
         type="button"
-        class="h-11 w-11 shrink-0 rounded-xl border-2 border-[#dcccac] text-lg text-[#546b41] hover:border-[#546b41]"
+        class="inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-xs font-semibold text-[#546b41] hover:underline"
         title="Show a new picture"
-        aria-label="Show a new picture"
         @click="refresh"
       >
-        ↻
+        <RefreshCw class="h-3.5 w-3.5" :class="{ 'animate-spin': loading }" /> New picture
       </button>
+    </div>
+    <!-- The picture (320 x 72, see-through) sits on this soft box -->
+    <div class="mb-2 flex h-[72px] w-full select-none items-center justify-center overflow-hidden rounded-xl border-2 border-[#dcccac] bg-gradient-to-br from-[#fbfaf6] to-[#eef4ea]">
+      <img v-if="image" :src="image" alt="CAPTCHA picture: type the characters shown" class="h-full w-full object-contain" draggable="false" />
+      <span v-else class="text-xs text-gray-400">{{ error || 'Loading…' }}</span>
     </div>
     <input
       id="captcha"
@@ -44,6 +44,7 @@
 import { ref, onMounted } from 'vue'
 import axios from 'axios'
 import { API_ORIGIN } from '@/utils/apiBase'
+import { RefreshCw } from 'lucide-vue-next'
 
 defineProps({ modelValue: { type: String, default: '' } })
 const emit = defineEmits(['update:modelValue'])
@@ -52,10 +53,11 @@ const enabled = ref(true)
 const captchaId = ref('')
 const image = ref('')
 const error = ref('')
+const loading = ref(false)
 
 async function refresh() {
-  image.value = ''
   error.value = ''
+  loading.value = true
   emit('update:modelValue', '')
   try {
     const res = await axios.get(`${API_ORIGIN}/api/auth/captcha`)
@@ -63,7 +65,10 @@ async function refresh() {
     captchaId.value = res.data.captchaId || ''
     image.value = res.data.image || ''
   } catch {
-    error.value = 'Could not load the picture. Tap ↻ to try again.'
+    image.value = ''
+    error.value = 'Could not load the picture. Tap "New picture" to try again.'
+  } finally {
+    loading.value = false
   }
 }
 
