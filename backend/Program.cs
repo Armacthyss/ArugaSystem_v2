@@ -76,6 +76,8 @@ builder.Services.AddScoped<AuditService>();
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<MessageSender>();   // Email + SMS (settings in appsettings.json)
 builder.Services.AddScoped<ParentNotifier>();
+builder.Services.AddMemoryCache();
+builder.Services.AddSingleton<Captcha>();       // picture CAPTCHA on Sign In / Forgot Password
 builder.Services.AddDbContext<AppDbContext>(options =>   // ← only once
 options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 

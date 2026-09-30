@@ -4,8 +4,13 @@ import logoIcon from '@/assets/logo-icon.svg'
 import { ref, computed, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
+import CaptchaBox from '@/components/Shared/CaptchaBox.vue'
 
 const router = useRouter()
+
+// Picture CAPTCHA before a code is sent (see CaptchaBox.vue)
+const captcha = ref(null)
+const captchaAnswer = ref('')
 const API_BASE = `${API_ORIGIN}/api/auth/forgot-password`
 
 // step: 'request' -> 'verify' -> 'reset' -> 'done'
@@ -52,11 +57,17 @@ const requestCode = async () => {
     errorMessage.value = 'Enter your email or username first.'
     return
   }
+  if (captcha.value?.enabled !== false && !captchaAnswer.value.trim()) {
+    errorMessage.value = 'Type the characters in the picture first.'
+    return
+  }
   loading.value = true
   try {
     const res = await axios.post(`${API_BASE}/request`, {
       identifier: identifier.value.trim(),
       deliveryMethod: deliveryMethod.value,
+      captchaId: captcha.value?.captchaId,
+      captchaAnswer: captchaAnswer.value,
     })
     infoMessage.value = res.data.message
     otp.value = ''
@@ -64,6 +75,7 @@ const requestCode = async () => {
     startCooldown()
   } catch (err) {
     errorMessage.value = err?.response?.data?.message || 'Something went wrong. Please try again.'
+    captcha.value?.refresh()   // each picture works once
   } finally {
     loading.value = false
   }
@@ -173,6 +185,8 @@ const sendAgain = () => {
             </label>
           </div>
         </div>
+
+        <CaptchaBox ref="captcha" v-model="captchaAnswer" />
 
         <button
           type="submit"

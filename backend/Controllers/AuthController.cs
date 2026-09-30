@@ -345,6 +345,22 @@ namespace AndroidWebAPI.Controllers
         }
 
         // =========================================================
+        // CAPTCHA
+        // GET /api/auth/captcha  -> { captchaId, image }
+        // A new picture for the Sign In / Forgot Password pages.
+        // =========================================================
+
+        [AllowAnonymous]
+        [HttpGet("captcha")]
+        public IActionResult GetCaptcha([FromServices] AndroidWebAPI.Services.Captcha captcha)
+        {
+            if (!captcha.Enabled) return Ok(new { enabled = false });
+            var (id, image) = captcha.Create();
+            Response.Headers.CacheControl = "no-store";
+            return Ok(new { enabled = true, captchaId = id, image });
+        }
+
+        // =========================================================
         // UNIFIED LOGIN
         // POST /api/auth/login
         // =========================================================
@@ -352,8 +368,19 @@ namespace AndroidWebAPI.Controllers
         [AllowAnonymous]
         [HttpPost("login")]
         public async Task<IActionResult> Login(
-            [FromBody] LoginDto dto)
+            [FromBody] LoginDto dto,
+            [FromServices] AndroidWebAPI.Services.Captcha captcha)
         {
+            // Checked first, so a bot can't even test passwords without it
+            if (!captcha.Check(dto.CaptchaId, dto.CaptchaAnswer))
+            {
+                return BadRequest(new
+                {
+                    message = AndroidWebAPI.Services.Captcha.WrongAnswer,
+                    captcha = true
+                });
+            }
+
             if (string.IsNullOrWhiteSpace(dto.Identifier))
             {
                 return BadRequest(new
@@ -794,6 +821,11 @@ if (account.AccountType == "SystemAdmin")
         public string Identifier { get; set; } = string.Empty;
 
         public string Password { get; set; } = string.Empty;
+
+        // From GET /api/auth/captcha and what the person typed
+        public string? CaptchaId { get; set; }
+
+        public string? CaptchaAnswer { get; set; }
     }
 
 

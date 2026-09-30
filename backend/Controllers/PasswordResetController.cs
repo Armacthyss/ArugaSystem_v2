@@ -51,6 +51,8 @@ namespace AndroidWebAPI.Controllers
         {
             public string Identifier { get; set; } = string.Empty;
             public string DeliveryMethod { get; set; } = "email";
+            public string? CaptchaId { get; set; }
+            public string? CaptchaAnswer { get; set; }
         }
 
         public class VerifyDto
@@ -65,11 +67,15 @@ namespace AndroidWebAPI.Controllers
         }
 
         [HttpPost("request")]
-        public async Task<IActionResult> RequestCode([FromBody] RequestDto dto)
+        public async Task<IActionResult> RequestCode([FromBody] RequestDto dto, [FromServices] Captcha captcha)
         {
             var identifier = dto.Identifier?.Trim() ?? "";
             if (identifier.Length == 0)
                 return BadRequest(new { message = "Enter your email or username first." });
+
+            // Bots asking for codes would use up the SMS load and flood inboxes
+            if (!captcha.Check(dto.CaptchaId, dto.CaptchaAnswer))
+                return BadRequest(new { message = Captcha.WrongAnswer, captcha = true });
 
             bool bySms = string.Equals(dto.DeliveryMethod, "sms", StringComparison.OrdinalIgnoreCase);
             string channel = bySms ? "mobile number" : "email address";

@@ -4,6 +4,7 @@ import logoIcon from "@/assets/logo-icon.svg"
 import { ref, computed } from "vue"
 import { useRouter, useRoute } from "vue-router"
 import axios from "axios"
+import CaptchaBox from "@/components/Shared/CaptchaBox.vue"
 
 const API_BASE_URL = `${API_ORIGIN}/api/auth`
 
@@ -31,9 +32,14 @@ const rememberMe = ref(false)
 const errorMessage = ref("")
 const isLoading = ref(false)
 
+// Picture CAPTCHA (see CaptchaBox.vue)
+const captcha = ref(null)
+const captchaAnswer = ref("")
+
 const canSubmit = computed(() =>
   identifier.value.trim().length > 0 &&
   password.value.length > 0 &&
+  (captcha.value?.enabled === false || captchaAnswer.value.trim().length > 0) &&
   !isLoading.value
 )
 
@@ -83,6 +89,8 @@ const handleLogin = async () => {
     const response = await axios.post(`${API_BASE_URL}/login`, {
       identifier: identifier.value,
       password: password.value,
+      captchaId: captcha.value?.captchaId,
+      captchaAnswer: captchaAnswer.value,
     })
 
     const data = response.data
@@ -181,6 +189,8 @@ const handleLogin = async () => {
   } catch (error) {
     errorMessage.value = error?.response?.data?.message || "Invalid email/username or password."
     console.error("Login Error:", error)
+    // Each picture works once: show a new one for the next try
+    captcha.value?.refresh()
   } finally {
     isLoading.value = false
   }
@@ -268,6 +278,11 @@ const currentYear = new Date().getFullYear()
               {{ showPassword ? "🙈" : "👁️" }}
             </button>
           </div>
+        </div>
+
+        <!-- CAPTCHA (keeps bots from guessing passwords) -->
+        <div class="mt-5">
+          <CaptchaBox ref="captcha" v-model="captchaAnswer" />
         </div>
 
         <!-- REMEMBER ME / FORGOT PASSWORD -->
