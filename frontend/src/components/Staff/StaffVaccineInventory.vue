@@ -282,6 +282,7 @@ import { Plus, Package, AlertTriangle, Trash2, X, RefreshCw, ChevronLeft, Chevro
 import StaffSidebar from './StaffSidebar.vue'
 import StaffTopbar from './StaffTopbar.vue'
 import InventorySummary from '@/components/Shared/InventorySummary.vue'
+import { showAlert } from '@/utils/dialog'
 
 // Same API_BASE convention as the rest of the project.
 const API_BASE = `${API_ORIGIN}/api`
@@ -389,7 +390,7 @@ const fetchAll = () => {
 
 const handleSaveBatch = async () => {
   if (!batchForm.VaccineID || !batchForm.LotNumber || !batchForm.ExpirationDate) {
-    alert('Vaccine, Lot Number, and Expiration Date are required.')
+    showAlert({ title: 'Some details are missing', message: 'Vaccine, Lot Number and Expiration Date are required.', tone: 'error' })
     return
   }
   isSaving.value = true
@@ -412,7 +413,11 @@ const handleSaveBatch = async () => {
     fetchAll()
   } catch (err) {
     console.error('Save batch error:', err)
-    alert(err.response?.data?.message || 'Could not save this batch. Check your connection and try again.')
+    showAlert({
+      title: 'Could not save this batch',
+      message: err.response?.data?.message || 'Check your connection and try again.',
+      tone: 'error',
+    })
   } finally {
     isSaving.value = false
   }

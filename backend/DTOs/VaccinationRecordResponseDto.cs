@@ -26,6 +26,8 @@ namespace AndroidWebAPI.DTOs
 
         public string? NurseObservation { get; set; }
 
+        public string? InjectionSite { get; set; }
+
         public string? LotNumber { get; set; }
     }
 }

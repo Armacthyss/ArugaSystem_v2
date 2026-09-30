@@ -20,7 +20,7 @@
           <div class="space-y-5 animate-in fade-in slide-in-from-right-4 duration-500">
             <div class="grid grid-cols-3 gap-4">
               <div class="bg-emerald-600 p-6 rounded-xl text-center text-white shadow-sm"><h3 class="text-4xl font-black">{{ recordStats.completed }}</h3><p class="text-[9px] uppercase font-bold opacity-70 mt-1 tracking-widest">Completed</p></div>
-              <div class="bg-slate-600 p-6 rounded-xl text-center text-white shadow-sm"><h3 class="text-4xl font-black">{{ recordStats.scheduled }}</h3><p class="text-[9px] uppercase font-bold opacity-70 mt-1 tracking-widest">Scheduled</p></div>
+              <div class="bg-blue-600 p-6 rounded-xl text-center text-white shadow-sm"><h3 class="text-4xl font-black">{{ recordStats.scheduled }}</h3><p class="text-[9px] uppercase font-bold opacity-70 mt-1 tracking-widest">Scheduled</p></div>
               <div class="bg-red-500 p-6 rounded-xl text-center text-white shadow-sm"><h3 class="text-4xl font-black">{{ recordStats.overdue }}</h3><p class="text-[9px] uppercase font-bold opacity-70 mt-1 tracking-widest">Overdue</p></div>
             </div>
             <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
@@ -44,6 +44,7 @@
                     <th class="px-6 py-3">Vaccine</th>
                     <th class="px-6 py-3">Dose</th>
                     <th class="px-6 py-3">Status</th>
+                    <th class="px-6 py-3">Site</th>
                     <th class="px-6 py-3">Given By</th>
                     <th class="px-6 py-3">Lot #</th>
                   </tr></thead>
@@ -59,6 +60,7 @@
                       <td class="px-6 py-4 font-bold text-slate-800">{{ rec.vaccineName }}</td>
                       <td class="px-6 py-4 text-slate-500">Dose {{ rec.doseNumber }}</td>
                       <td class="px-6 py-4"><span :class="getStatusClass(rec.status)" class="px-3 py-1 rounded-full text-[9px] font-bold uppercase">{{ rec.status }}</span></td>
+                      <td class="px-6 py-4 text-slate-600 whitespace-nowrap">{{ rec.injectionSite || '—' }}</td>
                       <td class="px-6 py-4 text-slate-500 italic">{{ rec.administeredByName || '—' }}</td>
                       <td class="px-6 py-4 font-mono text-[10px] text-slate-400">{{ rec.lotNumber || '—' }}</td>
                     </tr>

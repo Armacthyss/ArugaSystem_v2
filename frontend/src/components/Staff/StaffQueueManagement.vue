@@ -186,6 +186,7 @@ import {
 import StaffSidebar from "./StaffSidebar.vue";
 import StaffTopbar from "./StaffTopbar.vue";
 import { withRelationship } from "@/utils/format";
+import { askConfirm, showAlert } from "@/utils/dialog";
 
 const API_BASE = `${API_ORIGIN}/api`;
 
@@ -302,20 +303,30 @@ const changeStatus = async (q, newStatus) => {
     // Re-fetch from the server to show what's actually saved, rather than
     // blindly reverting to the pre-edit value.
     await loadQueues();
-    alert(error.response?.data?.message || "The status couldn't be changed. The list has been refreshed to show the current state.");
+    showAlert({
+      title: "The status wasn't changed",
+      message: error.response?.data?.message || "The list has been refreshed to show the current state.",
+      tone: "error",
+    });
   } finally {
     updatingId.value = null;
   }
 };
 
 const deleteQueue = async (q) => {
-  if (!confirm(`Remove queue entry ${q.no} (${q.child})? This can't be undone.`)) return;
+  const ok = await askConfirm({
+    title: `Remove queue entry ${q.no}?`,
+    message: `${q.child}, brought by ${q.parent}, on ${formatDate(q.queueDate)}. This can't be undone.`,
+    confirmText: "Remove",
+    tone: "danger",
+  });
+  if (!ok) return;
   try {
     await axios.delete(`${API_BASE}/Queue/${q.queueID}`);
     queues.value = queues.value.filter((r) => r.queueID !== q.queueID);
   } catch (error) {
     console.error("Delete queue error:", error);
-    alert("Could not delete this entry. Please try again.");
+    showAlert({ title: "Could not delete this entry", message: "Please try again.", tone: "error" });
   }
 };
 

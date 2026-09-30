@@ -234,8 +234,8 @@ function buildReport(name, range) {
     case 'Vaccinations Performed': {
       const list = recs.filter(r => inPeriod(r.vaccinationDate, range)).sort((a, b) => new Date(b.vaccinationDate) - new Date(a.vaccinationDate))
       return {
-        columns: ['Date', 'Child', 'Vaccine', 'Dose', 'Lot No.', 'Administered By', 'Remarks'],
-        rows: list.map(r => [formatDate(r.vaccinationDate), r.childName, r.vaccineName, r.doseNumber, r.lotNumber || 'Historical', r.administeredByName || '—', r.nurseObservation || '']),
+        columns: ['Date', 'Child', 'Vaccine', 'Dose', 'Site', 'Lot No.', 'Administered By', 'Remarks'],
+        rows: list.map(r => [formatDate(r.vaccinationDate), r.childName, r.vaccineName, r.doseNumber, r.injectionSite || '—', r.lotNumber || 'Historical', r.administeredByName || '—', r.nurseObservation || '']),
         chart: monthlyChart(recs.map(r => r.vaccinationDate), 'Vaccinations per Month'),
       }
     }

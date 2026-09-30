@@ -8,6 +8,7 @@ import AppHeader from './Components/AppHeader.vue'
 import PrivacyConsentCheckbox from '@/components/Shared/PrivacyConsentCheckbox.vue'
 import { userLevel } from '@/utils/format'
 import { barangayChoices, BARANGAY_HINT } from '@/utils/barangays'
+import { askConfirm } from '@/utils/dialog'
 
 const API_BASE_URL = `${API_ORIGIN}/api`
 
@@ -124,11 +125,10 @@ async function setStatus(user, status) {
   closeMenu()
   actionError.value = ''
 
-  const confirmed = window.confirm(
-    status === 'Active'
-      ? `Activate ${user.firstName} ${user.lastName}?`
-      : `Deactivate ${user.firstName} ${user.lastName}? They won't be able to log in.`
-  )
+  const name = `${user.firstName} ${user.lastName}`
+  const confirmed = await askConfirm(status === 'Active'
+    ? { title: `Activate ${name}?`, message: 'They will be able to sign in again.', confirmText: 'Activate' }
+    : { title: `Deactivate ${name}?`, message: "They won't be able to sign in until the account is activated again.", confirmText: 'Deactivate', tone: 'danger' })
   if (!confirmed) return
 
   try {
@@ -138,7 +138,7 @@ async function setStatus(user, status) {
     user.status = status
   } catch (error) {
     console.error('Failed to update status:', error)
-    actionError.value = 'Could not update this user\u2019s status. Please try again.'
+    actionError.value = error.response?.data?.message || 'Could not update this user\u2019s status. Please try again.'
   }
 }
 
@@ -146,9 +146,11 @@ async function resetPassword(user) {
   closeMenu()
   actionError.value = ''
 
-  const confirmed = window.confirm(
-    `Reset the password for ${user.firstName} ${user.lastName}? They'll need to set a new one on next login.`
-  )
+  const confirmed = await askConfirm({
+    title: `Reset the password for ${user.firstName} ${user.lastName}?`,
+    message: "They get a temporary password (by email and text when set up) and choose a new one when they next sign in.",
+    confirmText: 'Reset Password',
+  })
   if (!confirmed) return
 
   try {

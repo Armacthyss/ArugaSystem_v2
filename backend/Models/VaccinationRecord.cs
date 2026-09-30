@@ -33,6 +33,11 @@ namespace AndroidWebAPI.Models
 
         public string? NurseObservation { get; set; }
 
+        // Where the dose was given ("Left thigh", "Right upper arm",
+        // "Mouth (oral)"...), so a later swelling can be traced to the
+        // vaccine (asked for by City Hall). Null for older/Yellow Book doses.
+        public string? InjectionSite { get; set; }
+
         // Completed / Cancelled / Deferred
         public string Status { get; set; } = "Completed";
 

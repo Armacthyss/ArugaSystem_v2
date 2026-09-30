@@ -13,6 +13,7 @@ import StaffTopbar from "./StaffTopbar.vue";
 import { getToken } from "@/utils/auth";
 import { withRelationship } from "@/utils/format";
 import { visitProgress, unfinishedChildren } from "@/utils/visitProgress";
+import { askConfirm, showAlert } from "@/utils/dialog";
 
 const router = useRouter();
 
@@ -196,8 +197,14 @@ const callVisit = (q) => {
   assignMenuOpen.value = null;
   return roomAction(`${API_BASE}/Queue/${q.queueID}/call`, "Could not call this family.");
 };
-const backToWaiting = (q) => {
-  if (!confirm(`${q.no} did not come in? They go back to waiting and keep their number.`)) return;
+const backToWaiting = async (q) => {
+  const ok = await askConfirm({
+    title: `${q.no} did not come in?`,
+    message: `${q.child}, brought by ${q.parent || "their parent"}, will go back to the waiting list and keep queue number ${q.no}. You can call them again later.`,
+    confirmText: "Back to Waiting",
+    cancelText: "They're here",
+  });
+  if (!ok) return;
   return roomAction(`${API_BASE}/Queue/${q.queueID}/back-to-waiting`, "Could not update this family.");
 };
 // Each child's progress in the family inside (done / not yet), so nobody
@@ -212,10 +219,21 @@ watch(() => nowServing.value?.queueID, loadRoomProgress);
 const completeVisit = async (q) => {
   await loadRoomProgress();
   const left = unfinishedChildren(q.children, roomProgress.value);
-  const question = left.length
-    ? `Still due today and not recorded:\n• ${left.join("\n• ")}\n\nComplete the visit for ${q.no} anyway?`
-    : `Complete the visit for ${q.no} (${q.child})? Parents get a text of the vaccines given.`;
-  if (!confirm(question)) return;
+  const ok = await askConfirm(left.length
+    ? {
+        title: `Complete ${q.no} anyway?`,
+        message: "These are still due today and not recorded:",
+        details: left,
+        confirmText: "Complete Anyway",
+        cancelText: "Go Back",
+        tone: "danger",
+      }
+    : {
+        title: `Complete the visit for ${q.no}?`,
+        message: `${q.child}. The parents get a text of the vaccines given today.`,
+        confirmText: "Complete Visit",
+      });
+  if (!ok) return;
   return roomAction(`${API_BASE}/Queue/${q.queueID}/complete`, "Could not complete the visit.");
 };
 const startVaccinating = (q, c) => router.push(`/staff/vaccination/${q.queueID}?child=${c.childID}`);
@@ -395,13 +413,19 @@ const closeMenus = (event) => {
 // DELETE /api/Queue/{id}
 const removeFromQueue = async (q) => {
   assignMenuOpen.value = null;
-  if (!confirm(`Remove ${q.no} (${q.child}) from today's queue?`)) return;
+  const ok = await askConfirm({
+    title: `Remove ${q.no} from today's queue?`,
+    message: `${q.child}, brought by ${q.parent}, will be taken off today's list. This can't be undone.`,
+    confirmText: "Remove",
+    tone: "danger",
+  });
+  if (!ok) return;
   try {
     const res = await fetch(`${API_BASE}/Queue/${q.queueID}`, { method: "DELETE", headers: authJson() });
     if (!res.ok) throw new Error(`Status ${res.status}`);
   } catch (error) {
     console.error("Remove from queue error:", error);
-    alert("Could not remove this entry. Please try again.");
+    showAlert({ title: "Could not remove this entry", message: "Please try again.", tone: "error" });
   } finally {
     await loadQueue();
   }
@@ -745,7 +769,7 @@ onUnmounted(() => {
     <p class="text-[14px] font-semibold">Today's Queue</p>
 
     <span class="text-[12px] text-stone-500">
-      {{ visibleQueue.length }} patients in queue
+      {{ visibleQueue.length }} {{ visibleQueue.length === 1 ? 'family' : 'families' }} in queue
     </span>
   </div>
 
@@ -779,8 +803,9 @@ onUnmounted(() => {
                   <template v-for="q in visibleQueue" :key="q.queueID">
                    <tr class="border-t border-stone-200">
                     <td class="px-5 py-3 font-medium whitespace-nowrap">{{ q.no }}</td>
-                    <td class="px-5 py-3 whitespace-nowrap">{{ q.child }}</td>
-                    <td class="px-5 py-3 whitespace-nowrap text-stone-500">{{ q.parent }}</td>
+                    <!-- names wrap, so the action buttons stay on screen -->
+                    <td class="px-5 py-3 min-w-[140px]">{{ q.child }}</td>
+                    <td class="px-5 py-3 min-w-[140px] text-stone-500">{{ q.parent }}</td>
                     <td class="px-5 py-3 whitespace-nowrap text-stone-500">{{ q.time }}</td>
                     <td class="px-5 py-3 whitespace-nowrap">
                       <span

@@ -5,6 +5,7 @@ import axios from 'axios'
 import AppSidebar from './Components/AppSidebar.vue'
 import AppHeader from './Components/AppHeader.vue'
 import { API_BASE, formatDate, isSameDay, toISODate, downloadCSV } from '@/utils/format'
+import { askConfirm } from '@/utils/dialog'
 
 /* -------------------------------- Status meta -------------------------------- */
 // In-app notifications are delivered the moment they're created, so the
@@ -113,7 +114,13 @@ const resend = async (n) => {
 
 const deleteNotification = async (n) => {
   closeMenu()
-  if (!confirm(`Delete "${n.title}" for ${n.recipient}? The recipient will no longer see it.`)) return
+  const ok = await askConfirm({
+    title: 'Delete this notification?',
+    message: `"${n.title}" for ${n.recipient}. The recipient will no longer see it.`,
+    confirmText: 'Delete',
+    tone: 'danger',
+  })
+  if (!ok) return
   try {
     await axios.delete(`${API_BASE}/Notifications/${n.id}`)
     notifications.value = notifications.value.filter(x => x.id !== n.id)

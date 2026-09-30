@@ -378,10 +378,8 @@
                 </p>
               </div>
               <div class="p-3 bg-slate-50 rounded-lg">
-                <p class="text-xs text-slate-400 mb-1">Scheduled Date</p>
-                <p class="font-medium text-slate-700 text-sm">
-                  {{ selectedRecord.scheduledDate ? formatDate(selectedRecord.scheduledDate) : '—' }}
-                </p>
+                <p class="text-xs text-slate-400 mb-1">Injection Site</p>
+                <p class="font-medium text-slate-700 text-sm">{{ selectedRecord.injectionSite || '—' }}</p>
               </div>
               <div class="p-3 bg-slate-50 rounded-lg">
                 <p class="text-xs text-slate-400 mb-1">Batch / Lot No.</p>
@@ -506,6 +504,7 @@ async function fetchRecords() {
       status:             r.status     ?? r.Status     ?? 'Pending',
       administeredByName: r.administeredByName ?? r.AdministeredByName ?? null,
       remarks:            r.nurseObservation ?? r.remarks ?? r.Remarks ?? null,
+      injectionSite:      r.injectionSite ?? null,
       daysLate:           computeDaysLate(
                             r.vaccinationDate ?? r.dateAdministered ?? r.DateAdministered,
                             r.scheduledDate    ?? r.ScheduledDate

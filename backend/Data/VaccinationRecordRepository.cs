@@ -55,6 +55,7 @@ public async Task<IEnumerable<VaccinationRecordResponseDto>> GetByChildAsync(Gui
                 ? r.AdministeredBy.FirstName + " " + r.AdministeredBy.LastName
                 : null,
             NurseObservation = r.NurseObservation,
+            InjectionSite = r.InjectionSite,
             LotNumber = r.Inventory != null ? r.Inventory.LotNumber : null
         })
         .ToListAsync();

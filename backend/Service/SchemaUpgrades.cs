@@ -17,6 +17,11 @@ IF COL_LENGTH('dbo.Parents', 'ConsentRecordedAt') IS NULL
     ALTER TABLE dbo.Parents ADD ConsentRecordedAt DATETIME2 NULL;
 IF COL_LENGTH('dbo.Parents', 'PrivacyConsentAt') IS NULL
     ALTER TABLE dbo.Parents ADD PrivacyConsentAt DATETIME2 NULL;");
+
+            // Oct 2026: where each dose was given (see VaccinationRecord.cs)
+            await context.Database.ExecuteSqlRawAsync(@"
+IF COL_LENGTH('dbo.VaccinationRecords', 'InjectionSite') IS NULL
+    ALTER TABLE dbo.VaccinationRecords ADD InjectionSite NVARCHAR(30) NULL;");
         }
     }
 }

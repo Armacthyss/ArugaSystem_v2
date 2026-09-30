@@ -15,6 +15,7 @@ import StaffTopbar from "./StaffTopbar.vue";
 import PrivacyConsentCheckbox from "@/components/Shared/PrivacyConsentCheckbox.vue";
 import { barangayChoices, isServedBarangay, BARANGAY_HINT } from "@/utils/barangays";
 import { toISODate } from "@/utils/format";
+import { showAlert } from "@/utils/dialog";
 
 const route = useRoute();
 // Birth dates and Yellow Book doses can't be in the future
@@ -278,7 +279,7 @@ async function setPrimary(childId, relId) {
     await api.makePrimaryContact(relId);
     await loadRelationships();
   } catch (e) {
-    alert(`Couldn't change the primary contact: ${e.response?.data?.message || e.message}`);
+    showAlert({ title: "Couldn't change the primary contact", message: e.response?.data?.message || e.message, tone: "error" });
   }
 }
 
@@ -293,7 +294,7 @@ async function setNotifyMode(child, mode) {
     await api.setReminderRecipients(child.id, mode);
     await loadRelationships();
   } catch (e) {
-    alert(`Couldn't change who gets reminders: ${e.response?.data?.message || e.message}`);
+    showAlert({ title: "Couldn't change who gets reminders", message: e.response?.data?.message || e.message, tone: "error" });
   }
 }
 
@@ -967,7 +968,11 @@ async function submitParentRegister() {
     }
     if (linkFailures > 0) {
       error.value = null;
-      alert(`Parent registered, but ${linkFailures} child link(s) failed to save. You can link them from the parent's profile instead.`);
+      showAlert({
+        title: "Parent registered, but some children weren't linked",
+        message: `${linkFailures} child link(s) failed to save. You can link them from the parent's profile instead.`,
+        tone: "error",
+      });
     }
   } catch (e) {
     console.error("Error registering parent:", e);
@@ -1112,12 +1117,14 @@ async function submitChildRegister() {
     // Records" from the child's row.
     const newChildID = createdChild?.childID;
     let priorVaccinationSaveFailed = false;
+    let priorVaccinationError = "";
     if (priorVaccinationsToSave.length > 0 && newChildID) {
       try {
         await api.saveHistoricalVaccinations({ childID: newChildID, vaccinations: priorVaccinationsToSave });
       } catch (e) {
         console.error("Error saving prior vaccinations at registration:", e);
         priorVaccinationSaveFailed = true;
+        priorVaccinationError = e.response?.data?.message || "";
       }
     } else if (priorVaccinationsToSave.length > 0) {
       priorVaccinationSaveFailed = true;
@@ -1127,7 +1134,12 @@ async function submitChildRegister() {
     closeRegisterModal();
     if (priorVaccinationSaveFailed) {
       error.value = null;
-      alert("Child registered, but the prior vaccination history couldn't be saved. Add it from the child's row via \"Add Historical Vaccination Records\" instead.");
+      showAlert({
+        title: "Child registered, but the Yellow Book doses weren't saved",
+        message: (priorVaccinationError ? `${priorVaccinationError}\n\n` : "")
+          + "Add them from the child's row with \"Add Historical Vaccination Records\".",
+        tone: "error",
+      });
     }
   } catch (e) {
     console.error("Error registering child:", e);
@@ -1401,6 +1413,7 @@ async function submitChildRegister() {
                   <th class="text-left font-semibold px-3 py-2 text-[10.5px] uppercase tracking-wide text-stone-500">Vaccine</th>
                   <th class="text-left font-semibold px-3 py-2 text-[10.5px] uppercase tracking-wide text-stone-500">Dose</th>
                   <th class="text-left font-semibold px-3 py-2 text-[10.5px] uppercase tracking-wide text-stone-500">Date</th>
+                  <th class="text-left font-semibold px-3 py-2 text-[10.5px] uppercase tracking-wide text-stone-500">Site</th>
                   <th class="text-left font-semibold px-3 py-2 text-[10.5px] uppercase tracking-wide text-stone-500">Status</th>
                 </tr></thead>
                 <tbody>
@@ -1408,6 +1421,7 @@ async function submitChildRegister() {
                     <td class="px-3 py-2">{{ v.vaccineName || vaccineNameById(v.vaccineID) }}</td>
                     <td class="px-3 py-2">{{ v.doseNumber }}</td>
                     <td class="px-3 py-2">{{ formatVaccDate(v.vaccinationDate) }}</td>
+                    <td class="px-3 py-2 whitespace-nowrap">{{ v.injectionSite || '—' }}</td>
                     <td class="px-3 py-2"><span class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium bg-emerald-50 text-emerald-700">{{ v.status }}</span></td>
                   </tr>
                 </tbody>

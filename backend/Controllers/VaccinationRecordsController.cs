@@ -96,6 +96,7 @@ namespace AndroidWebAPI.Controllers
                     ? $"{r.AdministeredBy.FirstName} {r.AdministeredBy.LastName}".Trim()
                     : null,
                 nurseObservation = r.NurseObservation,
+                injectionSite = r.InjectionSite,
                 lotNumber = r.Inventory != null ? r.Inventory.LotNumber : null,
             });
         }
@@ -139,6 +140,9 @@ namespace AndroidWebAPI.Controllers
             if (roomError != null)
                 return BadRequest(new { message = roomError });
 
+            if (!InjectionSites.TryNormalize(dto.InjectionSite, out var site))
+                return BadRequest(new { message = "Pick the injection site from the list." });
+
             var record = new VaccinationRecord
             {
                 ChildID = dto.ChildID,
@@ -148,6 +152,7 @@ namespace AndroidWebAPI.Controllers
                 InventoryID = dto.InventoryID,
                 AdministeredByUserID = dto.AdministeredByUserID,
                 NurseObservation = dto.NurseObservation,
+                InjectionSite = site,
             };
 
             try
@@ -157,9 +162,9 @@ namespace AndroidWebAPI.Controllers
 
                 await _audit.LogAsync("Vaccination", "Vaccinate Child",
                     await DescribeDoseAsync(record.ChildID, record.VaccineID, record.DoseNumber),
-                    string.IsNullOrWhiteSpace(record.NurseObservation)
-                        ? "Recorded an administered vaccine dose."
-                        : $"Recorded an administered vaccine dose. Remarks: {record.NurseObservation}",
+                    "Recorded an administered vaccine dose" +
+                        (record.InjectionSite != null ? $" ({record.InjectionSite})" : "") + "." +
+                        (string.IsNullOrWhiteSpace(record.NurseObservation) ? "" : $" Remarks: {record.NurseObservation}"),
                     userId: record.AdministeredByUserID,
                     newValue: $"Record {record.RecordCode}");
 
@@ -293,9 +298,14 @@ namespace AndroidWebAPI.Controllers
                 .Where(t => t.ChildID == child.ChildID && (t.Status == "Pending" || t.Status == "Missed"))
                 .OrderBy(t => t.ScheduledDate)
                 .FirstOrDefaultAsync();
+            // A dose whose date already passed isn't "next on <past date>": it is still due
             string nextLine = next == null
                 ? $" {child.FirstName} has no more scheduled doses on file."
-                : $" Next: {next.Vaccine?.VaccineName ?? "vaccine"} (Dose {next.DoseNumber}) on {next.ScheduledDate:MMMM d, yyyy}.";
+                : next.ScheduledDate.Date < record.VaccinationDate.Date
+                    ? $" Still due: {next.Vaccine?.VaccineName ?? "vaccine"} (Dose {next.DoseNumber}), since {next.ScheduledDate:MMMM d, yyyy}."
+                : next.ScheduledDate.Date == record.VaccinationDate.Date
+                    ? $" Also due today: {next.Vaccine?.VaccineName ?? "vaccine"} (Dose {next.DoseNumber})."
+                    : $" Next: {next.Vaccine?.VaccineName ?? "vaccine"} (Dose {next.DoseNumber}) on {next.ScheduledDate:MMMM d, yyyy}.";
 
             var tally = new ParentNotifier.Delivery();
             foreach (var parent in parents)
@@ -307,7 +317,9 @@ namespace AndroidWebAPI.Controllers
                     DoseNumber = record.DoseNumber,
                     Type = "Completed",
                     Title = $"Vaccine administered — {childName}",
-                    Message = $"{vaccineName} (Dose {record.DoseNumber}) was administered to {childName} on {dateLabel}.{nextLine}",
+                    Message = $"{vaccineName} (Dose {record.DoseNumber}) was administered to {childName} on {dateLabel}" +
+                              (record.InjectionSite != null ? $", {InjectionSites.Phrase(record.InjectionSite)}" : "") +
+                              $".{nextLine}",
                     ScheduledDate = record.VaccinationDate,
                     IsRead = false,
                 }, tally, sms: false);

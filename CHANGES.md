@@ -6,6 +6,30 @@ the beneficiary revision below is on `Aruga-Revision`.
 
 ---
 
+## Injection site, pop-ups and colours (Sep 30, 2026)
+
+**Injection site (asked for by City Hall)**
+- Recording a vaccination now asks **where the dose was given**: Left thigh, Right thigh, Left upper arm, Right upper arm, or Mouth (oral). If the parent later reports a swelling, the health center can see which vaccine was given there.
+- Only the sites that fit the vaccine are shown (OPV: by mouth; BCG and MMR: arms first; the injections: thighs first). OPV is filled in as "Mouth (oral)" and BCG as "Right upper arm"; for the other injections the Nurse picks the side. The window also says where the previous dose of the same vaccine went, to help alternate sides.
+- The site shows on the Nurse's vaccination page (Immunization History), My Vaccination Records, Staff Patient Records, Admin Patient Management, the "Vaccinations Performed" report and its export, the printed/PDF vaccination card, the parent's Records page, and the parent's "vaccine administered" notice ("…given in the left thigh").
+- Doses recorded before this change and Yellow Book doses show "—". The demo data gets typical sites when DemoSeed.sql is run again.
+- New database column `VaccinationRecords.InjectionSite` (the API adds it by itself; Schema.sql and Setup_WithDemoData.sql have it).
+
+**Aruga pop-ups instead of the browser's "localhost:5173 says" boxes**
+- Every confirmation and error message (Not Here, Complete Visit, Remove from queue, Deactivate / Reset Password, Delete vaccine, Unlink parent, Delete notification, save errors…) is now an Aruga window with a clear title and buttons that say what they do, e.g. **"Q-003 did not come in?"** with **They're here** / **Back to Waiting**.
+
+**Parent portal colours (technical adviser)**
+- Records tab: the **Scheduled** count is blue (like the Scheduled labels), not gray.
+- The profile window and the notifications panel have the green header of the parent portal instead of dark gray.
+
+**Fixes found while testing**
+- The "vaccine administered" notice said "Next: … on August 5, 2026" for a dose that was already overdue. It now says "Still due: … since August 5" (or "Also due today").
+- Staff Dashboard: with two children in one visit, the queue table pushed its buttons off the screen; names now wrap. "1 patients in queue" now reads "1 family in queue".
+- User Management: when deactivating failed, the reason from the system (e.g. "You can't deactivate your own account") is now shown.
+- My Vaccination Records: the "Scheduled Date" box in the details window was always empty; it now shows the injection site.
+- Demo data: OPV doses (given by mouth) no longer have "swelling at the injection site" remarks.
+- Registering a child with Yellow Book doses that couldn't be saved now says why (e.g. a date before the birth date).
+
 ## CAPTCHA on Sign In and Forgot Password (Sep 30, 2026)
 
 Asked for by the technical adviser: Aruga is a public government website, so bots must not be able to keep trying passwords.

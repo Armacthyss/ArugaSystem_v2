@@ -260,6 +260,7 @@ CREATE TABLE dbo.VaccinationRecords (
     VaccinationDate      datetime2        NOT NULL,
     AdministeredByUserID uniqueidentifier NULL,
     NurseObservation     nvarchar(max)    NULL,    -- "Remarks"
+    InjectionSite        nvarchar(30)     NULL,    -- Left thigh / Right upper arm / Mouth (oral)...
     Status               nvarchar(20)     NOT NULL CONSTRAINT DF_VaccinationRecords_Status DEFAULT ('Completed'),
     CreatedAt            datetime2        NOT NULL CONSTRAINT DF_VaccinationRecords_CreatedAt DEFAULT (GETDATE()),
     UpdatedAt            datetime2        NULL,

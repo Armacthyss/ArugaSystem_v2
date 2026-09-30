@@ -48,6 +48,9 @@ namespace AndroidWebAPI.Controllers
             {
                 vaccineID = v.VaccineID,
                 vaccineName = v.VaccineName,
+                abbreviation = v.Abbreviation,
+                // Oral / Intradermal / Intramuscular...: which injection sites fit
+                administrationRoute = v.AdministrationRoute,
                 doses = doses
                     .Where(d => d.VaccineID == v.VaccineID)
                     .OrderBy(d => d.DoseNumber)

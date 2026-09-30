@@ -67,6 +67,7 @@
               <th class="border border-slate-300 px-3 py-2 text-center text-xs">Dose</th>
               <th class="border border-slate-300 px-3 py-2 text-left text-xs">Scheduled</th>
               <th class="border border-slate-300 px-3 py-2 text-left text-xs">Date Given</th>
+              <th class="border border-slate-300 px-3 py-2 text-left text-xs">Site</th>
               <th class="border border-slate-300 px-3 py-2 text-left text-xs">Lot No.</th>
               <th class="border border-slate-300 px-3 py-2 text-left text-xs">Given By</th>
             </tr>
@@ -79,11 +80,12 @@
               <td class="border border-slate-300 px-3 py-1.5 font-medium" :class="row.given ? 'text-emerald-800' : (row.overdue ? 'text-rose-600' : 'text-slate-400')">
                 {{ row.given ? formatDate(row.givenOn) : (row.overdue ? 'Overdue' : '—') }}
               </td>
+              <td class="border border-slate-300 px-3 py-1.5 text-xs whitespace-nowrap">{{ row.site || '' }}</td>
               <td class="border border-slate-300 px-3 py-1.5 font-mono text-xs">{{ row.lotNumber || '' }}</td>
               <td class="border border-slate-300 px-3 py-1.5 text-xs">{{ row.givenBy || '' }}</td>
             </tr>
             <tr v-if="rows.length === 0">
-              <td colspan="6" class="border border-slate-300 px-3 py-6 text-center text-slate-400">No vaccination schedule found for this child.</td>
+              <td colspan="7" class="border border-slate-300 px-3 py-6 text-center text-slate-400">No vaccination schedule found for this child.</td>
             </tr>
           </tbody>
         </table>
@@ -123,6 +125,7 @@ import { useRoute, useRouter } from 'vue-router'
 import axios from 'axios'
 import logoIcon from '@/assets/logo-icon.svg'
 import { API_BASE, formatDate, toISODate, withRelationship, guardiansOf } from '@/utils/format'
+import { showAlert } from '@/utils/dialog'
 
 const route = useRoute()
 const router = useRouter()
@@ -181,6 +184,7 @@ const rows = computed(() => {
       given: !!rec || t.status === 'Completed',
       givenOn: rec?.vaccinationDate,
       lotNumber: rec?.lotNumber,
+      site: rec?.injectionSite,
       givenBy: rec?.administeredByName,
       overdue: !rec && t.status !== 'Completed' && String(t.scheduledDate).slice(0, 10) < today,
     }
@@ -188,7 +192,7 @@ const rows = computed(() => {
   for (const rec of byKey.values()) {
     list.push({
       key: `${rec.vaccineID}-${rec.doseNumber}`, vaccineName: rec.vaccineName, doseNumber: rec.doseNumber,
-      scheduledDate: null, given: true, givenOn: rec.vaccinationDate, lotNumber: rec.lotNumber, givenBy: rec.administeredByName, overdue: false,
+      scheduledDate: null, given: true, givenOn: rec.vaccinationDate, lotNumber: rec.lotNumber, site: rec.injectionSite, givenBy: rec.administeredByName, overdue: false,
     })
   }
   return list.sort((a, b) => new Date(a.scheduledDate || a.givenOn) - new Date(b.scheduledDate || b.givenOn))
@@ -236,7 +240,7 @@ async function downloadPdf() {
     pdf.save(`Immunization_Record_${safeName}.pdf`)
   } catch (e) {
     console.error('VaccinationCard PDF:', e)
-    alert('Could not create the PDF. You can use Print and choose "Save as PDF" instead.')
+    showAlert({ title: 'Could not create the PDF', message: 'You can use Print and choose "Save as PDF" instead.', tone: 'error' })
   } finally {
     downloading.value = false
   }

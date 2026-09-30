@@ -362,6 +362,26 @@ FROM @Given g
 JOIN @TL t ON t.TimelineID = g.TimelineID
 JOIN @MainInv mi ON mi.VaccineID = t.VaccineID;
 
+-- Where each demo dose was given (typical sites; the Nurse picks the real
+-- one when recording). The column is added here too in case the API hasn't
+-- started on this database yet; EXEC because it may be new in this batch.
+IF COL_LENGTH('dbo.VaccinationRecords', 'InjectionSite') IS NULL
+    ALTER TABLE dbo.VaccinationRecords ADD InjectionSite NVARCHAR(30) NULL;
+EXEC (N'UPDATE vr SET InjectionSite = CASE v.Abbreviation
+            WHEN ''BCG''   THEN N''Right upper arm''
+            WHEN ''MMR''   THEN N''Left upper arm''
+            WHEN ''OPV''   THEN N''Mouth (oral)''
+            WHEN ''Penta'' THEN N''Left thigh''
+            ELSE N''Right thigh'' END
+        FROM VaccinationRecords vr JOIN Vaccines v ON v.VaccineID = vr.VaccineID
+        WHERE CONVERT(char(36), vr.ChildID) LIKE ''A2A30000-%''');
+
+-- OPV is given by mouth: no injection-site remarks on it
+UPDATE vr SET NurseObservation = N'No adverse reaction observed.'
+FROM VaccinationRecords vr JOIN Vaccines v ON v.VaccineID = vr.VaccineID
+WHERE v.Abbreviation = 'OPV' AND vr.ChildID IN (SELECT ChildID FROM @Kid)
+  AND (vr.NurseObservation LIKE N'%injection%' OR vr.NurseObservation LIKE N'%swelling%');
+
 UPDATE vt SET VaccinationRecordID = vr.VaccinationRecordID
 FROM VaccinationTimeline vt JOIN VaccinationRecords vr ON vr.TimelineID = vt.TimelineID
 WHERE vt.ChildID IN (SELECT ChildID FROM @Kid);

@@ -3,7 +3,7 @@
     <div class="fixed inset-0 z-200 flex justify-end" @click.self="$emit('close')">
       <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" @click="$emit('close')"></div>
       <div class="relative w-full max-w-100 h-full bg-white shadow-2xl flex flex-col">
-        <div class="bg-slate-800 px-6 py-5 flex items-center justify-between text-white shrink-0">
+        <div class="bg-emerald-600 px-6 py-5 flex items-center justify-between text-white shrink-0">
           <div class="flex items-center gap-3">
             <span class="text-xl">🔔</span>
             <span class="font-bold text-base">Notifications</span>

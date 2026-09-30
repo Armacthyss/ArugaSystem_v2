@@ -118,7 +118,7 @@
                     <CheckCircle class="w-5 h-5 text-emerald-600 shrink-0" />
                     <div>
                       <p class="text-sm font-medium text-slate-800">{{ g.vaccineName }} — Dose {{ g.doseNumber }}</p>
-                      <p class="text-xs text-slate-500">Batch {{ g.lotNumber }}<span v-if="g.nextLabel"> · Next dose: <strong class="text-emerald-700">{{ g.nextLabel }}</strong></span></p>
+                      <p class="text-xs text-slate-500">Batch {{ g.lotNumber }}<span v-if="g.site"> · {{ g.site }}</span><span v-if="g.nextLabel"> · Next dose: <strong class="text-emerald-700">{{ g.nextLabel }}</strong></span></p>
                     </div>
                   </div>
                   <span class="text-xs font-semibold text-emerald-700">Recorded</span>
@@ -174,7 +174,7 @@
               <div v-for="h in history" :key="h.vaccinationRecordID" class="border-l-2 pl-3"
                 :class="hasReaction(h) ? 'border-amber-400' : 'border-emerald-300'">
                 <p class="text-sm font-medium text-slate-800">{{ h.vaccineName }} — Dose {{ h.doseNumber }}</p>
-                <p class="text-xs text-slate-400">{{ formatDate(h.vaccinationDate) }}<span v-if="h.administeredByName"> · {{ h.administeredByName }}</span></p>
+                <p class="text-xs text-slate-400">{{ formatDate(h.vaccinationDate) }}<span v-if="h.injectionSite"> · <span class="font-medium text-slate-600">{{ h.injectionSite }}</span></span><span v-if="h.administeredByName"> · {{ h.administeredByName }}</span></p>
                 <p v-if="h.nurseObservation" class="text-xs mt-0.5" :class="hasReaction(h) ? 'text-amber-700' : 'text-slate-500'">{{ h.nurseObservation }}</p>
               </div>
             </div>
@@ -241,6 +241,20 @@
             </div>
 
             <div>
+              <label class="text-xs font-medium text-slate-600 uppercase tracking-wide block mb-1.5">Injection Site <span class="text-red-400">*</span></label>
+              <div class="grid grid-cols-2 gap-2">
+                <button v-for="s in siteChoices" :key="s" type="button" @click="form.site = s"
+                  class="px-3 py-2 text-sm rounded-lg border transition-colors text-left"
+                  :class="form.site === s ? 'border-emerald-500 bg-emerald-50 text-emerald-800 font-semibold' : 'border-slate-200 text-slate-600 hover:bg-slate-50'">
+                  {{ s }}
+                </button>
+              </div>
+              <p class="text-xs text-slate-400 mt-1">
+                {{ previousSite || 'Where the dose was given, so any swelling can be traced to this vaccine.' }}
+              </p>
+            </div>
+
+            <div>
               <label class="text-xs font-medium text-slate-600 uppercase tracking-wide block mb-1.5">Remarks / Adverse Reactions</label>
               <textarea v-model="form.remarks" rows="3" placeholder="e.g. No adverse reaction observed"
                 class="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"></textarea>
@@ -291,6 +305,8 @@ import StaffSidebar from './StaffSidebar.vue'
 import StaffTopbar from './StaffTopbar.vue'
 import { withRelationship, guardiansOf } from '@/utils/format'
 import { visitProgress, unfinishedChildren } from '@/utils/visitProgress'
+import { askConfirm } from '@/utils/dialog'
+import { sitesForRoute, defaultSite } from '@/utils/injectionSites'
 
 const router = useRouter()
 const route  = useRoute()
@@ -430,11 +446,23 @@ const loadingInventory = ref(false)
 const form = ref({})
 
 function blankForm() {
-  return { manual: false, vaccineId: '', vaccineName: '', doseNumber: '', date: todayISO, inventoryId: '', remarks: '' }
+  return { manual: false, vaccineId: '', vaccineName: '', doseNumber: '', date: todayISO, inventoryId: '', remarks: '', site: '' }
 }
 
+// ── Injection site (City Hall: to trace a swelling to the vaccine) ──
+const routeOf = (vaccineId) => vaccineList.value.find(v => v.vaccineID === Number(vaccineId))?.administrationRoute
+const siteChoices = computed(() => sitesForRoute(routeOf(form.value.vaccineId)))
+// Where the previous dose of this vaccine went, so the Nurse can alternate sides
+const previousSite = computed(() => {
+  const prev = history.value.find(h => h.vaccineID === Number(form.value.vaccineId) && h.doseNumber === Number(form.value.doseNumber) - 1)
+  return prev?.injectionSite ? `Dose ${prev.doseNumber} was given in the ${prev.injectionSite.toLowerCase()}.` : ''
+})
+
 function openRecord(dose) {
-  form.value = { ...blankForm(), vaccineId: dose.vaccineID, vaccineName: dose.vaccineName, doseNumber: dose.doseNumber }
+  form.value = {
+    ...blankForm(), vaccineId: dose.vaccineID, vaccineName: dose.vaccineName, doseNumber: dose.doseNumber,
+    site: defaultSite(routeOf(dose.vaccineID)),
+  }
   submitError.value = ''
   showModal.value = true
   fetchInventory(dose.vaccineID)
@@ -459,6 +487,7 @@ function onManualVaccineChange() {
   const v = vaccineList.value.find(v => v.vaccineID === form.value.vaccineId)
   form.value.vaccineName = v?.vaccineName || ''
   form.value.doseNumber = ''
+  form.value.site = defaultSite(v?.administrationRoute)
   fetchInventory(form.value.vaccineId)
 }
 
@@ -483,7 +512,7 @@ async function fetchInventory(vaccineId) {
 }
 
 const canSubmit = computed(() =>
-  form.value.vaccineId && form.value.doseNumber && form.value.date && form.value.inventoryId
+  form.value.vaccineId && form.value.doseNumber && form.value.date && form.value.inventoryId && form.value.site
 )
 
 async function submitDose() {
@@ -501,6 +530,7 @@ async function submitDose() {
       inventoryID: Number(f.inventoryId),
       administeredByUserID: user.UserID,   // the server uses the signed-in Nurse
       nurseObservation: f.remarks || null,
+      injectionSite: f.site,
     })
 
     await Promise.all([loadTimeline(), loadHistory(), refreshProgress()])
@@ -515,6 +545,7 @@ async function submitDose() {
       vaccineName: f.vaccineName,
       doseNumber: f.doseNumber,
       lotNumber: batch?.lotNumber || '—',
+      site: f.site,
       nextLabel: next ? `Dose ${next.doseNumber} on ${formatDate(next.scheduledDate)}` : '',
     })
 
@@ -540,8 +571,14 @@ async function completeVisit() {
     ...(dueDoses.value.length ? [`${child.value.name} (${dueDoses.value.length} vaccine${dueDoses.value.length === 1 ? '' : 's'})`] : []),
     ...unfinishedChildren(family.value, progress.value, childId.value),
   ]
-  if (left.length &&
-      !confirm(`Still due today and not recorded:\n• ${left.join('\n• ')}\n\nComplete the visit for the whole family anyway?`)) return
+  if (left.length && !(await askConfirm({
+    title: 'Complete the visit anyway?',
+    message: 'These are still due today and not recorded:',
+    details: left,
+    confirmText: 'Complete Anyway',
+    cancelText: 'Go Back',
+    tone: 'danger',
+  }))) return
   completing.value = true
   try {
     await axios.patch(`${API}/api/Queue/${queueId.value}/complete`)

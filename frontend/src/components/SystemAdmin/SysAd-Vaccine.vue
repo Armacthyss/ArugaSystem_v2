@@ -6,6 +6,7 @@ import { useFloatingMenu } from "@/utils/floatingMenu"
 import AppSidebar from "./Components/AppSidebar.vue"
 import AppHeader from "./Components/AppHeader.vue"
 import { downloadCSV, toISODate } from "@/utils/format"
+import { askConfirm, showAlert } from "@/utils/dialog"
 
 /* ------------------------------- API config ------------------------------- */
 const api = `${API_ORIGIN}/api/Vaccines`
@@ -264,12 +265,18 @@ async function setStatus(vaccine, activate) {
 async function remove(vaccineID) {
   closeMenu()
   const vaccine = vaccines.value.find(v => v.vaccineID === vaccineID)
-  if (!confirm(`Delete ${vaccine?.vaccineName || 'this vaccine'}? This can't be undone.`)) return
+  const ok = await askConfirm({
+    title: `Delete ${vaccine?.vaccineName || 'this vaccine'}?`,
+    message: "This can't be undone. A vaccine already in children's records can't be deleted; deactivate it instead.",
+    confirmText: 'Delete',
+    tone: 'danger',
+  })
+  if (!ok) return
   try {
     await axios.delete(`${api}/${vaccineID}`)
     await Promise.all([load(), loadAllDoses()])
   } catch (err) {
-    alert(err.response?.data?.message || 'Could not delete this vaccine.')
+    showAlert({ title: 'Could not delete this vaccine', message: err.response?.data?.message || 'Please try again.', tone: 'error' })
   }
 }
 

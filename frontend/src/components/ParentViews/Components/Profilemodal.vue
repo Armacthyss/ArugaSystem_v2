@@ -2,13 +2,13 @@
   <Transition name="modal-fade" appear>
     <div class="fixed inset-0 z-300 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" @click.self="$emit('close')">
       <div class="relative w-full max-w-2xl bg-white rounded-xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
-        <div class="bg-slate-800 px-8 py-7 flex items-center gap-5 shrink-0">
+        <div class="bg-emerald-600 px-8 py-7 flex items-center gap-5 shrink-0">
           <div class="w-16 h-16 rounded-xl bg-white/20 flex items-center justify-center text-4xl shadow-lg shrink-0">👤</div>
           <div class="flex-1 min-w-0">
             <p class="text-white font-bold text-xl leading-tight">
               {{ info?.firstName }} {{ info?.middleName ? info.middleName + ' ' : '' }}{{ info?.lastName }}
             </p>
-            <p class="text-slate-300 text-xs font-medium mt-1">Parent/Guardian Account · Aruga Pediatric Portal</p>
+            <p class="text-emerald-100 text-xs font-medium mt-1">Parent/Guardian Account · Aruga Pediatric Portal</p>
           </div>
           <button @click="$emit('close')" class="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/25 flex items-center justify-center text-white text-lg transition-all shrink-0">✕</button>
         </div>

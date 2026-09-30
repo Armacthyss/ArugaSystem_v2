@@ -7,6 +7,7 @@ import AppSidebar from './Components/AppSidebar.vue'
 import { API_BASE, ageLabel, formatDate, isSameDay, toISODate, downloadCSV } from '@/utils/format'
 import { barangayChoices, BARANGAY_HINT } from '@/utils/barangays'
 import PrivacyConsentCheckbox from '@/components/Shared/PrivacyConsentCheckbox.vue'
+import { askConfirm } from '@/utils/dialog'
 
 /* -------------------------------- Status meta -------------------------------- */
 const vaccMeta = {
@@ -153,7 +154,13 @@ const openDrawer = async (patient) => {
 const closeDrawer = () => (showDrawer.value = false)
 
 const unlinkParent = async (link) => {
-  if (!confirm(`Unlink ${link.name} from ${selectedPatient.value.firstName}? They will no longer see this child's record.`)) return
+  const ok = await askConfirm({
+    title: `Unlink ${link.name}?`,
+    message: `They will no longer see ${selectedPatient.value.firstName}'s record or get reminders for this child.`,
+    confirmText: 'Unlink',
+    tone: 'danger',
+  })
+  if (!ok) return
   try {
     await axios.delete(`${API_BASE}/ChildParentRelationships/${link.relationshipID}`)
     flash(`${link.name} unlinked.`)
@@ -581,7 +588,7 @@ const saveLink = async () => {
               <div v-for="h in history" :key="h.vaccinationRecordID" class="flex items-start justify-between gap-3 bg-slate-50 rounded-lg px-4 py-2.5">
                 <div class="min-w-0">
                   <p class="text-sm font-medium text-slate-900">{{ h.vaccineName }} — Dose {{ h.doseNumber }}</p>
-                  <p class="text-xs text-slate-500">{{ h.administeredByName || 'Historical record' }}<span v-if="h.lotNumber"> · Lot {{ h.lotNumber }}</span></p>
+                  <p class="text-xs text-slate-500">{{ h.administeredByName || 'Historical record' }}<span v-if="h.injectionSite"> · {{ h.injectionSite }}</span><span v-if="h.lotNumber"> · Lot {{ h.lotNumber }}</span></p>
                   <p v-if="h.nurseObservation" class="text-xs text-slate-500 italic mt-0.5">{{ h.nurseObservation }}</p>
                 </div>
                 <span class="text-xs text-slate-500 whitespace-nowrap">{{ formatDate(h.vaccinationDate) }}</span>

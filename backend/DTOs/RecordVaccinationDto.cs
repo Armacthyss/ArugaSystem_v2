@@ -17,5 +17,8 @@ namespace AndroidWebAPI.DTOs
         public Guid? AdministeredByUserID { get; set; }
 
         public string? NurseObservation { get; set; }
+
+        // "Left thigh", "Right upper arm", "Mouth (oral)"... (Services/InjectionSites.cs)
+        public string? InjectionSite { get; set; }
     }
 }
