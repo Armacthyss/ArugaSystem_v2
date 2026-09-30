@@ -111,6 +111,10 @@ function redirectForRole(role) {
       router.push("/system-admin/home")
       break
 
+    case "SuperAdmin":
+      router.push("/super-admin/home")
+      break
+
     default:
       console.warn("Unknown role, no redirect configured:", role)
       router.push("/")

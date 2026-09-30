@@ -46,7 +46,7 @@ onMounted(async () => {
     load('/VaccinationRecords/all', records),
     load('/VaccineInventory', inventory),
     load('/Vaccines', vaccines),
-    load('/AuditLogs', auditLogs),
+    load('/AuditLogs/activity', auditLogs),   // clinic work only (full log: Super Admin)
   ])
   loading.value = false
 })

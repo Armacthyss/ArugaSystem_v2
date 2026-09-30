@@ -37,7 +37,6 @@ onMounted(async () => {
     load('accounts', '/accounts'),
     load('queues', '/Queue'),
     load('notifications', '/Notifications', { from: toISODate(yearAgo) }),
-    load('audit', '/AuditLogs', { from: toISODate(yearAgo) }),
     load('schedule', '/VaccinationTimeline/schedule', { from: toISODate(), to: toISODate(inSixtyDays), includeOverdue: true }),
   ])
   loading.value = false
@@ -76,7 +75,7 @@ const categories = [
   { name: 'Queue Reports', icon: '🎫', reports: ['Daily Queue Summary'] },
   { name: 'Notification Reports', icon: '🔔', reports: ['Notifications Sent', 'Announcement History'] },
   { name: 'User Reports', icon: '👥', reports: ['Registered Parents', 'Doctors & Nurses'] },
-  { name: 'Audit Reports', icon: '📋', reports: ['Audit Logs', 'Login History'] },
+  // Audit Logs and Login History moved to the Super Admin's Audit Logs page
 ]
 
 const expandedCategory = ref('Vaccination Reports')
@@ -364,16 +363,6 @@ function buildReport(name, range) {
         columns: ['Name', 'User Level', 'Position', 'Username', 'Contact', 'Status', 'Last Login'],
         rows: list.map(a => [`${a.firstName} ${a.lastName}`, userLevel(a.role), a.role, a.username, a.contactNo || '—', a.status, a.lastLogin ? formatDateTime(a.lastLogin) : 'Never']),
         chart: countChart(list, a => userLevel(a.role), 'Accounts by User Level'),
-      }
-    }
-    case 'Audit Logs':
-    case 'Login History': {
-      let list = data.audit.filter(l => inPeriod(l.timestamp, range))
-      if (name === 'Login History') list = list.filter(l => l.action === 'Login')
-      return {
-        columns: ['Date & Time', 'User', 'Role', 'Module', 'Action', 'Record', 'Status'],
-        rows: list.map(l => [formatDateTime(l.timestamp), l.user, l.role, l.module, l.action, l.affectedRecord, l.status]),
-        chart: countChart(list, l => (name === 'Login History' ? l.status : l.module), name === 'Login History' ? 'Logins by Result' : 'Activity by Module'),
       }
     }
     default:

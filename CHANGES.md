@@ -6,6 +6,32 @@ the beneficiary revision below is on `Aruga-Revision`.
 
 ---
 
+## Super Admin level (Sep 30, 2026)
+
+Asked for by the technical adviser: a Super Admin for the development team, with the audit logs on that level.
+
+**Four user levels now**
+- **Super Admin**: the development team, Gabriel Ryan D. Barlam (`gabriel_barlam`) and Renzo Miguel Palmon (`renzo_palmon`). First password SuperAdmin@2026, changed at the first sign-in. Manages the system.
+- **Admin / Doctor** runs the clinic, as before.
+- **Staff / Nurse** and **Parent** are unchanged.
+
+**What the Super Admin can do** (own portal, 3 pages)
+- **System Status:** accounts per level (active/inactive), sign-ins and failed sign-ins today, locked accounts, whether Email, SMS (texts used today out of the daily limit) and the CAPTCHA are on, and the latest failed sign-ins and account changes.
+- **Admin Accounts:** add Admin / Doctor and Super Admin accounts, edit their name and PRC license, reset passwords (this also unlocks the account), unlock after 5 wrong passwords, activate/deactivate. A Super Admin can't deactivate their own account.
+- **Audit Logs:** moved here from the Admin portal. The full record of who did what, with filters and export. Nobody can edit or delete it.
+
+**What the Super Admin cannot do**
+- Open patient records, vaccination records, the queue, inventory, vaccines, schedules, clinic hours or announcements. The system refuses these even if typed in directly. This follows the Data Privacy Act of 2012 (Republic Act No. 10173): people only see the personal data their job needs.
+
+**Changes for the Doctor**
+- The **Audit Logs** page and the Audit Reports (Audit Logs, Login History) moved to the Super Admin. The Doctor's and Nurse's dashboards still show "Recent Clinic Activities" (clinic work only, no sign-ins or account changes).
+- User Management adds **Staff / Nurse** and parent accounts; Admin / Doctor accounts are added by the Super Admin. The Doctor can no longer reset or deactivate another Doctor's account (the Super Admin can), so if the only Doctor forgets their password, a Super Admin can reset it.
+- Super Admins don't appear in the clinic's staff lists and don't get the weekly stock check.
+
+**For the paper:** the user levels (RBAC) go from three to four: Super Admin, Admin / Doctor, Staff / Nurse, Parent.
+
+**Database:** new script `SuperAdmins.sql` (already run on this computer's database; Schema.sql and Setup_WithDemoData.sql include it). A Super Admin has Users.Position = 'SuperAdmin'.
+
 ## Injection site, pop-ups and colours (Sep 30, 2026)
 
 **Injection site (asked for by City Hall)**

@@ -71,7 +71,14 @@ namespace AndroidWebAPI.Services
 
         public bool SmsEnabled => SmsProvider != null;
 
-        private int SmsDailyLimit => int.TryParse(_config["Sms:DailyLimit"], out var n) && n > 0 ? n : 50;
+        public int SmsDailyLimit => int.TryParse(_config["Sms:DailyLimit"], out var n) && n > 0 ? n : 50;
+
+        // Texts handed to the SMS provider today (since the API started), for
+        // the Super Admin dashboard
+        public static int SmsSentToday
+        {
+            get { lock (SmsCountLock) return _smsCountDay == DateTime.Today ? _smsCountToday : 0; }
+        }
 
         // Reserves one text from today's allowance; false when it's used up
         private bool TakeSmsAllowance()

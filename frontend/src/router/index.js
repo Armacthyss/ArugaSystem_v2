@@ -36,6 +36,10 @@ import TestAPI from '@/components/SystemAdmin/TestAPI.vue'
 import VaccineSchedule from '@/components/SystemAdmin/VaccineSchedule.vue'
 import SystemOperatingHours from '@/components/SystemAdmin/SysAd-Operating_hours.vue'
 
+// ── Super Admin (the development team) ─────────────────────
+import SuperAdminHome from '@/components/SuperAdmin/SuperAdminHome.vue'
+import SuperAdminAccounts from '@/components/SuperAdmin/SuperAdminAccounts.vue'
+
 // ── Staff ────────────────────────────────────────────────────
 
 import StaffDashboard from '@/components/Staff/StaffDashboard.vue'
@@ -299,14 +303,8 @@ const routes = [
     }
   },
 
-  {
-    path: '/system-admin/audit-logs',
-    component: SystemAuditlogs,
-    meta: {
-      requiresAuth: true,
-      role: 'SystemAdmin'
-    }
-  },
+  // The audit logs moved to the Super Admin (technical adviser, Oct 2026)
+  { path: '/system-admin/audit-logs', redirect: '/system-admin/home' },
 
   {
     path: '/system-admin/test-api',
@@ -336,6 +334,27 @@ const routes = [
       requiresAuth: true,
       role: 'SystemAdmin'
     }
+  },
+
+
+  // ── Super Admin ────────────────────────────────────────────
+  // The development team: system status, Admin / Doctor accounts and the
+  // audit logs. No patient pages.
+
+  {
+    path: '/super-admin/home',
+    component: SuperAdminHome,
+    meta: { requiresAuth: true, role: 'SuperAdmin' }
+  },
+  {
+    path: '/super-admin/accounts',
+    component: SuperAdminAccounts,
+    meta: { requiresAuth: true, role: 'SuperAdmin' }
+  },
+  {
+    path: '/super-admin/audit-logs',
+    component: SystemAuditlogs,
+    meta: { requiresAuth: true, role: 'SuperAdmin' }
   },
 
 
@@ -377,6 +396,8 @@ function homeFor(role) {
       return '/staff/dashboard'
     case 'SystemAdmin':
       return '/system-admin/home'
+    case 'SuperAdmin':
+      return '/super-admin/home'
     default:
       return '/'
   }

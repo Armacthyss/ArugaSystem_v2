@@ -4,14 +4,15 @@ Run these in SQL Server Management Studio (open the file, press **Execute**).
 
 | Script | When to use it |
 |---|---|
-| `Setup_WithDemoData.sql` | **Easiest for a new computer (e.g. a groupmate).** Does `Schema.sql` and `DemoSeed.sql` in one go: creates `ArugaSystemDB` and fills it with the demo families, children, vaccination history, stock and today's queue. Logins: `demo.doctor`, `demo.nurse`, `demo.nurse2`, parents like `maria.santos@demo.aruga.ph` (password **Aruga@2026**), and `admin` / `Admin@2026`. |
+| `Setup_WithDemoData.sql` | **Easiest for a new computer (e.g. a groupmate).** Does `Schema.sql` and `DemoSeed.sql` in one go: creates `ArugaSystemDB` and fills it with the demo families, children, vaccination history, stock and today's queue. Logins: `demo.doctor`, `demo.nurse`, `demo.nurse2`, parents like `maria.santos@demo.aruga.ph` (password **Aruga@2026**), `admin` / `Admin@2026`, and the Super Admins `gabriel_barlam` / `renzo_palmon` (**SuperAdmin@2026**). |
 | `Schema.sql` | **New computer / empty SQL Server.** Creates `ArugaSystemDB` with every table, the 7 EPI vaccines and their schedule, vaccination hours (Mon, Wed, Fri 8 AM–12 PM, check-in until 11 AM), 3 vaccination rooms (Room 1–3), and one Admin / Doctor account: **admin / Admin@2026** (asks for a new password at first login; put the Doctor's real name and PRC license on it in User Management). |
 | `Cleanup_2026-09.sql` | **You already have an older `ArugaSystemDB`.** Upgrades it to the same structure as `Schema.sql` without touching your patients or records, and changes the old Mon–Fri 8 AM–5 PM hours to Mon, Wed, Fri 8 AM–12 PM. Back up first (right-click the database → Tasks → Back Up...). |
+| `SuperAdmins.sql` | Adds the two **Super Admin** accounts (the development team): `gabriel_barlam` and `renzo_palmon`, password **SuperAdmin@2026** (changed at first sign-in). Run it once on an existing `ArugaSystemDB`; `Schema.sql` and `Setup_WithDemoData.sql` already include it. Safe to run again. |
 | `DemoSeed.sql` | Optional. Adds sample families, children, vaccination history, stock and today's queue for demos. Run it **on the morning of the demo**: dates are computed from the day you run it. Safe to run again. |
 | `DemoSeed_Remove.sql` | Removes everything `DemoSeed.sql` added. Your own records are left alone. |
 
 Order on a new machine: `Setup_WithDemoData.sql` (or `Schema.sql` → optional `DemoSeed.sql`).
-Order on an existing database: back up → `Cleanup_2026-09.sql` → (optional) `DemoSeed.sql`.
+Order on an existing database: back up → `Cleanup_2026-09.sql` → `SuperAdmins.sql` → (optional) `DemoSeed.sql`.
 
 Notes
 - Every script switches to `ArugaSystemDB` by itself, so it doesn't matter which database is selected in SSMS.

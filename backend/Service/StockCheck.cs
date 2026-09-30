@@ -147,7 +147,8 @@ namespace AndroidWebAPI.Services
             body.AppendLine("After the delivery arrives, add it under Inventory → Receive New Batch. Parents who were told a vaccine was out of stock are notified automatically.");
 
             var recipients = await context.Users
-                .Where(u => u.AccountStatus == "Active")   // every Doctor and Nurse
+                .Where(u => u.AccountStatus == "Active"    // every Doctor and Nurse
+                         && (u.Position == null || u.Position != Roles.SuperAdminPosition))
                 .ToListAsync();
 
             foreach (var u in recipients)

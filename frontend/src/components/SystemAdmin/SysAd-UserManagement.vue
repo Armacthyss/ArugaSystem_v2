@@ -547,10 +547,14 @@ texted = !!response.data.texted
                     >
                       <button @click="openDrawer(user)" class="w-full text-left px-3.5 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors">View Details</button>
                       <button v-if="user.role !== 'Parent'" @click="openEditModal(user)" class="w-full text-left px-3.5 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors">Edit Profile</button>
-                      <button @click="resetPassword(user)" class="w-full text-left px-3.5 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors">Reset Password</button>
-                      <div class="my-1 border-t border-slate-100"></div>
-                      <button v-if="user.status !== 'Active'" @click="setStatus(user, 'Active')" class="w-full text-left px-3.5 py-2 text-sm text-emerald-700 hover:bg-emerald-50 transition-colors">Activate</button>
-                      <button v-if="user.status === 'Active'" @click="setStatus(user, 'Inactive')" class="w-full text-left px-3.5 py-2 text-sm text-slate-600 hover:bg-slate-50 transition-colors">Deactivate</button>
+                      <!-- Doctor accounts are managed by the Super Admin -->
+                      <template v-if="userLevel(user.role) !== 'Admin / Doctor'">
+                        <button @click="resetPassword(user)" class="w-full text-left px-3.5 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors">Reset Password</button>
+                        <div class="my-1 border-t border-slate-100"></div>
+                        <button v-if="user.status !== 'Active'" @click="setStatus(user, 'Active')" class="w-full text-left px-3.5 py-2 text-sm text-emerald-700 hover:bg-emerald-50 transition-colors">Activate</button>
+                        <button v-if="user.status === 'Active'" @click="setStatus(user, 'Inactive')" class="w-full text-left px-3.5 py-2 text-sm text-slate-600 hover:bg-slate-50 transition-colors">Deactivate</button>
+                      </template>
+                      <p v-else class="px-3.5 py-2 text-[11px] text-slate-400">Password and status of Doctor accounts are managed by the Super Admin.</p>
                     </div>
                     </Teleport>
                   </td>
@@ -699,8 +703,8 @@ texted = !!response.data.texted
               <select v-model="addForm.role" class="w-full text-sm rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-colors">
                 <option value="Parent">Parent</option>
                 <option value="Nurse">Staff / Nurse</option>
-                <option value="Doctor">Admin / Doctor</option>
               </select>
+              <p class="mt-1 text-[11px] text-slate-400">Admin / Doctor accounts are added by the Super Admin.</p>
             </div>
 
             <div>

@@ -24,27 +24,63 @@ namespace AndroidWebAPI.Controllers
             _audit = audit;
         }
 
+        // Who manages which accounts:
+        //   Super Admin    -> Admin / Doctor and Super Admin accounts
+        //   Admin / Doctor -> Staff / Nurse and parent accounts
+        //   Staff / Nurse  -> parent accounts (a parent at the counter)
+        private async Task<bool> CanManageAsync(Account account)
+        {
+            if (account.AccountType == "Parent")
+                return !User.IsInRole(AndroidWebAPI.Services.Roles.SuperAdmin);
+
+            var position = await _context.Users.Where(u => u.UserID == account.ReferenceID)
+                .Select(u => u.Position).FirstOrDefaultAsync();
+            bool topLevel = AndroidWebAPI.Services.Roles.IsDoctorPosition(position)
+                            || AndroidWebAPI.Services.Roles.IsSuperAdminPosition(position);
+
+            if (User.IsInRole(AndroidWebAPI.Services.Roles.SuperAdmin)) return topLevel;
+            if (User.IsInRole(AndroidWebAPI.Services.Roles.Admin)) return !topLevel;
+            return false;
+        }
+
+        private const string NotYours =
+            "This account is managed by another user level (Super Admin: Doctors; Doctor: Nurses and parents).";
+
         // =========================================================
         // GET /api/accounts
-        // Unified list for the admin User Management table.
-        // Joins Accounts with Parents / Users depending on AccountType.
+        // Unified list for the User Management tables. The Doctor sees the
+        // clinic's accounts (everyone except the Super Admins); the Super
+        // Admin sees the Doctor and Super Admin accounts only (no families).
         // =========================================================
 
-        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.Admin)]
+        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.AdminOrSuperAdmin)]
         [HttpGet]
         public async Task<IActionResult> GetAllAccounts()
         {
+            bool super = User.IsInRole(AndroidWebAPI.Services.Roles.SuperAdmin);
+
             var accounts = await _context.Accounts
+                .Where(a => !super || a.AccountType == "Personnel")
                 .OrderByDescending(a => a.CreatedAt)
                 .ToListAsync();
 
-            var parents = await _context.Parents.ToDictionaryAsync(p => p.ParentID);
+            var parents = super
+                ? new Dictionary<Guid, Parent>()
+                : await _context.Parents.ToDictionaryAsync(p => p.ParentID);
             var users = await _context.Users.ToDictionaryAsync(u => u.UserID);
 
             var result = new List<object>();
 
             foreach (var account in accounts)
             {
+                if (account.AccountType == "Personnel" && users.TryGetValue(account.ReferenceID, out var u))
+                {
+                    bool topLevel = AndroidWebAPI.Services.Roles.IsDoctorPosition(u.Position)
+                                    || AndroidWebAPI.Services.Roles.IsSuperAdminPosition(u.Position);
+                    if (super ? !topLevel : AndroidWebAPI.Services.Roles.IsSuperAdminPosition(u.Position))
+                        continue;
+                }
+
                 if (account.AccountType == "Parent" &&
                     parents.TryGetValue(account.ReferenceID, out var parent))
                 {
@@ -82,7 +118,10 @@ namespace AndroidWebAPI.Controllers
                         // Administrator); UserType is a legacy column whose
                         // values ("Admission", ...) don't match the UI's roles.
                         role = string.IsNullOrWhiteSpace(user.Position) ? user.UserType : user.Position,
+                        prcNo = user.PRCNo,
+                        address = user.Address,
                         status = account.Status ? "Active" : "Inactive",
+                        locked = account.LockedUntil > DateTime.Now,
                         mustChangePassword = account.MustChangePassword,
                         lastLogin = account.LastLogin,
                         createdAt = account.CreatedAt
@@ -99,7 +138,7 @@ namespace AndroidWebAPI.Controllers
         // POST /api/accounts/personnel
         // =========================================================
 
-        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.Admin)]
+        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.AdminOrSuperAdmin)]
         [HttpPost("personnel")]
 public async Task<IActionResult> CreatePersonnelAccount(
     [FromBody] CreatePersonnelAccountDto dto,
@@ -114,14 +153,19 @@ public async Task<IActionResult> CreatePersonnelAccount(
     if (string.IsNullOrWhiteSpace(dto.Role))
         return BadRequest(new { message = "Role is required." });
 
-    // Doctor = Admin level, Nurse = Staff level
-    if (!AndroidWebAPI.Services.Roles.Positions.Contains(dto.Role))
+    // The Doctor adds Nurses; the Super Admin adds Doctors and Super Admins
+    bool bySuperAdmin = User.IsInRole(AndroidWebAPI.Services.Roles.SuperAdmin);
+    var allowed = bySuperAdmin ? AndroidWebAPI.Services.Roles.SuperAdminPositions : AndroidWebAPI.Services.Roles.Positions;
+    if (!allowed.Contains(dto.Role))
     {
         return BadRequest(new
         {
-            message = "Role must be Doctor (Admin) or Nurse (Staff)."
+            message = bySuperAdmin
+                ? "Role must be Doctor (Admin) or Super Admin."
+                : "You can add Nurse (Staff) accounts. Doctor accounts are added by the Super Admin."
         });
     }
+    bool newSuperAdmin = AndroidWebAPI.Services.Roles.IsSuperAdminPosition(dto.Role);
 
     // =========================================================
     // GENERATE USERNAME AUTOMATICALLY
@@ -153,15 +197,12 @@ public async Task<IActionResult> CreatePersonnelAccount(
         Email = dto.Email,
         ContactNo = dto.ContactNo,
         Address = dto.Address,
-        // dbo.Users has a CHECK constraint allowing only
-        // 'Doctor' | 'Nurse' | 'Admission' | 'Request' here — writing
-        // "Healthcare"/"Staff" made every account creation fail. Position
-        // (below) is what login actually uses to pick the portal.
-        UserType = dto.Role == "Staff"
-        ? "Admission"
-        : dto.Role,
-Position = dto.Role,
-        PRCNo = dto.LicenseNumber,
+        // dbo.Users has a CHECK constraint allowing only 'Doctor' | 'Nurse' |
+        // 'Admission' | 'Administrator' here; a Super Admin keeps it NULL.
+        // Position (below) is what login actually uses to pick the portal.
+        UserType = newSuperAdmin ? null : dto.Role,
+        Position = dto.Role,
+        PRCNo = newSuperAdmin ? null : dto.LicenseNumber,
         AccountStatus = "Active"
     };
 
@@ -191,15 +232,17 @@ Position = dto.Role,
 
     await _accountRepository.CreateAsync(account);
 
+    string level = newSuperAdmin ? "Super Admin" : dto.Role == "Doctor" ? "Admin / Doctor" : "Staff / Nurse";
+
     await _audit.LogAsync("User Management", "Create",
-        $"{dto.Role} Account – {user.FirstName} {user.LastName}",
-        $"Created a new {dto.Role} account (username {username}).",
-        newValue: $"Status: Active, Role: {dto.Role}");
+        $"{level} Account – {user.FirstName} {user.LastName}",
+        $"Created a new {level} account (username {username}).",
+        newValue: $"Status: Active, Role: {level}");
 
     // Sign-in details to the new staff member (the admin also sees them)
     bool emailed = await sender.SendEmailAsync(dto.Email, "Your Aruga staff account",
         $"Hi {dto.FirstName},\n\nAn Aruga account was created for you at Leveriza Health Center " +
-        $"({(dto.Role == "Staff" ? "Admission Staff" : dto.Role)}).\n\n" +
+        $"({level}).\n\n" +
         $"Username: {username}\nTemporary password: {temporaryPassword}\n\n" +
         "You'll be asked to choose your own password the first time you sign in.");
 
@@ -259,10 +302,9 @@ private static async Task<bool> TextTemporaryPasswordAsync(
         // Active / Inactive only.
         // =========================================================
 
-        // The Admission Staff register families, so they may also switch a
-        // parent's login off and on; staff and health-worker accounts stay
-        // with the System Administrator.
-        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.StaffOrAdmin)]
+        // Nurses register families, so they may also switch a parent's login
+        // off and on; see CanManageAsync for the other levels.
+        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.StaffOrAdmin + "," + AndroidWebAPI.Services.Roles.SuperAdmin)]
         [HttpPatch("{id}/status")]
         public async Task<IActionResult> UpdateStatus(
             Guid id,
@@ -272,8 +314,8 @@ private static async Task<bool> TextTemporaryPasswordAsync(
 
             if (account == null)
                 return NotFound(new { message = "Account not found." });
-            if (!User.IsInRole(AndroidWebAPI.Services.Roles.Admin) && account.AccountType != "Parent")
-                return Forbid();
+            if (!await CanManageAsync(account))
+                return BadRequest(new { message = NotYours });
             // Deactivating yourself would lock you out of the Admin portal
             if (!dto.Status && User.FindFirst("AccountID")?.Value == account.AccountID.ToString())
                 return BadRequest(new { message = "You can't deactivate your own account." });
@@ -299,13 +341,39 @@ private static async Task<bool> TextTemporaryPasswordAsync(
         }
 
         // =========================================================
+        // POST /api/accounts/{id}/unlock
+        // Lifts the 15-minute lock after 5 wrong passwords, e.g. a Doctor
+        // who needs in right away.
+        // =========================================================
+
+        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.AdminOrSuperAdmin)]
+        [HttpPost("{id}/unlock")]
+        public async Task<IActionResult> Unlock(Guid id)
+        {
+            var account = await _accountRepository.GetByIdAsync(id);
+            if (account == null)
+                return NotFound(new { message = "Account not found." });
+            if (!await CanManageAsync(account))
+                return BadRequest(new { message = NotYours });
+
+            account.FailedLoginAttempts = 0;
+            account.LockedUntil = null;
+            account.UpdatedAt = DateTime.Now;
+            await _accountRepository.UpdateAsync(account);
+
+            await _audit.LogAsync("User Management", "Unlock", $"Account – {account.Username}",
+                "Unlocked the account after too many wrong passwords.");
+            return Ok(new { message = "Account unlocked." });
+        }
+
+        // =========================================================
         // POST /api/accounts/{id}/reset-password
         // Admin-triggered reset. Forces MustChangePassword back to true.
         // =========================================================
 
         // Staff may reset a parent's password (e.g. a parent at the counter
-        // who forgot it); other accounts are reset by the Administrator.
-        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.StaffOrAdmin)]
+        // who forgot it); see CanManageAsync for the other levels.
+        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.StaffOrAdmin + "," + AndroidWebAPI.Services.Roles.SuperAdmin)]
         [HttpPost("{id}/reset-password")]
         public async Task<IActionResult> ResetPassword(Guid id, [FromServices] AndroidWebAPI.Services.MessageSender sender)
         {
@@ -313,13 +381,16 @@ private static async Task<bool> TextTemporaryPasswordAsync(
 
             if (account == null)
                 return NotFound(new { message = "Account not found." });
-            if (!User.IsInRole(AndroidWebAPI.Services.Roles.Admin) && account.AccountType != "Parent")
-                return Forbid();
+            if (!await CanManageAsync(account))
+                return BadRequest(new { message = NotYours });
 
             string temporaryPassword = GenerateTemporaryPassword();
 
             account.PasswordHash = BCrypt.Net.BCrypt.HashPassword(temporaryPassword);
             account.MustChangePassword = true;
+            // A new password also lifts a lock from wrong tries
+            account.FailedLoginAttempts = 0;
+            account.LockedUntil = null;
             account.UpdatedAt = DateTime.Now;
 
             await _accountRepository.UpdateAsync(account);

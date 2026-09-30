@@ -3,7 +3,10 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
 import { Bell, Settings, KeyRound, Clock, LogOut, ArrowRight } from 'lucide-vue-next'
-import { getUser, logout } from '@/utils/auth'
+import { getUser, getRole, logout } from '@/utils/auth'
+
+// The Super Admin gets no clinic alerts or clinic settings
+const isSuperAdmin = getRole() === 'SuperAdmin'
 import { API_BASE, relativeTime } from '@/utils/format'
 
 defineProps({
@@ -41,7 +44,7 @@ const unread = computed(() => notifications.value.filter(n => !n.isRead).length)
 let poll = null
 
 async function loadNotifications() {
-  if (!user.value.UserID) return
+  if (!user.value.UserID || isSuperAdmin) return
   try {
     const res = await axios.get(`${API_BASE}/Notifications/user/${user.value.UserID}`)
     notifications.value = res.data.slice(0, 20)
@@ -98,7 +101,7 @@ onUnmounted(() => {
     <div class="flex items-center gap-3 shrink-0">
 
       <!-- Notifications -->
-      <div class="relative">
+      <div v-if="!isSuperAdmin" class="relative">
         <button
           @click.stop="toggle('bell')"
           class="header-trigger relative w-9 h-9 rounded-lg flex items-center justify-center text-slate-500 hover:bg-slate-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
@@ -154,7 +157,7 @@ onUnmounted(() => {
           <button @click="go('/ChangePassword')" class="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50">
             <KeyRound class="w-4 h-4 text-slate-400" /> Change my password
           </button>
-          <button @click="go('/system-admin/operating-hours')" class="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50">
+          <button v-if="!isSuperAdmin" @click="go('/system-admin/operating-hours')" class="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50">
             <Clock class="w-4 h-4 text-slate-400" /> Clinic operating hours
           </button>
           <button @click="signOut" class="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-rose-700 hover:bg-rose-50 border-t border-slate-100">

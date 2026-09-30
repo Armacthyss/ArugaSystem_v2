@@ -125,7 +125,7 @@ const timeline = computed(() => logs.value.slice(0, 6))
       <!-- Top navbar -->
       <AppHeader
   title="Audit Logs"
-  breadcrumb="Admin / Audit Logs"
+  breadcrumb="Super Admin / Audit Logs"
   user-initials="RM"
 />
 

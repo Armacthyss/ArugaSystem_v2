@@ -550,7 +550,8 @@ function timeAgo(value) {
 }
 const loadActivities = async () => {
   try {
-    const res = await fetch(`${API_BASE}/AuditLogs`);
+    // Clinic work only; the full audit trail is the Super Admin's
+    const res = await fetch(`${API_BASE}/AuditLogs/activity`);
     if (!res.ok) throw new Error(`Status ${res.status}`);
     const logs = await res.json();
     activities.value = logs

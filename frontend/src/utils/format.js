@@ -67,9 +67,10 @@ export function withRelationship(name, relationship) {
   return relationship ? `${name} (${relationship})` : name
 }
 
-// The three user levels, from an account's position/role. Older accounts
+// The user levels, from an account's position/role. Older accounts
 // may still say "Administrator" (Admin level) or "Staff" (Staff level).
 export function userLevel(role) {
+  if (role === 'SuperAdmin') return 'Super Admin'
   if (role === 'Parent') return 'Parent'
   if (role === 'Doctor' || role === 'Administrator' || role === 'SystemAdmin') return 'Admin / Doctor'
   if (role === 'Nurse' || role === 'Staff' || role === 'Admission' || role === 'Healthcare') return 'Staff / Nurse'

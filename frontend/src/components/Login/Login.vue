@@ -69,6 +69,11 @@ function redirectForRole(role) {
       router.push("/system-admin/home")
       break
 
+    // Super Admin: the development team (audit logs, Admin accounts)
+    case "SuperAdmin":
+      router.push("/super-admin/home")
+      break
+
     default:
       console.warn("Unknown role, no redirect configured:", role)
       errorMessage.value = "This account has no home page configured."

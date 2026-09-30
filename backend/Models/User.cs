@@ -21,7 +21,9 @@ namespace AndroidWebAPI.Models
         public string? ContactNo { get; set; }
         public string? Address { get; set; }
 
-        public string UserType { get; set; } = "Healthcare";
+        // NULL for a Super Admin (the column's CHECK rule lists the clinic's
+        // positions only); Position is what decides the portal.
+        public string? UserType { get; set; }
 
 public string Position { get; set; } = string.Empty;
         public string? PRCNo { get; set; }

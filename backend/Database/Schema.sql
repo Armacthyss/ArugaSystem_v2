@@ -9,6 +9,8 @@
        (check-in until 11 AM; change these in the app: System Admin >
        Operating Hours)
      • QR check-in switched ON
+     • two Super Admin accounts (the development team, see SuperAdmins.sql):
+           gabriel_barlam, renzo_palmon   password  SuperAdmin@2026
      • one Admin / Doctor account:
            username  admin
            password  Admin@2026      (the system asks for a new one at first login;
@@ -539,6 +541,33 @@ BEGIN
         INSERT dbo.Accounts (Username, PasswordHash, AccountType, ReferenceID, Status, MustChangePassword)
         VALUES (N'admin', @AdminPwd, 'Personnel', @AdminID, 1, 1);
 END
+GO
+
+-- Super Admin accounts: the development team (same as SuperAdmins.sql).
+-- They see the audit logs and manage the Admin / Doctor accounts, not patients.
+-- BCrypt hash of  SuperAdmin@2026
+DECLARE @SuperPwd nvarchar(100) = N'$2b$11$eTkLnq4/jtcQN3tPlIStNeYFOl8OfGn6Ch5TfQZ0lUn9kCeKn1.9S';
+
+DECLARE @Super TABLE (UserID uniqueidentifier, AccountID uniqueidentifier, Username nvarchar(50),
+                      FirstName nvarchar(50), MiddleName nvarchar(50), LastName nvarchar(50));
+INSERT @Super VALUES
+ ('5A000000-0000-0000-0000-000000000001', '5A000000-0000-0000-0001-000000000001', N'gabriel_barlam', N'Gabriel Ryan', N'D.', N'Barlam'),
+ ('5A000000-0000-0000-0000-000000000002', '5A000000-0000-0000-0001-000000000002', N'renzo_palmon',   N'Renzo Miguel', NULL,   N'Palmon');
+
+-- Position 'SuperAdmin' picks the portal; UserType stays NULL (its CHECK
+-- rule only lists the clinic's positions)
+INSERT dbo.Users (UserID, FirstName, MiddleName, LastName, Username, PasswordHash, UserType, Position, AccountStatus)
+SELECT s.UserID, s.FirstName, s.MiddleName, s.LastName, s.Username, @SuperPwd, NULL, N'SuperAdmin', N'Active'
+FROM @Super s
+WHERE NOT EXISTS (SELECT 1 FROM dbo.Users u WHERE u.UserID = s.UserID OR u.Username = s.Username);
+
+INSERT dbo.Accounts (AccountID, Username, PasswordHash, AccountType, ReferenceID, Status, MustChangePassword, FailedLoginAttempts, CreatedAt)
+SELECT s.AccountID, s.Username, @SuperPwd, 'Personnel', s.UserID, 1, 1, 0, GETDATE()
+FROM @Super s
+WHERE EXISTS (SELECT 1 FROM dbo.Users u WHERE u.UserID = s.UserID)
+  AND NOT EXISTS (SELECT 1 FROM dbo.Accounts a WHERE a.AccountID = s.AccountID OR a.Username = s.Username);
+
+PRINT 'Super Admin accounts ready: gabriel_barlam, renzo_palmon (password SuperAdmin@2026, change it at first sign-in).';
 GO
 
 -- If this SQL Server has the team's "ArugaSystem" login (appsettings.json with

@@ -30,7 +30,8 @@ namespace AndroidWebAPI.Controllers
         [HttpGet]
         public async Task<IActionResult> GetAll([FromQuery] string? position)
         {
-            var query = _context.Users.AsQueryable();
+            // The clinic's staff only: Super Admins (the system team) aren't listed
+            var query = _context.Users.Where(u => u.Position == null || u.Position != AndroidWebAPI.Services.Roles.SuperAdminPosition);
 
             if (!string.IsNullOrWhiteSpace(position))
             {
@@ -130,12 +131,19 @@ namespace AndroidWebAPI.Controllers
         // System Administrator edit (User Management): the full profile,
         // including name and PRC license number. Position/role is not
         // changed here.
-        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.Admin)]
+        // The Super Admin edits Doctor and Super Admin profiles; the Doctor
+        // edits the clinic's staff (not the Super Admins).
+        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.AdminOrSuperAdmin)]
         [HttpPut("{id:guid}/admin")]
         public async Task<IActionResult> AdminUpdateProfile(Guid id, [FromBody] AdminUpdateUserDto dto)
         {
             var user = await _context.Users.FirstOrDefaultAsync(u => u.UserID == id);
             if (user == null) return NotFound(new { message = "User not found." });
+
+            bool targetSuper = AndroidWebAPI.Services.Roles.IsSuperAdminPosition(user.Position);
+            bool bySuper = User.IsInRole(AndroidWebAPI.Services.Roles.SuperAdmin);
+            if (bySuper ? !(targetSuper || AndroidWebAPI.Services.Roles.IsDoctorPosition(user.Position)) : targetSuper)
+                return BadRequest(new { message = "This profile is managed by another user level." });
 
             if (string.IsNullOrWhiteSpace(dto.FirstName) || string.IsNullOrWhiteSpace(dto.LastName))
                 return BadRequest(new { message = "First and last name are required." });
