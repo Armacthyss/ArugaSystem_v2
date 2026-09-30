@@ -58,7 +58,9 @@ const requestCode = async () => {
     return
   }
   if (captcha.value?.enabled !== false && !captchaAnswer.value.trim()) {
-    errorMessage.value = 'Type the characters in the picture first.'
+    errorMessage.value = captcha.value?.checked
+      ? 'Type the characters in the picture first.'
+      : 'Tick "I\'m not a robot" first.'
     return
   }
   loading.value = true

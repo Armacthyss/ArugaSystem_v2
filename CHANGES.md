@@ -33,7 +33,7 @@ the beneficiary revision below is on `Aruga-Revision`.
 ## CAPTCHA on Sign In and Forgot Password (Sep 30, 2026)
 
 Asked for by the technical adviser: Aruga is a public government website, so bots must not be able to keep trying passwords.
-- **Sign In** and **Forgot Password → Send Code** now show a picture with 5 characters to type. The ↻ button shows a new picture.
+- **Sign In** and **Forgot Password → Send Code** have an **"I'm not a robot"** box. Ticking it opens a picture with 5 characters to type ("New picture" shows another). The tick alone isn't the protection (a bot can tick a box); the typed characters are what the system checks, like Google's version asking for a picture puzzle.
 - Each picture works once and for 5 minutes; after a wrong answer (or a wrong password) a new picture appears. Upper or lower case both work.
 - The system itself checks the answer before it even looks at the password, so bots can't skip the picture.
 - On Forgot Password this also protects the SMS load: bots can't make the system send reset codes over and over.
