@@ -24,6 +24,64 @@
             </button>
           </div>
 
+          <!-- INVENTORY SUMMARY PER VACCINE -->
+          <InventorySummary :refresh-key="summaryKey" class="mb-6" />
+
+          <!-- WEEKLY STOCK CHECK -->
+          <div class="bg-white rounded-2xl border border-slate-200 shadow-sm mb-6 overflow-hidden">
+            <div class="px-6 py-4 border-b border-slate-100 flex items-start justify-between gap-4 flex-wrap">
+              <div>
+                <p class="text-sm font-bold text-slate-800">Weekly Stock Check</p>
+                <p class="text-[11.5px] text-slate-500 mt-0.5">
+                  Sent to every Doctor and Nurse every {{ stockCheck.checkDay || 'Wednesday' }} at 8:00 AM.
+                  Suggested orders cover two weeks plus the minimum stock, in case the pharmacy can only deliver next week.
+                </p>
+              </div>
+              <button @click="sendStockCheck" :disabled="sendingCheck" class="shrink-0 text-xs font-bold px-3.5 py-2 rounded-lg border border-emerald-200 text-emerald-700 hover:bg-emerald-50 disabled:opacity-50">
+                {{ sendingCheck ? 'Sending…' : 'Send to Doctor & Nurses now' }}
+              </button>
+            </div>
+            <p v-if="stockCheckMessage" class="px-6 pt-3 text-xs font-semibold text-emerald-700">{{ stockCheckMessage }}</p>
+            <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm">
+              <thead class="text-[10px] uppercase font-bold text-slate-400">
+                <tr>
+                  <th class="px-6 py-3">Vaccine</th>
+                  <th class="px-3 py-3 text-right">On hand</th>
+                  <th class="px-3 py-3 text-right">Due this week</th>
+                  <th class="px-3 py-3 text-right">Next 2 weeks</th>
+                  <th class="px-3 py-3">Status</th>
+                  <th class="px-6 py-3 text-right">Order</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100">
+                <tr v-for="l in stockCheck.lines" :key="l.vaccineID" :class="l.restock ? 'bg-rose-50/40' : ''">
+                  <td class="px-6 py-2.5">
+                    <p class="font-semibold text-slate-800">{{ l.vaccine }}</p>
+                    <p v-if="l.expiringSoon" class="text-[11px] text-amber-700">{{ l.expiringSoon }} doses expire by {{ formatDate(l.nextExpiry) }}: use these first</p>
+                  </td>
+                  <td class="px-3 py-2.5 text-right font-semibold">{{ l.onHand }}</td>
+                  <td class="px-3 py-2.5 text-right text-slate-600">{{ l.dueThisWeek }}</td>
+                  <td class="px-3 py-2.5 text-right text-slate-600">{{ l.dueTwoWeeks }}</td>
+                  <td class="px-3 py-2.5">
+                    <span class="text-[11px] font-bold px-2 py-0.5 rounded-full"
+                      :class="l.status === 'OK' ? 'bg-emerald-50 text-emerald-700' : l.status === 'Low' ? 'bg-amber-50 text-amber-700' : 'bg-rose-50 text-rose-700'">
+                      {{ l.status }}
+                    </span>
+                  </td>
+                  <td class="px-6 py-2.5 text-right">
+                    <span v-if="l.restock" class="font-bold text-rose-700">about {{ l.suggestedOrder }}</span>
+                    <span v-else class="text-slate-400">—</span>
+                  </td>
+                </tr>
+                <tr v-if="!stockCheck.lines?.length">
+                  <td colspan="6" class="px-6 py-4 text-sm text-slate-400">Loading…</td>
+                </tr>
+              </tbody>
+            </table>
+            </div>
+          </div>
+
           <!-- SUMMARY STATS (computed from real inventory data) -->
           <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
             <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
@@ -51,6 +109,7 @@
 
           <!-- INVENTORY TABLE -->
           <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+            <div class="overflow-x-auto">
             <table class="w-full text-left text-sm">
               <thead class="bg-slate-50/50 border-b border-slate-200 text-[11px] uppercase font-bold text-slate-500">
                 <tr>
@@ -100,6 +159,7 @@
                 </tr>
               </tbody>
             </table>
+            </div>
             <!-- PAGINATION -->
             <div v-if="inventory.length > 0" class="flex items-center justify-between px-6 py-3.5 border-t border-slate-100 flex-wrap gap-3">
               <div class="flex items-center gap-3">
@@ -168,7 +228,7 @@
               </div>
               <div>
                 <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Doses Received</label>
-                <input v-model.number="batchForm.InitialQuantity" type="number" min="0" placeholder="0" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:border-emerald-500 outline-none">
+                <input v-model.number="batchForm.InitialQuantity" v-digits type="number" min="0" placeholder="0" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:border-emerald-500 outline-none">
               </div>
             </div>
 
@@ -183,10 +243,15 @@
               </div>
             </div>
 
+            <div>
+              <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Manufacturing Date (optional)</label>
+              <input v-model="batchForm.ManufacturingDate" type="date" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:border-emerald-500 outline-none">
+            </div>
+
             <div class="grid grid-cols-2 gap-3">
               <div>
                 <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Minimum Stock</label>
-                <input v-model.number="batchForm.MinimumStock" type="number" min="0" placeholder="e.g. 50" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:border-emerald-500 outline-none">
+                <input v-model.number="batchForm.MinimumStock" v-digits type="number" min="0" placeholder="e.g. 50" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:border-emerald-500 outline-none">
               </div>
               <div>
                 <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Supplier</label>
@@ -209,14 +274,18 @@
 </template>
 
 <script setup>
+import { API_ORIGIN } from '@/utils/apiBase'
+import { toISODate } from '@/utils/format'
 import { ref, reactive, computed, onMounted } from 'vue'
 import axios from 'axios'
 import { Plus, Package, AlertTriangle, Trash2, X, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-vue-next'
 import StaffSidebar from './StaffSidebar.vue'
 import StaffTopbar from './StaffTopbar.vue'
+import InventorySummary from '@/components/Shared/InventorySummary.vue'
+import { showAlert } from '@/utils/dialog'
 
 // Same API_BASE convention as the rest of the project.
-const API_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:57147').replace(/\/$/, '') + '/api'
+const API_BASE = `${API_ORIGIN}/api`
 
 const inventory = ref([])       // raw VaccineInventory rows from the backend
 const vaccineCatalog = ref([])  // Vaccine catalog, used to resolve vaccineID -> name
@@ -247,13 +316,13 @@ const paginationPages = computed(() => {
 
 const batchForm = reactive({
   VaccineID: null, LotNumber: '', InitialQuantity: null,
-  ReceivedDate: '', ExpirationDate: '', MinimumStock: null, Supplier: '',
+  ReceivedDate: '', ExpirationDate: '', ManufacturingDate: '', MinimumStock: null, Supplier: '',
 })
 
 const openAddModal = () => {
   Object.assign(batchForm, {
     VaccineID: null, LotNumber: '', InitialQuantity: null,
-    ReceivedDate: '', ExpirationDate: '', MinimumStock: null, Supplier: '',
+    ReceivedDate: '', ExpirationDate: '', ManufacturingDate: '', MinimumStock: null, Supplier: '',
   })
   showAddModal.value = true
   if (vaccineCatalog.value.length === 0) fetchVaccineCatalog()
@@ -270,8 +339,10 @@ const fetchInventory = async () => {
     console.error('Fetch inventory error:', err)
   } finally {
     isLoading.value = false
+    summaryKey.value++
   }
 }
+const summaryKey = ref(0)   // reloads the Inventory Summary with the batches
 
 // Vaccine catalog is a separate table (VaccineInventory only stores a VaccineID FK,
 // not a name) — same catalog endpoint the Doctor-side vaccine pickers use.
@@ -284,14 +355,42 @@ const fetchVaccineCatalog = async () => {
   }
 }
 
+// ── WEEKLY STOCK CHECK ────────────────────────────────────────────
+// GET /api/VaccineInventory/stock-check: per vaccine on hand vs. due, and a
+// suggested order. The same check is sent to Staff & Admin every check day.
+const stockCheck = ref({ lines: [] })
+const sendingCheck = ref(false)
+const stockCheckMessage = ref('')
+
+const fetchStockCheck = async () => {
+  try {
+    stockCheck.value = (await axios.get(`${API_BASE}/VaccineInventory/stock-check`)).data
+  } catch (err) {
+    console.error('Stock check error:', err)
+  }
+}
+
+const sendStockCheck = async () => {
+  sendingCheck.value = true
+  stockCheckMessage.value = ''
+  try {
+    stockCheckMessage.value = (await axios.post(`${API_BASE}/VaccineInventory/stock-check/send`)).data.message
+  } catch (err) {
+    stockCheckMessage.value = err.response?.data?.message || 'Could not send the stock check.'
+  } finally {
+    sendingCheck.value = false
+  }
+}
+
 const fetchAll = () => {
   fetchInventory()
   fetchVaccineCatalog()
+  fetchStockCheck()
 }
 
 const handleSaveBatch = async () => {
   if (!batchForm.VaccineID || !batchForm.LotNumber || !batchForm.ExpirationDate) {
-    alert('Vaccine, Lot Number, and Expiration Date are required.')
+    showAlert({ title: 'Some details are missing', message: 'Vaccine, Lot Number and Expiration Date are required.', tone: 'error' })
     return
   }
   isSaving.value = true
@@ -304,16 +403,21 @@ const handleSaveBatch = async () => {
       currentQuantity: initialQty, // a brand-new batch starts fully stocked
       minimumStock: batchForm.MinimumStock ?? 0,
       expirationDate: batchForm.ExpirationDate,
-      receivedDate: batchForm.ReceivedDate || new Date().toISOString().slice(0, 10),
+      manufacturingDate: batchForm.ManufacturingDate || null,
+      receivedDate: batchForm.ReceivedDate || toISODate(),
       supplier: batchForm.Supplier || null,
       status: true,
     }
     await axios.post(`${API_BASE}/VaccineInventory`, payload)
     showAddModal.value = false
-    await fetchInventory()
+    fetchAll()
   } catch (err) {
     console.error('Save batch error:', err)
-    alert(err.response?.data?.message || 'Could not save this batch. Check your connection and try again.')
+    showAlert({
+      title: 'Could not save this batch',
+      message: err.response?.data?.message || 'Check your connection and try again.',
+      tone: 'error',
+    })
   } finally {
     isSaving.value = false
   }

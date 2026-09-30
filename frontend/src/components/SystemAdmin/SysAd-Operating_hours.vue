@@ -1,5 +1,6 @@
 <script setup>
 
+import { API_ORIGIN } from '@/utils/apiBase'
 import axios from "axios"
 import { ref, computed, onMounted } from "vue"
 import AppSidebar from "./Components/AppSidebar.vue"
@@ -13,8 +14,8 @@ const props = defineProps({
 const isAdmin = computed(() => props.userRole === "Admin")
 
 /* ------------------------------- API config ------------------------------- */
-const scheduleApi = "http://localhost:57147/api/ClinicOperatingSchedule"
-const exceptionsApi = "http://localhost:57147/api/ClinicScheduleExceptions"
+const scheduleApi = `${API_ORIGIN}/api/ClinicOperatingSchedule`
+const exceptionsApi = `${API_ORIGIN}/api/ClinicScheduleExceptions`
 
 /* --------------------------------- Sidebar --------------------------------- */
 const isCollapsed = ref(false)
@@ -223,6 +224,7 @@ function blankExceptionForm() {
   return {
     exceptionID: 0,
     exceptionDate: "",
+    endDate: "", // optional: same exception on every date up to this one (e.g. a typhoon)
     isOpen: false,
     openingTime: "07:00",
     closingTime: "12:00",
@@ -263,6 +265,7 @@ function closeExceptionModal() {
 
 function validateExceptionForm(f) {
   if (!f.exceptionDate) return "Exception date is required."
+  if (f.endDate && f.endDate < f.exceptionDate) return "The last date can't be before the first date."
   if (!f.reason || !f.reason.trim()) return "Reason is required."
   if (f.isOpen) {
     const open = toMinutes(f.openingTime)
@@ -294,12 +297,18 @@ async function saveException() {
       reason: f.reason.trim(),
       isActive: true,
     }
+    // The API says how many doses moved and parents were told (closures only).
+    const closureSummary = (data) =>
+      data?.parentsNotified
+        ? ` ${data.parentsNotified} parent(s) notified${data.dosesMoved ? `; ${data.dosesMoved} dose(s) moved to the next vaccination day` : ""}.`
+        : ""
     if (isEditingException.value) {
-      await axios.put(`${exceptionsApi}/${f.exceptionID}`, { exceptionID: f.exceptionID, ...payload })
-      notify("success", "Schedule exception updated.")
+      const res = await axios.put(`${exceptionsApi}/${f.exceptionID}`, { exceptionID: f.exceptionID, ...payload })
+      notify("success", "Schedule exception updated." + closureSummary(res.data))
     } else {
-      await axios.post(exceptionsApi, payload)
-      notify("success", "Schedule exception created.")
+      const res = await axios.post(exceptionsApi, { ...payload, endDate: f.endDate || null })
+      const days = res.data?.exceptions?.length || 1
+      notify("success", (days > 1 ? `Schedule exception added to ${days} dates.` : "Schedule exception created.") + closureSummary(res.data))
     }
     closeExceptionModal()
     await loadExceptions()
@@ -444,8 +453,8 @@ function overviewCellTooltip(date) {
   if (status.kind === "exception") {
     return `${label} — Exception (${status.isOpen ? "Open" : "Closed"})${status.reason ? ": " + status.reason : ""}`
   }
-  if (status.kind === "scheduled") return `${label} — Regular weekly open day`
-  return `${label} — Closed`
+  if (status.kind === "scheduled") return `${label} — Vaccination day`
+  return `${label} — No vaccinations`
 }
 
 // Admin convenience: click a date to add or edit its exception, instead of
@@ -462,10 +471,22 @@ function onOverviewDayClick(date) {
   }
 }
 
+// General clinic hours (backend setting "Clinic:Hours"), shown to parents
+// next to the vaccination hours.
+const clinicHoursText = ref("")
+async function loadClinicHoursText() {
+  try {
+    clinicHoursText.value = (await axios.get(`${scheduleApi}/today`)).data?.clinicHoursText || ""
+  } catch {
+    clinicHoursText.value = ""
+  }
+}
+
 /* --------------------------------- Init --------------------------------- */
 onMounted(() => {
   loadWeeklySchedule()
   loadExceptions()
+  loadClinicHoursText()
 })
 </script>
 
@@ -478,7 +499,7 @@ onMounted(() => {
       <!-- Top navbar -->
       <AppHeader
   title="Operating Hours"
-  breadcrumb="System Administration / Operating Hours"
+  breadcrumb="Admin / Operating Hours"
   user-initials="RM"
 />
       <!-- Page content -->
@@ -526,7 +547,7 @@ onMounted(() => {
             <!-- Legend -->
             <div class="px-6 pt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-slate-600">
               <span class="inline-flex items-center gap-1.5">
-                <span class="w-3.5 h-3.5 rounded bg-sky-200 border border-sky-300"></span> Weekly Open Day
+                <span class="w-3.5 h-3.5 rounded bg-sky-200 border border-sky-300"></span> Vaccination Day
               </span>
               <span class="inline-flex items-center gap-1.5">
                 <span class="w-3.5 h-3.5 rounded ring-2 ring-amber-400"></span> Today
@@ -575,8 +596,11 @@ onMounted(() => {
           <!-- ------------- Weekly Schedule ------------- -->
           <section class="bg-white rounded-xl border border-slate-200 shadow-sm">
             <div class="px-6 py-4 border-b border-slate-200">
-              <h2 class="text-sm font-bold text-slate-900">Weekly Schedule</h2>
-              <p class="text-xs text-slate-500 mt-0.5">Standard operating hours for each day of the week.</p>
+              <h2 class="text-sm font-bold text-slate-900">Weekly Vaccination Schedule</h2>
+              <p class="text-xs text-slate-500 mt-0.5">
+                The days and hours vaccinations are given. Due dates, parent check-in and reminders follow this schedule.
+                <span v-if="clinicHoursText">Parents also see the general clinic hours: {{ clinicHoursText }}.</span>
+              </p>
             </div>
 
             <div v-if="weeklyLoading" class="px-6 py-10 text-center text-sm text-slate-500">Loading weekly schedule…</div>
@@ -643,7 +667,7 @@ onMounted(() => {
           <div class="px-6 py-4 border-b border-slate-200 flex items-center justify-between gap-4 flex-wrap">
             <div>
               <h2 class="text-sm font-bold text-slate-900">Schedule Exceptions</h2>
-              <p class="text-xs text-slate-500 mt-0.5">Date-specific overrides to the weekly schedule, e.g. holidays or special clinic days.</p>
+              <p class="text-xs text-slate-500 mt-0.5">Dates the health center is closed (typhoon, holiday) or extra vaccination days. Parents are notified when the health center is closed.</p>
             </div>
             <button
               v-if="isAdmin"
@@ -743,7 +767,7 @@ onMounted(() => {
 
           <label class="flex items-center gap-2 text-sm font-medium text-slate-700">
             <input type="checkbox" v-model="dayForm.isOpen" class="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" />
-            Clinic is open this day
+            Vaccinations are given on this day
           </label>
 
           <div v-if="dayForm.isOpen" class="grid grid-cols-1 gap-4">
@@ -760,7 +784,7 @@ onMounted(() => {
               <input type="time" v-model="dayForm.queueCutoffTime" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
             </div>
           </div>
-          <p v-else class="text-xs text-slate-500">This day is marked closed — operating hours won't be shown to parents.</p>
+          <p v-else class="text-xs text-slate-500">No vaccinations on this day. Doses due on it move to the next vaccination day.</p>
         </div>
         <div class="px-6 py-4 border-t border-slate-200 flex justify-end gap-3">
           <button class="text-sm font-semibold text-slate-600 px-4 py-2 rounded-lg hover:bg-slate-50" @click="closeDayModal">Cancel</button>
@@ -848,9 +872,21 @@ onMounted(() => {
             </div>
           </div>
 
+          <!-- Several days at once (new exceptions only), e.g. a typhoon -->
+          <div v-if="!isEditingException">
+            <label class="block text-xs font-semibold text-slate-500 mb-1">Until (optional)</label>
+            <input
+              type="date"
+              v-model="exceptionForm.endDate"
+              :min="exceptionForm.exceptionDate || undefined"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+            <p class="text-[11px] text-slate-400 mt-1">For more than one day, e.g. a typhoon closing the health center Monday to Wednesday.</p>
+          </div>
+
           <label class="flex items-center gap-2 text-sm font-medium text-slate-700">
             <input type="checkbox" v-model="exceptionForm.isOpen" class="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" />
-            Clinic is open on this date
+            Open for vaccinations on this date
           </label>
 
           <div v-if="exceptionForm.isOpen" class="grid grid-cols-1 gap-4">
@@ -867,14 +903,17 @@ onMounted(() => {
               <input type="time" v-model="exceptionForm.queueCutoffTime" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
             </div>
           </div>
-          <p v-else class="text-xs text-slate-500">Marked closed — times won't be shown or used for this date.</p>
+          <p v-else class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            The health center is closed. When you save, every parent is notified in the app, and families with a child
+            due on this date also get an email and SMS with the child's new date. Doses due on this date move to the next vaccination day.
+          </p>
 
           <div>
             <label class="block text-xs font-semibold text-slate-500 mb-1">Reason</label>
             <input
               type="text"
               v-model="exceptionForm.reason"
-              placeholder="e.g. Clinic Holiday"
+              placeholder="e.g. Typhoon, Holiday"
               class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
             />
           </div>
@@ -899,7 +938,7 @@ onMounted(() => {
           <h3 class="text-sm font-bold text-slate-900">Remove this exception?</h3>
           <p class="text-sm text-slate-600 mt-2">
             {{ formatDateLong(confirmDeleteTarget.exceptionDate.slice(0, 10)) }} — {{ confirmDeleteTarget.reason || "No reason given" }}.
-            This won't affect any other scheduled dates.
+            Doses already moved off this date keep their new date.
           </p>
         </div>
         <div class="px-6 py-4 border-t border-slate-200 flex justify-end gap-3">

@@ -71,12 +71,13 @@
 
           <!-- Table -->
           <div class="bg-white border border-stone-200 rounded-2xl shadow-sm overflow-hidden">
+            <div class="overflow-x-auto">
             <table class="w-full text-left border-collapse text-[13px]">
               <thead>
                 <tr class="bg-stone-50 border-b border-stone-200">
                   <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-wide text-stone-500">Queue No.</th>
                   <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-wide text-stone-500">Child(ren)</th>
-                  <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-wide text-stone-500">Parent</th>
+                  <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-wide text-stone-500">Parent / Guardian</th>
                   <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-wide text-stone-500">Date</th>
                   <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-wide text-stone-500">Status</th>
                   <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-wide text-stone-500 text-right">Actions</th>
@@ -97,7 +98,8 @@
                         class="text-[12px] font-medium rounded-full pl-2.5 pr-6 py-1 border-none outline-none cursor-pointer disabled:opacity-50"
                         :class="statusStyle[q.status] || 'bg-stone-100 text-stone-600'"
                       >
-                        <option v-for="s in availableStatuses" :key="s" :value="s">{{ statusLabel(s) }}</option>
+                        <!-- "In Progress" = called into the vaccination room; that is set with Call Next on the Dashboard -->
+                        <option v-for="s in availableStatuses" :key="s" :value="s" :disabled="s === 'InProgress' && q.status !== 'InProgress'">{{ statusLabel(s) }}</option>
                       </select>
                     </td>
                     <td class="px-5 py-3 text-right">
@@ -133,6 +135,7 @@
                 </tr>
               </tbody>
             </table>
+            </div>
 
             <!-- Pagination -->
             <div v-if="filteredQueues.length > 0" class="flex items-center justify-between px-6 py-3.5 border-t border-stone-100 flex-wrap gap-3">
@@ -174,6 +177,7 @@
 </template>
 
 <script setup>
+import { API_ORIGIN } from '@/utils/apiBase'
 import { ref, computed, onMounted } from "vue";
 import axios from "axios";
 import {
@@ -181,8 +185,10 @@ import {
 } from "lucide-vue-next";
 import StaffSidebar from "./StaffSidebar.vue";
 import StaffTopbar from "./StaffTopbar.vue";
+import { withRelationship } from "@/utils/format";
+import { askConfirm, showAlert } from "@/utils/dialog";
 
-const API_BASE = "http://localhost:57147/api";
+const API_BASE = `${API_ORIGIN}/api`;
 
 // Unlike the Dashboard (which calls GET /api/Queue/today, scoped
 // server-side to today), this page is the intentional full-history view —
@@ -232,7 +238,8 @@ const loadQueues = async () => {
       queueNumber: q.queueNumber,
       no: `Q-${String(q.queueNumber).padStart(3, "0")}`,
       child: q.children?.map((c) => c.name).join(", ") || "—",
-      parent: q.requestBy || "—",
+      // "Rosario Santos (Grandmother)": who brought the child
+      parent: withRelationship(q.requestBy, q.requestByRelationship),
       barangayNo: q.barangayNo,
       queueDate: q.queueDate,
       status: q.status || "Waiting",
@@ -293,25 +300,33 @@ const changeStatus = async (q, newStatus) => {
     await axios.put(`${API_BASE}/Queue/${q.queueID}/status`, { status: newStatus });
   } catch (error) {
     console.error("Status update error:", error);
-    // The backend can throw *after* the write already succeeded (e.g. while
-    // building its response), so don't trust a failed request to mean the
-    // data didn't change — re-fetch from the server to see what's actually
-    // true, rather than blindly reverting to the pre-edit value.
+    // Re-fetch from the server to show what's actually saved, rather than
+    // blindly reverting to the pre-edit value.
     await loadQueues();
-    alert("The status update may not have gone through as expected — the list has been refreshed to show the current state. Please check and try again if needed.");
+    showAlert({
+      title: "The status wasn't changed",
+      message: error.response?.data?.message || "The list has been refreshed to show the current state.",
+      tone: "error",
+    });
   } finally {
     updatingId.value = null;
   }
 };
 
 const deleteQueue = async (q) => {
-  if (!confirm(`Remove queue entry ${q.no} (${q.child})? This can't be undone.`)) return;
+  const ok = await askConfirm({
+    title: `Remove queue entry ${q.no}?`,
+    message: `${q.child}, brought by ${q.parent}, on ${formatDate(q.queueDate)}. This can't be undone.`,
+    confirmText: "Remove",
+    tone: "danger",
+  });
+  if (!ok) return;
   try {
     await axios.delete(`${API_BASE}/Queue/${q.queueID}`);
     queues.value = queues.value.filter((r) => r.queueID !== q.queueID);
   } catch (error) {
     console.error("Delete queue error:", error);
-    alert("Could not delete this entry. Please try again.");
+    showAlert({ title: "Could not delete this entry", message: "Please try again.", tone: "error" });
   }
 };
 

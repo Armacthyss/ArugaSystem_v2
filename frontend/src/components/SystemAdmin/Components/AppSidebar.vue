@@ -15,43 +15,41 @@ import {
   BarChart3,
   ClipboardList,
   LogOut,
-  ChevronLeft
+  ChevronLeft,
+  Activity,
+  UserCog,
 } from 'lucide-vue-next'
 
-import { logout } from '@/utils/auth'
+import { logout, getRole } from '@/utils/auth'
 
 const router = useRouter()
 
+// Admin / Doctor: the clinic. Super Admin (the development team): the
+// system only, with the audit logs (technical adviser, Oct 2026).
+const ADMIN_ITEMS = [
+  { label: 'Dashboard',          icon: House,          to: '/system-admin/home' },
+  { label: 'User Management',    icon: Users,         to: '/system-admin/user-management' },
+  { label: 'Patient Management', icon: Baby,          to: '/system-admin/patients' },
+  { label: 'Vaccine Management', icon: Syringe,       to: '/system-admin/vaccines' },
+  { label: 'Inventory',          icon: Package,       to: '/system-admin/inventory' },
+  { label: 'Notifications',      icon: Bell,          to: '/system-admin/notifications' },
+  { label: 'Operating Hours',    icon: Clock,         to: '/system-admin/operating-hours' },
+  { label: 'Reports',            icon: BarChart3,     to: '/system-admin/reports' },
+]
+const SUPER_ADMIN_ITEMS = [
+  { label: 'System Status',      icon: Activity,      to: '/super-admin/home' },
+  { label: 'Admin Accounts',     icon: UserCog,       to: '/super-admin/accounts' },
+  { label: 'Audit Logs',         icon: ClipboardList, to: '/super-admin/audit-logs' },
+]
+
 const props = defineProps({
-  navItems: {
-    type: Array,
-    default: () => ([
-      { label: 'Dashboard',          icon: House,          to: '/system-admin/home' },
-      { label: 'User Management',    icon: Users,         to: '/system-admin/user-management' },
-      { label: 'Patient Management', icon: Baby,          to: '/system-admin/patients' },
-      { label: 'Vaccine Management', icon: Syringe,       to: '/system-admin/vaccines' },
-      { label: 'Inventory',          icon: Package,       to: '/system-admin/inventory' },
-      { label: 'Notifications',      icon: Bell,          to: '/system-admin/notifications' },
-      { label: 'Operating Hours',    icon: Clock,         to: '/system-admin/operating-hours' },
-      { label: 'Reports',            icon: BarChart3,     to: '/system-admin/reports' },
-      { label: 'Audit Logs',         icon: ClipboardList, to: '/system-admin/audit-logs' },
-    ]),
-  },
+  // Leave empty to show the signed-in level's menu
+  navItems: { type: Array, default: null },
 
-  userName: {
-    type: String,
-    default: 'Renzo Miguel',
-  },
-
-  userRole: {
-    type: String,
-    default: 'System Admin',
-  },
-
-  userInitials: {
-    type: String,
-    default: 'RM',
-  },
+  // Optional overrides; by default the signed-in account is shown
+  userName: { type: String, default: '' },
+  userRole: { type: String, default: '' },
+  userInitials: { type: String, default: '' },
 })
 
 const account = computed(() => {
@@ -64,67 +62,32 @@ const account = computed(() => {
 
 const loggedInUser = computed(() => account.value?.user || {})
 
+const isSuperAdmin = getRole() === 'SuperAdmin'
+const items = computed(() => props.navItems || (isSuperAdmin ? SUPER_ADMIN_ITEMS : ADMIN_ITEMS))
+
+// Login.vue stores FirstName / LastName (PascalCase); accept both spellings
+const firstName = computed(() => loggedInUser.value.FirstName || loggedInUser.value.firstName || '')
+const lastName = computed(() => loggedInUser.value.LastName || loggedInUser.value.lastName || '')
+
 const displayName = computed(() => {
-
-  // System Admin does not have a normal user record
-  if (account.value?.role === 'SystemAdmin') {
-    return 'System Admin'
-  }
-
-  const firstName = loggedInUser.value.firstName
-  const middleName = loggedInUser.value.middleName
-  const lastName = loggedInUser.value.lastName
-
-  const fullName = [
-    firstName,
-    middleName,
-    lastName
-  ]
-    .filter(Boolean)
-    .join(' ')
-
-  if (fullName) {
-    return fullName
-  }
-
-  if (loggedInUser.value.username) {
-    return loggedInUser.value.username
-  }
-
-  return account.value?.username || 'User'
+  if (props.userName) return props.userName
+  const fullName = [firstName.value, lastName.value].filter(Boolean).join(' ')
+  return fullName || loggedInUser.value.username || 'Administrator'
 })
 
 const displayRole = computed(() => {
-  const role = account.value?.role
-
-  if (role === 'Healthcare') {
-    if (loggedInUser.value.position) {
-      return `Healthcare • ${loggedInUser.value.position}`
-    }
-
-    return 'Healthcare'
-  }
-
-  if (role === 'SystemAdmin') {
-    return 'System Admin'
-  }
-
-  return role || 'User'
+  if (props.userRole) return props.userRole
+  if (isSuperAdmin) return 'Super Admin'
+  const position = loggedInUser.value.UserType || loggedInUser.value.position
+  // Admin level: the Doctor (older accounts may be an "Administrator")
+  if (account.value?.role === 'SystemAdmin') return position === 'Doctor' ? 'Admin / Doctor' : 'Administrator'
+  return position || account.value?.role || 'User'
 })
 
 const displayInitials = computed(() => {
-  const first = loggedInUser.value.firstName?.[0] || ''
-  const last = loggedInUser.value.lastName?.[0] || ''
-
-  if (first || last) {
-    return `${first}${last}`.toUpperCase()
-  }
-
-  if (account.value?.role === 'SystemAdmin') {
-    return 'SA'
-  }
-
-  return 'U'
+  if (props.userInitials) return props.userInitials
+  const initials = `${firstName.value[0] || ''}${lastName.value[0] || ''}`.toUpperCase()
+  return initials || 'SA'
 })
 
 function handleLogout() {
@@ -154,7 +117,7 @@ const toggleSidebar = () => {
 
     <nav class="flex-1 overflow-y-auto py-4 px-3 space-y-1">
      <RouterLink
-  v-for="item in navItems"
+  v-for="item in items"
   :key="item.label"
   :to="item.to"
   class="w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"

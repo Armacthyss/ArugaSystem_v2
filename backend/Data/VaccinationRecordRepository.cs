@@ -55,12 +55,7 @@ public async Task<IEnumerable<VaccinationRecordResponseDto>> GetByChildAsync(Gui
                 ? r.AdministeredBy.FirstName + " " + r.AdministeredBy.LastName
                 : null,
             NurseObservation = r.NurseObservation,
-            DoctorDiagnosis = r.DoctorDiagnosis,
-            DoctorDiagnosedByUserID = r.DoctorDiagnosedByUserID,
-            DoctorDiagnosedByName = r.DoctorDiagnosedBy != null
-                ? r.DoctorDiagnosedBy.FirstName + " " + r.DoctorDiagnosedBy.LastName
-                : null,
-            DoctorDiagnosedAt = r.DoctorDiagnosedAt,
+            InjectionSite = r.InjectionSite,
             LotNumber = r.Inventory != null ? r.Inventory.LotNumber : null
         })
         .ToListAsync();
@@ -99,8 +94,7 @@ public async Task<VaccinationRecord> CompleteVaccinationAsync(Guid vaccinationRe
         if (inventory.CurrentQuantity <= 0)
             throw new Exception("No vaccine stock remaining for the selected batch.");
 
-        inventory.CurrentQuantity--;
-        inventory.UpdatedAt = DateTime.UtcNow;
+        DeductStock(inventory);
 
         record.InventoryID = dto.InventoryID;
         record.AdministeredByUserID = dto.AdministeredByUserID;
@@ -109,22 +103,13 @@ public async Task<VaccinationRecord> CompleteVaccinationAsync(Guid vaccinationRe
         record.Status = "Completed";
         record.UpdatedAt = DateTime.UtcNow;
 
-        var timeline = await _context.VaccinationTimelines
-            .FirstOrDefaultAsync(t =>
-                t.ChildID == record.ChildID &&
-                t.VaccineID == record.VaccineID &&
-                t.DoseNumber == record.DoseNumber &&
-                t.Status == "Pending");
-
-        if (timeline != null)
-        {
-            timeline.Status = "Completed";
-            timeline.VaccinationRecordID = record.VaccinationRecordID;
-            timeline.UpdatedAt = DateTime.UtcNow;
-            record.TimelineID = timeline.TimelineID;
-        }
+        await LinkTimelineAsync(record);
 
         await _context.SaveChangesAsync();
+
+        await RecalculateFollowingDosesAsync(record.ChildID, record.VaccineID, record.DoseNumber, record.VaccinationDate);
+        await _context.SaveChangesAsync();
+
         await transaction.CommitAsync();
         return record;
     }
@@ -133,23 +118,6 @@ public async Task<VaccinationRecord> CompleteVaccinationAsync(Guid vaccinationRe
         await transaction.RollbackAsync();
         throw;
     }
-}
-
-public async Task<VaccinationRecord> UpdateDiagnosisAsync(Guid vaccinationRecordId, UpdateDiagnosisDto dto)
-{
-    var record = await _context.VaccinationRecords
-        .FirstOrDefaultAsync(r => r.VaccinationRecordID == vaccinationRecordId);
-
-    if (record == null)
-        throw new Exception("Vaccination record not found.");
-
-    record.DoctorDiagnosis = dto.DoctorDiagnosis;
-    record.DoctorDiagnosedByUserID = dto.DiagnosedByUserID;
-    record.DoctorDiagnosedAt = DateTime.UtcNow;
-    record.UpdatedAt = DateTime.UtcNow;
-
-    await _context.SaveChangesAsync();
-    return record;
 }
 
         public async Task AddAsync(VaccinationRecord record)
@@ -221,11 +189,34 @@ public async Task RecordVaccinationAsync(VaccinationRecord record)
         // 3. Verify vaccine exists
         // ==========================================
 
-        var vaccineExists = await _context.Vaccines
-            .AnyAsync(v => v.VaccineID == record.VaccineID);
+        var vaccine = await _context.Vaccines
+            .FirstOrDefaultAsync(v => v.VaccineID == record.VaccineID);
 
-        if (!vaccineExists)
+        if (vaccine == null)
             throw new Exception("Vaccine not found.");
+
+        // ==========================================
+        // 3b. Doses go in order (Penta 3 can't be
+        //     given before Penta 2), never ahead
+        // ==========================================
+
+        if (record.DoseNumber < 1 ||
+            (vaccine.NumberOfRequiredDoses > 0 && record.DoseNumber > vaccine.NumberOfRequiredDoses))
+        {
+            throw new Exception(
+                $"{vaccine.VaccineName} has {vaccine.NumberOfRequiredDoses} dose(s); there is no Dose {record.DoseNumber}.");
+        }
+
+        if (record.DoseNumber > 1 &&
+            !await AlreadyVaccinatedAsync(record.ChildID, record.VaccineID, record.DoseNumber - 1))
+        {
+            throw new Exception(
+                $"Dose {record.DoseNumber - 1} of {vaccine.VaccineName} hasn't been recorded yet. " +
+                "If it was given elsewhere, add it from the child's Yellow Book (Patient Records) first.");
+        }
+
+        if (record.VaccinationDate.Date > DateTime.Today)
+            throw new Exception("The vaccination date can't be in the future.");
 
         // ==========================================
         // 4. Inventory is REQUIRED for clinic
@@ -289,12 +280,10 @@ public async Task RecordVaccinationAsync(VaccinationRecord record)
         }
 
         // ==========================================
-        // 10. Deduct inventory
+        // 10. Deduct inventory (+ low-stock alert)
         // ==========================================
 
-        inventory.CurrentQuantity--;
-
-        inventory.UpdatedAt = DateTime.UtcNow;
+        DeductStock(inventory);
 
         // ==========================================
         // 11. Create vaccination record
@@ -310,38 +299,27 @@ public async Task RecordVaccinationAsync(VaccinationRecord record)
         record.CreatedAt = DateTime.UtcNow;
 
         // ==========================================
-        // 12. Find matching pending timeline
+        // 12-13. Complete and link the matching
+        //        timeline entry (Pending or Missed)
         // ==========================================
 
-        var timeline = await _context.VaccinationTimelines
-            .FirstOrDefaultAsync(t =>
-                t.ChildID == record.ChildID &&
-                t.VaccineID == record.VaccineID &&
-                t.DoseNumber == record.DoseNumber &&
-                t.Status == "Pending");
-
-        // ==========================================
-        // 13. Complete and link timeline
-        // ==========================================
-
-        if (timeline != null)
-        {
-            timeline.Status = "Completed";
-
-            timeline.VaccinationRecordID =
-                record.VaccinationRecordID;
-
-            timeline.UpdatedAt = DateTime.UtcNow;
-
-            record.TimelineID =
-                timeline.TimelineID;
-        }
+        await LinkTimelineAsync(record);
 
         // ==========================================
         // 14. Save everything
         // ==========================================
 
         await _context.VaccinationRecords.AddAsync(record);
+
+        await _context.SaveChangesAsync();
+
+        // ==========================================
+        // 14b. Recalculation engine — push this
+        //      vaccine's later doses out from the
+        //      ACTUAL administration date
+        // ==========================================
+
+        await RecalculateFollowingDosesAsync(record.ChildID, record.VaccineID, record.DoseNumber, record.VaccinationDate);
 
         await _context.SaveChangesAsync();
 
@@ -367,10 +345,10 @@ public async Task RecordHistoricalVaccinationsAsync(
     try
     {
         // 1. Verify child exists
-        var childExists = await _context.Children
-            .AnyAsync(c => c.ChildID == submission.ChildID);
+        var child = await _context.Children
+            .FirstOrDefaultAsync(c => c.ChildID == submission.ChildID);
 
-        if (!childExists)
+        if (child == null)
             throw new Exception("Child not found.");
 
         // 2. Nothing to save
@@ -391,6 +369,11 @@ public async Task RecordHistoricalVaccinationsAsync(
             if (!vaccineExists)
                 throw new Exception(
                     $"Vaccine {item.VaccineID} not found.");
+
+            // A Yellow Book date lies between the birth date and today
+            if (item.VaccinationDate.Date > DateTime.Today || item.VaccinationDate.Date < child.BirthDate.Date)
+                throw new Exception(
+                    $"The date for vaccine {item.VaccineID} dose {item.DoseNumber} must be between the birth date and today.");
 
             // Prevent duplicate vaccine + dose for this child
             var alreadyExists = await AlreadyVaccinatedAsync(
@@ -429,10 +412,28 @@ public async Task RecordHistoricalVaccinationsAsync(
                 CreatedAt = DateTime.UtcNow
             };
 
+            // Tick off the matching timeline entry so the child's schedule
+            // doesn't keep showing an already-given dose as due/missed.
+            await LinkTimelineAsync(record);
+
             await _context.VaccinationRecords.AddAsync(record);
         }
 
         // 4. Save all records together
+        await _context.SaveChangesAsync();
+
+        // 4b. Re-plan the remaining doses of each vaccine from its most
+        //     recent historical dose.
+        var latestPerVaccine = submission.Vaccinations
+            .GroupBy(v => v.VaccineID)
+            .Select(g => g.OrderByDescending(v => v.DoseNumber).First());
+
+        foreach (var latest in latestPerVaccine)
+        {
+            await RecalculateFollowingDosesAsync(
+                submission.ChildID, latest.VaccineID, latest.DoseNumber, latest.VaccinationDate);
+        }
+
         await _context.SaveChangesAsync();
 
         // 5. Commit transaction
@@ -444,5 +445,130 @@ public async Task RecordHistoricalVaccinationsAsync(
         throw;
     }
 }
+
+        // =====================================================
+        // SHARED HELPERS
+        // =====================================================
+
+        // DOH minimum spacing between two doses of the same vaccine.
+        private const int MinimumDoseIntervalDays = 28;
+
+        // Marks the child's timeline entry for this vaccine/dose as done.
+        // Matches Missed as well as Pending — a child who comes in late for
+        // a dose that already rolled over to Missed still gets it ticked off.
+        private async Task LinkTimelineAsync(VaccinationRecord record)
+        {
+            var timeline = await _context.VaccinationTimelines
+                .FirstOrDefaultAsync(t =>
+                    t.ChildID == record.ChildID &&
+                    t.VaccineID == record.VaccineID &&
+                    t.DoseNumber == record.DoseNumber &&
+                    (t.Status == "Pending" || t.Status == "Missed"));
+
+            if (timeline == null) return;
+
+            timeline.Status = "Completed";
+            timeline.CompletedDate = record.VaccinationDate.Date;
+            timeline.VaccinationRecordID = record.VaccinationRecordID;
+            timeline.UpdatedAt = DateTime.UtcNow;
+            record.TimelineID = timeline.TimelineID;
+        }
+
+        // RECALCULATION ENGINE
+        // After dose N of a vaccine is given on `administeredOn`, every later
+        // dose of that vaccine that hasn't been given yet is re-planned from
+        // the ACTUAL date instead of the original plan:
+        //
+        //   next due = later of
+        //     • the age-based date (birth + RecommendedAgeDays) — child on schedule
+        //     • previous dose + max(rule interval, 28 days)  — child is late
+        //
+        // then moved forward to the next day the clinic is open. Each later
+        // dose cascades from the one before it.
+        private async Task RecalculateFollowingDosesAsync(
+            Guid childId, int vaccineId, int doseNumber, DateTime administeredOn)
+        {
+            var child = await _context.Children.FirstOrDefaultAsync(c => c.ChildID == childId);
+            if (child == null) return;
+
+            var following = await _context.VaccinationTimelines
+                .Where(t =>
+                    t.ChildID == childId &&
+                    t.VaccineID == vaccineId &&
+                    t.DoseNumber > doseNumber &&
+                    (t.Status == "Pending" || t.Status == "Missed"))
+                .OrderBy(t => t.DoseNumber)
+                .ToListAsync();
+
+            if (following.Count == 0) return;
+
+            var rules = await _context.VaccinationScheduleRules
+                .Where(r => r.VaccineID == vaccineId)
+                .ToListAsync();
+
+            var previous = administeredOn.Date;
+
+            foreach (var timeline in following)
+            {
+                var rule = rules.FirstOrDefault(r => r.DoseNumber == timeline.DoseNumber);
+
+                var ageBased = child.BirthDate.Date.AddDays(rule?.RecommendedAgeDays ?? 0);
+                var interval = Math.Max(rule?.IntervalFromPreviousDoseDays ?? 0, MinimumDoseIntervalDays);
+                var fromPrevious = previous.AddDays(interval);
+
+                var due = ageBased > fromPrevious ? ageBased : fromPrevious;
+                var scheduled = await AndroidWebAPI.Services.ClinicCalendar.NextOpenDayAsync(_context, due);
+
+                if (timeline.ScheduledDate.Date != scheduled || timeline.Status == "Missed")
+                {
+                    timeline.ScheduledDate = scheduled;
+                    timeline.Status = scheduled < DateTime.Today ? "Missed" : "Pending";
+                    timeline.UpdatedAt = DateTime.UtcNow;
+                }
+
+                previous = scheduled;
+            }
+        }
+
+        // Takes one dose out of a batch. When that pushes the batch below its
+        // minimum stock level, the Admission Staff (who order from the pharmacy),
+        // the Administrator and the health workers get a bell notification.
+        // The full weekly picture comes from StockCheck (every Wednesday).
+        private void DeductStock(VaccineInventory inventory)
+        {
+            int before = inventory.CurrentQuantity;
+            inventory.CurrentQuantity--;
+            inventory.UpdatedAt = DateTime.UtcNow;
+
+            if (before < inventory.MinimumStock || inventory.CurrentQuantity >= inventory.MinimumStock)
+                return;
+
+            var vaccineName = _context.Vaccines
+                .Where(v => v.VaccineID == inventory.VaccineID)
+                .Select(v => v.VaccineName)
+                .FirstOrDefault() ?? $"Vaccine {inventory.VaccineID}";
+
+            var recipients = _context.Users
+                .Where(u => u.AccountStatus == "Active" &&
+                            (u.Position == "Doctor" || u.Position == "Nurse" || u.Position == "Staff" || u.Position == "Administrator"))
+                .Select(u => u.UserID)
+                .ToList();
+
+            foreach (var userId in recipients)
+            {
+                _context.Notifications.Add(new Notification
+                {
+                    NotificationID = Guid.NewGuid(),
+                    UserID = userId,
+                    VaccineID = inventory.VaccineID,
+                    Type = "LowStock",
+                    Title = $"Low stock — {vaccineName}",
+                    Message = $"Batch {inventory.LotNumber} of {vaccineName} is down to {inventory.CurrentQuantity} dose(s), " +
+                              $"below the minimum of {inventory.MinimumStock}. Admission Staff: please ask the pharmacy for more.",
+                    IsRead = false,
+                    CreatedAt = DateTime.Now,
+                });
+            }
+        }
     }
 }

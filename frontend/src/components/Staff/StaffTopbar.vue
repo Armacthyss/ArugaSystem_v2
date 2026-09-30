@@ -3,14 +3,11 @@
   ================
   Shared top bar for every Staff*.vue page.
 
-  Bell    -> real late-patient alerts, pulled straight from GET /api/Queue/today
-             (same endpoint the dashboard's queue table uses) and filtered to
-             status === 'Late'. This is intentionally self-contained rather than
-             fed via props, so the bell works correctly no matter which
-             Staff*.vue page is currently mounted, not just the dashboard.
-  Gear    -> routes to /staff/settings (StaffAccountSettings.vue). That route
-             still needs to be added to router/index.js — it isn't in the
-             files this component has visibility into.
+  Bell    -> families checked in today who are still waiting to be called in,
+             from GET /api/Queue/today (same endpoint as the dashboard's queue
+             table). The red dot shows when someone has waited 15+ minutes.
+             Self-contained, so it works on every Staff*.vue page.
+  Gear    -> routes to /staff/settings (StaffAccountSettings.vue).
   Avatar  -> identity-card dropdown only (name, role, on-duty status). No
              actions in here on purpose: logout already lives in
              StaffSidebar.vue, so a second logout in this dropdown would just
@@ -33,41 +30,64 @@
     <div class="flex items-center gap-3">
       <slot />
 
-      <!-- Bell: late-patient alerts -->
+      <!-- Bell: stock alerts + families still waiting to be called in -->
       <div class="relative">
         <button
           @click.stop="toggle('bell')"
           class="topbar-trigger relative flex h-9 w-9 items-center justify-center rounded-full bg-stone-50 hover:bg-stone-100"
+          aria-label="Alerts and waiting families"
         >
           <Bell :size="17" class="text-stone-500" />
-          <span v-if="lateQueue.length > 0" class="absolute top-1.5 right-2 h-1.5 w-1.5 rounded-full bg-rose-600" />
+          <span v-if="longWaits > 0 || unreadAlerts > 0" class="absolute top-1.5 right-2 h-1.5 w-1.5 rounded-full bg-rose-600" />
         </button>
 
         <div
           v-if="open === 'bell'"
           class="topbar-panel absolute right-0 top-11 z-50 w-80 rounded-xl border border-stone-200 bg-white shadow-lg overflow-hidden"
         >
+          <!-- Stock check / low stock alerts sent to this staff account -->
+          <template v-if="alerts.length">
+            <div class="flex items-center justify-between px-4 py-3 border-b border-stone-100">
+              <p class="text-[13px] font-semibold">Alerts</p>
+              <button v-if="unreadAlerts > 0" @click="markAlertsRead" class="text-[11px] font-semibold text-emerald-700 hover:underline">Mark all read</button>
+            </div>
+            <div class="max-h-60 overflow-y-auto border-b border-stone-100">
+              <button
+                v-for="a in alerts"
+                :key="a.notificationID"
+                @click="openAlert"
+                class="block w-full px-4 py-3 text-left hover:bg-stone-50 border-b border-stone-50 last:border-0"
+                :class="a.isRead ? '' : 'bg-rose-50/40'"
+              >
+                <p class="text-[12.5px] font-semibold">{{ a.title }}</p>
+                <p class="text-[11px] text-stone-500 mt-0.5 whitespace-pre-line">{{ a.message }}</p>
+              </button>
+            </div>
+          </template>
+
           <div class="flex items-center justify-between px-4 py-3 border-b border-stone-100">
-            <p class="text-[13px] font-semibold">Late Patients</p>
-            <span class="text-[11px] text-stone-400">{{ lateQueue.length }} today</span>
+            <p class="text-[13px] font-semibold">Waiting to be Called</p>
+            <span class="text-[11px] text-stone-400">{{ waitingQueue.length }} waiting</span>
           </div>
           <div class="max-h-72 overflow-y-auto">
             <button
-              v-for="q in lateQueue"
+              v-for="q in waitingQueue"
               :key="q.queueID"
               @click="goToLate(q)"
               class="flex w-full items-start gap-3 px-4 py-3 text-left hover:bg-stone-50 border-b border-stone-50 last:border-0"
             >
-              <span class="mt-1 h-1.5 w-1.5 rounded-full bg-rose-600 shrink-0" />
+              <span class="mt-1 h-1.5 w-1.5 rounded-full shrink-0" :class="q.minutes >= 15 ? 'bg-rose-600' : 'bg-amber-400'" />
               <div class="min-w-0">
                 <p class="text-[12.5px] font-medium truncate">{{ q.child }}</p>
-                <p class="text-[11px] text-stone-500 truncate">Queue {{ q.no }} · Parent: {{ q.parent }}</p>
+                <p class="text-[11px] text-stone-500 truncate">
+                  {{ q.no }} · waiting {{ q.minutes }} min<span v-if="q.minutes >= 15" class="text-rose-600 font-semibold"> · long wait</span>
+                </p>
               </div>
             </button>
-            <p v-if="!loadingLate && lateQueue.length === 0" class="px-4 py-6 text-center text-[12px] text-stone-400">
-              No late patients right now.
+            <p v-if="!loadingLate && waitingQueue.length === 0" class="px-4 py-6 text-center text-[12px] text-stone-400">
+              Nobody is waiting right now.
             </p>
-            <p v-if="loadingLate && lateQueue.length === 0" class="px-4 py-6 text-center text-[12px] text-stone-400">
+            <p v-if="loadingLate && waitingQueue.length === 0" class="px-4 py-6 text-center text-[12px] text-stone-400">
               Loading…
             </p>
           </div>
@@ -122,10 +142,12 @@
 </template>
 
 <script setup>
+import { API_ORIGIN } from '@/utils/apiBase'
 import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import { Bell, Settings } from "lucide-vue-next";
 import { getAccount } from "@/utils/auth";
+import { withRelationship } from "@/utils/format";
 
 defineProps({
   title: { type: String, required: true },
@@ -133,7 +155,7 @@ defineProps({
 });
 
 const router = useRouter();
-const API_BASE = "http://localhost:57147/api";
+const API_BASE = `${API_ORIGIN}/api`;
 
 const account = getAccount() || {};
 const user = account.user || {};
@@ -162,12 +184,14 @@ const closeAll = (event) => {
   open.value = null;
 };
 
-// Late-patient alerts. Self-fetched from the same Queue/today endpoint the
-// dashboard uses, so the bell is accurate on every Staff*.vue page, not
-// just the dashboard.
-const lateQueue = ref([]);
+// Families checked in today who haven't been called into the room yet.
+// Self-fetched from the same Queue/today endpoint the dashboard uses, so
+// the bell is accurate on every Staff*.vue page, not just the dashboard.
+const waitingQueue = ref([]);
 const loadingLate = ref(false);
 let lateRefreshInterval = null;
+
+const longWaits = computed(() => waitingQueue.value.filter((q) => q.minutes >= 15).length);
 
 const loadLateQueue = async () => {
   loadingLate.value = true;
@@ -175,17 +199,19 @@ const loadLateQueue = async () => {
     const response = await fetch(`${API_BASE}/Queue/today`);
     if (!response.ok) throw new Error(`Failed to load queue. Status: ${response.status}`);
     const data = await response.json();
-    lateQueue.value = data
-      .filter((q) => (q.status || "Waiting") === "Late")
+    waitingQueue.value = data
+      .filter((q) => (q.status || "Waiting") === "Waiting")
       .map((q) => ({
         queueID: q.queueID,
         no: `Q-${String(q.queueNumber).padStart(3, "0")}`,
         child: q.children?.map((c) => c.name).join(", ") || "—",
-        parent: q.requestBy || "—",
-      }));
+        parent: withRelationship(q.requestBy, q.requestByRelationship),
+        minutes: q.checkedInAt ? Math.max(0, Math.floor((Date.now() - new Date(q.checkedInAt)) / 60000)) : 0,
+      }))
+      .sort((a, b) => b.minutes - a.minutes);
   } catch (error) {
-    console.error("Late queue loading error:", error);
-    lateQueue.value = [];
+    console.error("Waiting queue loading error:", error);
+    waitingQueue.value = [];
   } finally {
     loadingLate.value = false;
   }
@@ -196,10 +222,39 @@ const goToLate = (q) => {
   router.push("/staff/dashboard");
 };
 
+// Alerts sent to this staff account: the weekly stock check and low-stock
+// warnings (GET /api/Notifications/user/{userId}).
+const alerts = ref([]);
+const unreadAlerts = computed(() => alerts.value.filter((a) => !a.isRead).length);
+const staffUserId = user.UserID || user.userId;
+
+const loadAlerts = async () => {
+  if (!staffUserId) return;
+  try {
+    const response = await fetch(`${API_BASE}/Notifications/user/${staffUserId}`);
+    if (!response.ok) return;
+    alerts.value = (await response.json()).slice(0, 8);
+  } catch (error) {
+    console.error("Alerts loading error:", error);
+  }
+};
+
+const markAlertsRead = async () => {
+  alerts.value.forEach((a) => { a.isRead = true; });
+  try { await fetch(`${API_BASE}/Notifications/mark-all-read/user/${staffUserId}`, { method: "PATCH" }); } catch { /* shown as read anyway */ }
+};
+
+const openAlert = () => {
+  open.value = null;
+  markAlertsRead();
+  router.push("/staff/vaccine-inventory");
+};
+
 onMounted(() => {
   loadLateQueue();
+  loadAlerts();
   document.addEventListener("click", closeAll);
-  lateRefreshInterval = setInterval(loadLateQueue, 15000);
+  lateRefreshInterval = setInterval(() => { loadLateQueue(); loadAlerts(); }, 15000);
 });
 
 onUnmounted(() => {

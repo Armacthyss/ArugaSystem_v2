@@ -2,13 +2,13 @@
   <Transition name="modal-fade" appear>
     <div class="fixed inset-0 z-300 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" @click.self="$emit('close')">
       <div class="relative w-full max-w-2xl bg-white rounded-xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
-        <div class="bg-slate-800 px-8 py-7 flex items-center gap-5 shrink-0">
+        <div class="bg-emerald-600 px-8 py-7 flex items-center gap-5 shrink-0">
           <div class="w-16 h-16 rounded-xl bg-white/20 flex items-center justify-center text-4xl shadow-lg shrink-0">👤</div>
           <div class="flex-1 min-w-0">
             <p class="text-white font-bold text-xl leading-tight">
-              {{ parentData?.firstName }} {{ parentData?.middleName ? parentData.middleName + ' ' : '' }}{{ parentData?.lastName }}
+              {{ info?.firstName }} {{ info?.middleName ? info.middleName + ' ' : '' }}{{ info?.lastName }}
             </p>
-            <p class="text-slate-300 text-xs font-medium mt-1">Parent/Guardian Account · Aruga Pediatric Portal</p>
+            <p class="text-emerald-100 text-xs font-medium mt-1">Parent/Guardian Account · Aruga Pediatric Portal</p>
           </div>
           <button @click="$emit('close')" class="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/25 flex items-center justify-center text-white text-lg transition-all shrink-0">✕</button>
         </div>
@@ -16,10 +16,10 @@
           <div>
             <p class="text-[10px] font-semibold text-emerald-600 uppercase tracking-wide mb-4">Your Information</p>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div class="bg-slate-50 rounded-xl px-5 py-4"><p class="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Email Address</p><p class="text-sm font-bold text-slate-800 break-all">{{ parentData?.email || '—' }}</p></div>
-              <div class="bg-slate-50 rounded-xl px-5 py-4"><p class="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Contact Number</p><p class="text-sm font-bold text-slate-800">{{ parentData?.contactNo || parentData?.contactNumber || '—' }}</p></div>
-              <div class="bg-slate-50 rounded-xl px-5 py-4"><p class="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Barangay</p><p class="text-sm font-bold text-slate-800">{{ parentData?.barangayNo || parentData?.barangay || '—' }}</p></div>
-              <div class="bg-slate-50 rounded-xl px-5 py-4"><p class="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Address</p><p class="text-sm font-bold text-slate-800">{{ parentData?.address || '—' }}</p></div>
+              <div class="bg-slate-50 rounded-xl px-5 py-4"><p class="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Email Address</p><p class="text-sm font-bold text-slate-800 break-all">{{ info?.email || '—' }}</p></div>
+              <div class="bg-slate-50 rounded-xl px-5 py-4"><p class="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Contact Number</p><p class="text-sm font-bold text-slate-800">{{ info?.contactNo || info?.contactNumber || '—' }}</p></div>
+              <div class="bg-slate-50 rounded-xl px-5 py-4"><p class="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Barangay</p><p class="text-sm font-bold text-slate-800">{{ info?.barangayNo || info?.barangay || '—' }}</p></div>
+              <div class="bg-slate-50 rounded-xl px-5 py-4"><p class="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Address</p><p class="text-sm font-bold text-slate-800">{{ info?.address || '—' }}</p></div>
             </div>
           </div>
 
@@ -111,9 +111,9 @@
                   <span class="text-slate-400 text-xs font-bold">{{ expandedChildren.has(child.childID) ? '▲' : '▼' }}</span>
                 </button>
                 <div v-if="expandedChildren.has(child.childID)" class="px-5 py-4 grid grid-cols-1 sm:grid-cols-3 gap-3 bg-white border-t border-slate-50">
-                  <div class="bg-slate-50 rounded-xl px-4 py-3"><p class="text-[9px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Mother's Name</p><p class="text-sm font-bold text-slate-700">{{ child.motherName || '—' }}</p></div>
-                  <div class="bg-slate-50 rounded-xl px-4 py-3"><p class="text-[9px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Father's Name</p><p class="text-sm font-bold text-slate-700">{{ child.fatherName || '—' }}</p></div>
-                  <div class="bg-slate-50 rounded-xl px-4 py-3"><p class="text-[9px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Legal Guardian</p><p class="text-sm font-bold text-slate-700">{{ child.guardianName || '—' }}</p></div>
+                  <!-- How the logged-in person is related to this child (Mother, Grandmother, Uncle...) -->
+                  <div class="bg-slate-50 rounded-xl px-4 py-3"><p class="text-[9px] font-semibold text-slate-400 uppercase tracking-wide mb-1">You Are {{ child.firstName }}'s</p><p class="text-sm font-bold text-slate-700">{{ child.relationshipType || '—' }}</p></div>
+                  <div class="bg-slate-50 rounded-xl px-4 py-3 sm:col-span-2"><p class="text-[9px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Parents / Guardians</p><p class="text-sm font-bold text-slate-700">{{ child.guardians ? child.guardians.split('; ').join(', ') : '—' }}</p></div>
                   <div class="bg-slate-50 rounded-xl px-4 py-3"><p class="text-[9px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Place of Birth</p><p class="text-sm font-bold text-slate-700">{{ child.placeOfBirth || '—' }}</p></div>
                   <div class="bg-slate-50 rounded-xl px-4 py-3"><p class="text-[9px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Health Center</p><p class="text-sm font-bold text-slate-700">{{ child.healthCenter || '—' }}</p></div>
                   <div class="bg-slate-50 rounded-xl px-4 py-3"><p class="text-[9px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Barangay</p><p class="text-sm font-bold text-slate-700">{{ child.barangay || '—' }}</p></div>
@@ -133,11 +133,12 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { API_ORIGIN } from '@/utils/apiBase'
+import { ref, computed, onMounted } from 'vue'
 import axios from 'axios'
 import { format } from 'date-fns'
 
-const API_BASE_URL = 'http://localhost:57147'
+const API_BASE_URL = API_ORIGIN
 
 // parentData and children are fetched/owned by whichever page renders this
 // component (see HARD RULE 3) and passed down as props. The page controls
@@ -148,6 +149,19 @@ const props = defineProps({
 })
 
 defineEmits(['close'])
+
+// The page's copy of the parent's details is from sign-in; load the current
+// ones so edits the clinic staff made since then show up here too.
+const latest = ref(null)
+const info = computed(() => ({ ...props.parentData, ...(latest.value || {}) }))
+onMounted(async () => {
+  if (!props.parentData?.parentID) return
+  try {
+    latest.value = (await axios.get(`${API_BASE_URL}/api/Parents/${props.parentData.parentID}`)).data
+  } catch (e) {
+    console.error('Profilemodal: could not load current details', e)
+  }
+})
 
 function formatDisplayDate(date) {
   if (!date) return '—'

@@ -19,15 +19,38 @@ namespace AndroidWebAPI.Controllers
         private readonly AppDbContext _context;
         private readonly IConfiguration _config;
         private readonly IAccountRepository _accountRepository;
+        private readonly AndroidWebAPI.Services.AuditService _audit;
 
         public AuthController(
             AppDbContext context,
             IConfiguration config,
-            IAccountRepository accountRepository)
+            IAccountRepository accountRepository,
+            AndroidWebAPI.Services.AuditService audit)
         {
             _context = context;
             _config = config;
             _accountRepository = accountRepository;
+            _audit = audit;
+        }
+
+        // Login attempts are logged against the account's profile (parent or
+        // personnel) so the admin Audit Logs page can show who it was.
+        private Task LogLoginAsync(Account? account, string identifier, string status, string description)
+        {
+            string? role = account?.AccountType switch
+            {
+                "Parent" => "Parent",
+                "SystemAdmin" => "SystemAdmin",
+                _ => null,
+            };
+
+            return _audit.LogAsync("Authentication", "Login",
+                $"Account – {account?.Username ?? identifier}",
+                description,
+                status,
+                userId: account?.ReferenceID,
+                userName: account == null ? "Unknown" : null,
+                role: role);
         }
 
         // PATCH /api/Users/{userId}/change-password
@@ -44,6 +67,10 @@ namespace AndroidWebAPI.Controllers
         [Route("~/api/Users/{userId}/change-password")]
         public async Task<IActionResult> ChangePersonnelPassword(Guid userId, [FromBody] PersonnelChangePasswordDto dto)
         {
+            // Only your own password (the admin resets others from User Management)
+            if (AndroidWebAPI.Services.AccessGuard.CallerId(User) != userId)
+                return Forbid();
+
             var account = await _context.Accounts
                 .FirstOrDefaultAsync(a => a.AccountType == "Personnel" && a.ReferenceID == userId);
             if (account == null)
@@ -62,6 +89,9 @@ namespace AndroidWebAPI.Controllers
             var ok = await _accountRepository.ChangePasswordAsync(account.AccountID, dto.NewPassword);
             if (!ok)
                 return BadRequest(new { message = "Could not update password." });
+
+            await _audit.LogAsync("User Management", "Update", $"Account – {account.Username}",
+                "Changed own password.", userId: userId);
 
             return Ok(new { message = "Password updated." });
         }
@@ -258,6 +288,9 @@ namespace AndroidWebAPI.Controllers
                 });
             }
 
+            await _audit.LogAsync("User Management", "Update", $"Account – {account.Username}",
+                "Changed password (first-login / self-service).", userId: account.ReferenceID);
+
 
             // =====================================================
             // 7. DETERMINE USER ROLE
@@ -287,7 +320,8 @@ namespace AndroidWebAPI.Controllers
                     });
                 }
 
-                role = user.UserType;
+                // Same role names as Login returns
+                role = RoleForPosition(user.Position);
             }
             else
             {
@@ -311,14 +345,42 @@ namespace AndroidWebAPI.Controllers
         }
 
         // =========================================================
+        // CAPTCHA
+        // GET /api/auth/captcha  -> { captchaId, image }
+        // A new picture for the Sign In / Forgot Password pages.
+        // =========================================================
+
+        [AllowAnonymous]
+        [HttpGet("captcha")]
+        public IActionResult GetCaptcha([FromServices] AndroidWebAPI.Services.Captcha captcha)
+        {
+            if (!captcha.Enabled) return Ok(new { enabled = false });
+            var (id, image) = captcha.Create();
+            Response.Headers.CacheControl = "no-store";
+            return Ok(new { enabled = true, captchaId = id, image });
+        }
+
+        // =========================================================
         // UNIFIED LOGIN
         // POST /api/auth/login
         // =========================================================
 
+        [AllowAnonymous]
         [HttpPost("login")]
         public async Task<IActionResult> Login(
-            [FromBody] LoginDto dto)
+            [FromBody] LoginDto dto,
+            [FromServices] AndroidWebAPI.Services.Captcha captcha)
         {
+            // Checked first, so a bot can't even test passwords without it
+            if (!captcha.Check(dto.CaptchaId, dto.CaptchaAnswer))
+            {
+                return BadRequest(new
+                {
+                    message = AndroidWebAPI.Services.Captcha.WrongAnswer,
+                    captcha = true
+                });
+            }
+
             if (string.IsNullOrWhiteSpace(dto.Identifier))
             {
                 return BadRequest(new
@@ -383,6 +445,8 @@ namespace AndroidWebAPI.Controllers
 
             if (account == null)
             {
+                await LogLoginAsync(null, identifier, "Failed", "Login attempt with an unknown username or email.");
+
                 return Unauthorized(new
                 {
                     message = "Invalid username/email or password."
@@ -408,6 +472,8 @@ namespace AndroidWebAPI.Controllers
             if (account.LockedUntil.HasValue &&
                 account.LockedUntil.Value > DateTime.Now)
             {
+                await LogLoginAsync(account, identifier, "Warning", "Login attempt while the account is temporarily locked.");
+
                 return Unauthorized(new
                 {
                     message = "Account is temporarily locked. Please try again later."
@@ -454,6 +520,11 @@ namespace AndroidWebAPI.Controllers
 
                 await _context.SaveChangesAsync();
 
+                await LogLoginAsync(account, identifier, "Failed",
+                    account.LockedUntil > DateTime.Now
+                        ? "Incorrect password — account locked for 15 minutes after 5 failed attempts."
+                        : "Failed login attempt due to an incorrect password.");
+
                 return Unauthorized(new
                 {
                     message = "Invalid username/email or password."
@@ -469,6 +540,8 @@ namespace AndroidWebAPI.Controllers
             account.LastLogin = DateTime.Now;
 
             await _context.SaveChangesAsync();
+
+            await LogLoginAsync(account, identifier, "Success", "Signed in successfully.");
 
             // =====================================================
             // 6. PARENT ACCOUNT
@@ -516,7 +589,9 @@ namespace AndroidWebAPI.Controllers
                         email = parent.Email,
                         contactNo = parent.ContactNo,
                         barangayNo = parent.BarangayNo,
-                        address = parent.Address
+                        address = parent.Address,
+                        // null until the parent accepts the Data Privacy Notice
+                        privacyConsentAt = parent.PrivacyConsentAt
                     },
 
                     mustChangePassword =
@@ -551,24 +626,8 @@ if (account.AccountType == "Personnel")
         });
     }
 
-    // UserType is "Healthcare" for all personnel records.
-    // Position determines whether this is Staff or Healthcare.
-    string role;
-
-// FIXED
-if (string.Equals(user.Position, "Staff", StringComparison.OrdinalIgnoreCase))
-{
-    role = "Staff";
-}
-else if (string.Equals(user.Position, "Administrator", StringComparison.OrdinalIgnoreCase))
-{
-    role = "SystemAdmin";
-}
-else
-{
-    // Doctor / Nurse / Midwife
-    role = "Healthcare";
-}
+    // Position decides the portal: Doctor -> Admin, Nurse -> Staff.
+    string role = RoleForPosition(user.Position);
 
     var token = GenerateJwtToken(
         account,
@@ -661,7 +720,8 @@ if (account.AccountType == "SystemAdmin")
             });
         }
 
-        
+        private static string RoleForPosition(string? position) =>
+            AndroidWebAPI.Services.Roles.ForPosition(position);
 
         // =========================================================
         // JWT
@@ -761,6 +821,11 @@ if (account.AccountType == "SystemAdmin")
         public string Identifier { get; set; } = string.Empty;
 
         public string Password { get; set; } = string.Empty;
+
+        // From GET /api/auth/captcha and what the person typed
+        public string? CaptchaId { get; set; }
+
+        public string? CaptchaAnswer { get; set; }
     }
 
 

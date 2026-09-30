@@ -158,6 +158,7 @@ var timeline = new VaccinationTimeline
         if (existingRecord != null)
         {
             timeline.Status = "Completed";
+            timeline.CompletedDate = existingRecord.VaccinationDate.Date;
             timeline.VaccinationRecordID =
                 existingRecord.VaccinationRecordID;
         }
@@ -272,6 +273,149 @@ public async Task<IEnumerable<VaccinationTimeline>> GetUpcomingAsync(int days)
             t.ScheduledDate.Date <= endDate)
         .OrderBy(t => t.ScheduledDate)
         .ToListAsync();
+}
+
+// Recomputes every dose that hasn't been given yet, the same way the
+// recalculation engine does after a vaccination: a dose is due at the
+// recommended age, but never sooner than 28 days (or the rule's interval)
+// after the previous dose of the same vaccine, then moved to the next open
+// clinic day. Used when a child's birth date is corrected.
+public async Task RescheduleChildAsync(Guid childId)
+{
+    const int MinimumDoseIntervalDays = 28;
+
+    var child = await _context.Children.FirstOrDefaultAsync(c => c.ChildID == childId);
+    if (child == null) return;
+
+    var timelines = await _context.VaccinationTimelines
+        .Where(t => t.ChildID == childId && t.Status != "Cancelled")
+        .ToListAsync();
+    var rules = await _context.VaccinationScheduleRules.ToListAsync();
+    var records = await _context.VaccinationRecords
+        .Where(r => r.ChildID == childId && r.Status == "Completed")
+        .ToListAsync();
+
+    foreach (var vaccine in timelines.GroupBy(t => t.VaccineID))
+    {
+        DateTime? previous = null;
+
+        foreach (var timeline in vaccine.OrderBy(t => t.DoseNumber))
+        {
+            var rule = rules.FirstOrDefault(r => r.VaccineID == timeline.VaccineID && r.DoseNumber == timeline.DoseNumber);
+            var ageBased = child.BirthDate.Date.AddDays(rule?.RecommendedAgeDays ?? 0);
+
+            if (timeline.Status == "Completed")
+            {
+                timeline.ExpectedDate = ageBased;
+                previous = timeline.CompletedDate
+                    ?? records.FirstOrDefault(r => r.VaccineID == timeline.VaccineID && r.DoseNumber == timeline.DoseNumber)?.VaccinationDate.Date
+                    ?? timeline.ScheduledDate;
+                continue;
+            }
+
+            var due = ageBased;
+            if (previous != null)
+            {
+                var interval = Math.Max(rule?.IntervalFromPreviousDoseDays ?? 0, MinimumDoseIntervalDays);
+                var fromPrevious = previous.Value.AddDays(interval);
+                if (fromPrevious > due) due = fromPrevious;
+            }
+
+            var scheduled = await AndroidWebAPI.Services.ClinicCalendar.NextOpenDayAsync(_context, due);
+
+            timeline.ExpectedDate = ageBased;
+            timeline.ScheduledDate = scheduled;
+            timeline.Status = scheduled < DateTime.Today ? "Missed" : "Pending";
+            timeline.UpdatedAt = DateTime.UtcNow;
+
+            previous = scheduled;
+        }
+    }
+
+    await _context.SaveChangesAsync();
+}
+
+// Children registered in the app get their schedule right away; children
+// added straight into the database don't, so their Schedule and Records
+// pages would only list doses already given. This builds the missing
+// schedule the same way (doses already given count as done, the 28-day
+// rule applies to the rest, past due dates become overdue).
+public async Task<bool> EnsureTimelineAsync(Guid childId)
+{
+    if (await _context.VaccinationTimelines.AnyAsync(t => t.ChildID == childId)) return false;
+    if (!await _context.Children.AnyAsync(c => c.ChildID == childId)) return false;
+
+    await GenerateTimelineAsync(childId);
+    await RescheduleChildAsync(childId);
+    return true;
+}
+
+public async Task<int> EnsureAllTimelinesAsync()
+{
+    var missing = await _context.Children
+        .Where(c => !_context.VaccinationTimelines.Any(t => t.ChildID == c.ChildID))
+        .Select(c => c.ChildID)
+        .ToListAsync();
+
+    foreach (var childId in missing)
+        await EnsureTimelineAsync(childId);
+
+    return missing.Count;
+}
+
+// A dose that was given (e.g. entered from the Yellow Book before historical
+// entries were linked to the schedule) is marked as given on the schedule,
+// and that child's remaining doses are recalculated from it.
+public async Task<int> LinkGivenDosesAsync()
+{
+    var unlinked = await (
+        from t in _context.VaccinationTimelines
+        where t.Status != "Completed" && t.Status != "Cancelled"
+        join r in _context.VaccinationRecords
+            on new { t.ChildID, t.VaccineID, t.DoseNumber } equals new { r.ChildID, r.VaccineID, r.DoseNumber }
+        where r.Status == "Completed"
+        select new { Timeline = t, Record = r }).ToListAsync();
+
+    foreach (var pair in unlinked)
+    {
+        pair.Timeline.Status = "Completed";
+        pair.Timeline.CompletedDate = pair.Record.VaccinationDate.Date;
+        pair.Timeline.VaccinationRecordID = pair.Record.VaccinationRecordID;
+        pair.Timeline.UpdatedAt = DateTime.UtcNow;
+        pair.Record.TimelineID ??= pair.Timeline.TimelineID;
+    }
+    await _context.SaveChangesAsync();
+
+    var children = unlinked.Select(p => p.Timeline.ChildID).Distinct().ToList();
+    foreach (var childId in children)
+        await RescheduleChildAsync(childId);
+
+    return children.Count;
+}
+
+// When the admin closes a day (weekly hours or a holiday), doses still to
+// come on that day are moved: the child's schedule is recalculated so every
+// dose lands on an open day and keeps the 28-day spacing.
+public async Task<int> MoveDosesOffClosedDaysAsync()
+{
+    var isOpen = await AndroidWebAPI.Services.ClinicCalendar.OpenDayCheckAsync(_context);
+    var today = DateTime.Today;
+
+    var upcoming = await _context.VaccinationTimelines
+        .Where(t => t.Status == "Pending" && t.ScheduledDate >= today)
+        .Select(t => new { t.ChildID, t.ScheduledDate })
+        .ToListAsync();
+
+    var children = upcoming
+        .Where(t => !isOpen(t.ScheduledDate))
+        .Select(t => t.ChildID)
+        .Distinct()
+        .ToList();
+
+    foreach (var childId in children)
+        await RescheduleChildAsync(childId);
+
+    return children.Count;
 }
 
 public async Task RegenerateTimelineAsync(Guid childId)

@@ -36,6 +36,13 @@ namespace AndroidWebAPI.Repositories
             return qrCode;
         }
 
+        public async Task UpdateAsync(QueueQRCode qrCode)
+        {
+            _context.QueueQRCodes.Update(qrCode);
+
+            await _context.SaveChangesAsync();
+        }
+
         public async Task DeactivateAllAsync()
         {
             var activeCodes = await _context.QueueQRCodes

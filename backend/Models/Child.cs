@@ -22,8 +22,15 @@ namespace AndroidWebAPI.Models
         public string? HealthCenter { get; set; }
         public int? Barangay { get; set; }
 
+        // Family (household) number the health center files the family under
+        public string? FamilyNo { get; set; }
+
         public string? Sex { get; set; }
         public string? Allergies { get; set; }
+
+        // e.g. asthma, heart condition. Doctors/Nurses may update this and
+        // Allergies (PATCH /api/Children/{id}/health-notes).
+        public string? ExistingConditions { get; set; }
 
         // Birth measurements, taken at registration (or added later via Edit).
         // decimal(5,2) matches sensible bounds for both fields: heights up to

@@ -1,5 +1,7 @@
 <script setup>
+import { API_ORIGIN } from '@/utils/apiBase'
 import { ref, reactive, computed, watch, onMounted } from 'vue'
+import { useFloatingMenu } from '@/utils/floatingMenu'
 import axios from 'axios'
 
 /* =========================================================================
@@ -22,7 +24,7 @@ import axios from 'axios'
       different property name (e.g. `IsActive` serialized differently),
       update the one line inside isVaccineActive().
 ========================================================================= */
-const API_BASE = 'http://localhost:57147/api'
+const API_BASE = `${API_ORIGIN}/api`
 const api = {
   getInventory:          ()          => axios.get(`${API_BASE}/VaccineInventory`).then(r => r.data),
   getInventoryByVaccine: (vaccineId) => axios.get(`${API_BASE}/VaccineInventory/vaccine/${vaccineId}`).then(r => r.data),
@@ -274,9 +276,7 @@ const expiredList = computed(() =>
 )
 
 /* ------------------------------ Row actions menu ---------------------------- */
-const openMenuId = ref(null)
-const toggleMenu = (id) => (openMenuId.value = openMenuId.value === id ? null : id)
-const closeMenu = () => (openMenuId.value = null)
+const { openMenuId, menuStyle, toggleMenu, closeMenu } = useFloatingMenu()
 
 /* --------------------------------- Batch details drawer --------------------------------- */
 const showDrawer = ref(false)
@@ -688,14 +688,15 @@ async function setActiveState(item, nextActive) {
                         </td>
                         <td class="pr-5 py-2.5 text-right relative">
                           <button
-                            @click.stop="toggleMenu(item.inventoryID)"
+                            @click.stop="toggleMenu(item.inventoryID, $event)"
                             class="text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg w-8 h-8 inline-flex items-center justify-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                           >⋮</button>
 
+                          <Teleport to="body">
                           <div
                             v-if="openMenuId === item.inventoryID"
                             @click.stop
-                            class="absolute right-5 top-10 z-30 w-44 bg-white border border-slate-200 rounded-lg shadow-md py-1 text-left"
+                            :style="menuStyle" class="fixed z-50 w-44 bg-white border border-slate-200 rounded-lg shadow-md py-1 text-left"
                           >
                             <button @click="openDrawer(item)" class="w-full text-left px-3.5 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors">View Details</button>
                             <button @click="openEditModal(item)" class="w-full text-left px-3.5 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors">Edit Batch</button>
@@ -710,6 +711,7 @@ async function setActiveState(item, nextActive) {
                               class="w-full text-left px-3.5 py-2 text-sm text-emerald-700 hover:bg-emerald-50 transition-colors"
                             >Activate</button>
                           </div>
+                          </Teleport>
                         </td>
                       </tr>
                     </tbody>
@@ -819,11 +821,11 @@ async function setActiveState(item, nextActive) {
             </div>
             <div>
               <label class="block text-xs font-semibold text-slate-500 mb-1.5">Initial Quantity</label>
-              <input v-model="receiveForm.initialQuantity" type="number" min="1" class="w-full text-sm rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-colors" />
+              <input v-model="receiveForm.initialQuantity" v-digits type="number" min="1" class="w-full text-sm rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-colors" />
             </div>
             <div>
               <label class="block text-xs font-semibold text-slate-500 mb-1.5">Minimum Stock</label>
-              <input v-model="receiveForm.minimumStock" type="number" min="0" class="w-full text-sm rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-colors" />
+              <input v-model="receiveForm.minimumStock" v-digits type="number" min="0" class="w-full text-sm rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-colors" />
             </div>
             <div>
               <label class="block text-xs font-semibold text-slate-500 mb-1.5">Expiration Date</label>
@@ -866,7 +868,7 @@ async function setActiveState(item, nextActive) {
             </div>
             <div>
               <label class="block text-xs font-semibold text-slate-500 mb-1.5">Minimum Stock</label>
-              <input v-model="editForm.minimumStock" type="number" min="0" class="w-full text-sm rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-colors" />
+              <input v-model="editForm.minimumStock" v-digits type="number" min="0" class="w-full text-sm rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-colors" />
             </div>
             <div>
               <label class="block text-xs font-semibold text-slate-500 mb-1.5">Expiration Date</label>
@@ -955,7 +957,7 @@ async function setActiveState(item, nextActive) {
         </div>
 
         <div class="border-t border-slate-200 p-4 flex items-center gap-2 shrink-0">
-          <button @click="openEditModal(selectedBatch)" class="flex-1 text-sm font-semibold px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors">Edit Batch</button>
+          <button @click="closeDrawer(); openEditModal(selectedBatch)" class="flex-1 text-sm font-semibold px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors">Edit Batch</button>
           <button @click="closeDrawer" class="text-sm font-semibold px-4 py-2 rounded-lg text-slate-500 hover:bg-slate-50 transition-colors">Close</button>
         </div>
       </aside>

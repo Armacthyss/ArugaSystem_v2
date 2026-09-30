@@ -39,6 +39,7 @@
                 return Ok(rule);
             }
 
+            [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.Admin)]
             [HttpPost]
 public async Task<IActionResult> Create(CreateVaccinationScheduleRuleDto dto)
 {
@@ -69,6 +70,7 @@ public async Task<IActionResult> Create(CreateVaccinationScheduleRuleDto dto)
 
 
 
+[Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.Admin)]
 [HttpPut]
 public async Task<IActionResult> Update(UpdateVaccinationScheduleRuleDto dto)
 {
@@ -94,6 +96,7 @@ public async Task<IActionResult> Update(UpdateVaccinationScheduleRuleDto dto)
     return NoContent();
 }
 
+            [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.Admin)]
             [HttpDelete("{ruleId}")]
             public async Task<IActionResult> Delete(int ruleId)
             {

@@ -1,6 +1,7 @@
 using AndroidWebAPI.Data;
 using AndroidWebAPI.Models;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace AndroidWebAPI.Controllers
 {
@@ -47,6 +48,9 @@ namespace AndroidWebAPI.Controllers
             {
                 vaccineID = v.VaccineID,
                 vaccineName = v.VaccineName,
+                abbreviation = v.Abbreviation,
+                // Oral / Intradermal / Intramuscular...: which injection sites fit
+                administrationRoute = v.AdministrationRoute,
                 doses = doses
                     .Where(d => d.VaccineID == v.VaccineID)
                     .OrderBy(d => d.DoseNumber)
@@ -79,6 +83,7 @@ namespace AndroidWebAPI.Controllers
         // CREATE
         // POST: api/Vaccines
         // ===========================================
+        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.Admin)]
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] Vaccine vaccine)
         {
@@ -97,6 +102,7 @@ namespace AndroidWebAPI.Controllers
         // UPDATE
         // PUT: api/Vaccines/{id}
         // ===========================================
+        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.Admin)]
         [HttpPut("{id}")]
         public async Task<IActionResult> Update(int id, [FromBody] Vaccine vaccine)
         {
@@ -116,7 +122,45 @@ namespace AndroidWebAPI.Controllers
         // ===========================================
         // DELETE
         // DELETE: api/Vaccines/{id}
+        // Only a vaccine nobody has used yet can be deleted (e.g. one added
+        // by mistake). Once it is in a child's schedule or records, or has
+        // stock batches, it is kept for history: deactivate it instead.
         // ===========================================
-      
+        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.Admin)]
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> Delete(
+            int id,
+            [FromServices] AppDbContext context,
+            [FromServices] AndroidWebAPI.Services.AuditService audit)
+        {
+            var vaccine = await context.Vaccines.FindAsync(id);
+            if (vaccine == null)
+                return NotFound(new { message = "Vaccine not found." });
+
+            int records = await context.VaccinationRecords.CountAsync(r => r.VaccineID == id);
+            int schedules = await context.VaccinationTimelines.Where(t => t.VaccineID == id).Select(t => t.ChildID).Distinct().CountAsync();
+            int batches = await context.VaccineInventory.CountAsync(i => i.VaccineID == id);
+
+            if (records > 0 || schedules > 0 || batches > 0)
+            {
+                var uses = new List<string>();
+                if (records > 0) uses.Add($"{records} vaccination record(s)");
+                if (schedules > 0) uses.Add($"the schedule of {schedules} child(ren)");
+                if (batches > 0) uses.Add($"{batches} stock batch(es)");
+                return Conflict(new
+                {
+                    message = $"{vaccine.VaccineName} is already used in {string.Join(", ", uses)}, so it can't be deleted. Deactivate it instead."
+                });
+            }
+
+            context.VaccinationScheduleRules.RemoveRange(context.VaccinationScheduleRules.Where(r => r.VaccineID == id));
+            context.VaccineDoses.RemoveRange(context.VaccineDoses.Where(d => d.VaccineID == id));
+            context.Vaccines.Remove(vaccine);
+            await context.SaveChangesAsync();
+
+            await audit.LogAsync("Vaccine Management", "Delete", $"Vaccine – {vaccine.VaccineName}", "Deleted an unused vaccine.");
+
+            return NoContent();
+        }
     }
 }

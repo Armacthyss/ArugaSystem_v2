@@ -6,6 +6,11 @@ namespace AndroidWebAPI.DTOs
     {
         public DateTime ExceptionDate { get; set; }
 
+        // Optional last date, to add the same exception to several days at
+        // once (e.g. a typhoon closing the health center Mon–Wed). New
+        // exceptions only; an edit changes one date.
+        public DateTime? EndDate { get; set; }
+
         public bool IsOpen { get; set; }
 
         public TimeSpan OpeningTime { get; set; }

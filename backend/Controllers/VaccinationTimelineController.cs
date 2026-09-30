@@ -1,5 +1,6 @@
 using AndroidWebAPI.Data;
     using Microsoft.AspNetCore.Mvc;
+    using Microsoft.EntityFrameworkCore;
     using AndroidWebAPI.DTOs;
 
     namespace AndroidWebAPI.Controllers
@@ -16,6 +17,7 @@ using AndroidWebAPI.Data;
             }
 
             // GET: api/VaccinationTimeline
+            [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.ClinicTeam)]
             [HttpGet]
             public async Task<IActionResult> GetAll()
             {
@@ -24,6 +26,7 @@ using AndroidWebAPI.Data;
             }
 
             // GET: api/VaccinationTimeline/{timelineId}
+            [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.ClinicTeam)]
             [HttpGet("{timelineId}")]
             public async Task<IActionResult> GetById(Guid timelineId)
             {
@@ -37,8 +40,10 @@ using AndroidWebAPI.Data;
 
             // GET: api/VaccinationTimeline/child/{childId}
             [HttpGet("child/{childId}")]
-public async Task<IActionResult> GetByChild(Guid childId)
+public async Task<IActionResult> GetByChild(Guid childId, [FromServices] AppDbContext context)
 {
+    if (!await AndroidWebAPI.Services.AccessGuard.CanSeeChildAsync(User, context, childId)) return Forbid();
+    await _repository.EnsureTimelineAsync(childId);
     var timelines = await _repository.GetByChildAsync(childId);
 
     var result = timelines.Select(t => new
@@ -57,6 +62,7 @@ public async Task<IActionResult> GetByChild(Guid childId)
 }
 
             // POST: api/VaccinationTimeline/generate/{childId}
+            [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.ClinicTeam)]
             [HttpPost("generate/{childId}")]
             public async Task<IActionResult> Generate(Guid childId)
             {
@@ -69,6 +75,7 @@ public async Task<IActionResult> GetByChild(Guid childId)
             }
 
             // PUT: api/VaccinationTimeline/complete/{timelineId}
+            [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.ClinicTeam)]
             [HttpPut("complete/{timelineId}")]
             public async Task<IActionResult> MarkCompleted(Guid timelineId)
             {
@@ -81,6 +88,7 @@ public async Task<IActionResult> GetByChild(Guid childId)
             }
 
             // POST: api/VaccinationTimeline/regenerate/{childId}
+            [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.ClinicTeam)]
             [HttpPost("regenerate/{childId}")]
             public async Task<IActionResult> Regenerate(Guid childId)
             {
@@ -102,6 +110,7 @@ public async Task<IActionResult> GetByChild(Guid childId)
             // app ever populates with Status "Scheduled" — and so always
             // returned []. VaccinationTimeline (Status "Pending") is the
             // actual source of truth for "what's due."
+            [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.ClinicTeam)]
             [HttpGet("due-today")]
             public async Task<IActionResult> GetDueToday()
             {
@@ -134,7 +143,77 @@ public async Task<IActionResult> GetByChild(Guid childId)
                     : null;
             }
 
+            // GET: api/VaccinationTimeline/schedule?from=2026-09-01&to=2026-09-30&includeOverdue=true
+            // Flattened schedule for the Admission Staff "Vaccine Schedule"
+            // page and the dashboards: one row per timeline dose in the date
+            // range, with child + primary parent details already joined.
+            // includeOverdue also pulls in every not-yet-given dose dated
+            // before `from`, so late children don't drop off the list.
+            // `displayStatus` is what the UI shows:
+            //   Completed | Due Today | Upcoming | Overdue
+            [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.ClinicTeam)]
+            [HttpGet("schedule")]
+            public async Task<IActionResult> GetSchedule(
+                [FromServices] AppDbContext context,
+                [FromQuery] DateTime? from,
+                [FromQuery] DateTime? to,
+                [FromQuery] bool includeOverdue = true)
+            {
+                var today = DateTime.Today;
+                var start = (from ?? today).Date;
+                var end = (to ?? today.AddDays(30)).Date;
+
+                var rows = await context.VaccinationTimelines
+                    .Include(t => t.Child)
+                        .ThenInclude(c => c.ParentRelationships)
+                        .ThenInclude(r => r.Parent)
+                    .Include(t => t.Vaccine)
+                    .Where(t =>
+                        (t.ScheduledDate >= start && t.ScheduledDate <= end) ||
+                        (includeOverdue && t.ScheduledDate < start &&
+                         (t.Status == "Pending" || t.Status == "Missed")))
+                    .OrderBy(t => t.ScheduledDate)
+                    .ThenBy(t => t.Child.LastName)
+                    .ToListAsync();
+
+                var result = rows.Select(t =>
+                {
+                    var link = t.Child?.ParentRelationships?
+                        .FirstOrDefault(r => r.IsPrimaryContact && r.Status == "Active")
+                        ?? t.Child?.ParentRelationships?.FirstOrDefault(r => r.Status == "Active");
+
+                    string displayStatus =
+                        t.Status == "Completed" ? "Completed" :
+                        t.ScheduledDate.Date < today ? "Overdue" :
+                        t.ScheduledDate.Date == today ? "Due Today" : "Upcoming";
+
+                    return new
+                    {
+                        timelineID = t.TimelineID,
+                        childID = t.ChildID,
+                        childName = t.Child != null ? $"{t.Child.FirstName} {t.Child.LastName}".Trim() : "Unknown",
+                        birthDate = t.Child?.BirthDate,
+                        sex = t.Child?.Sex,
+                        parentID = link?.ParentID,
+                        parentName = link?.Parent != null ? $"{link.Parent.FirstName} {link.Parent.LastName}".Trim() : null,
+                        parentContact = link?.Parent?.ContactNo,
+                        vaccineID = t.VaccineID,
+                        vaccineName = t.Vaccine?.VaccineName ?? $"Vaccine {t.VaccineID}",
+                        abbreviation = t.Vaccine?.Abbreviation,
+                        doseNumber = t.DoseNumber,
+                        expectedDate = t.ExpectedDate,
+                        scheduledDate = t.ScheduledDate,
+                        completedDate = t.CompletedDate,
+                        status = t.Status,
+                        displayStatus,
+                    };
+                });
+
+                return Ok(result);
+            }
+
             // GET: api/VaccinationTimeline/upcoming/{days}
+            [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.ClinicTeam)]
             [HttpGet("upcoming/{days}")]
             public async Task<IActionResult> GetUpcoming(int days)
             {
@@ -142,12 +221,14 @@ public async Task<IActionResult> GetByChild(Guid childId)
                 return Ok(timelines);
             }
     [HttpGet("summary/{childId}")]
-    public async Task<IActionResult> GetSummary(Guid childId)
+    public async Task<IActionResult> GetSummary(Guid childId, [FromServices] AppDbContext context)
     {
+        if (!await AndroidWebAPI.Services.AccessGuard.CanSeeChildAsync(User, context, childId)) return Forbid();
         var summary = await _repository.GetTimelineSummaryAsync(childId);
         return Ok(summary);
     }
 
+    [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.ClinicTeam)]
     [HttpPut("update-missed")]
     public async Task<IActionResult> UpdateMissed()
     {

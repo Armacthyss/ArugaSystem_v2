@@ -24,6 +24,9 @@ namespace AndroidWebAPI.Models
         // Date adjusted to clinic operating schedule
         public DateTime ScheduledDate { get; set; }
 
+        // Actual administration date, set when the dose is recorded
+        public DateTime? CompletedDate { get; set; }
+
         // Completed / Pending / Missed / Cancelled
         public string Status { get; set; } = "Pending";
 

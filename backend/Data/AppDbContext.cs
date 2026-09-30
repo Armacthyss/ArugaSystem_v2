@@ -18,6 +18,7 @@ public DbSet<QueueChild> QueueChildren { get; set; }
         public DbSet<Account> Accounts { get; set; }
         public DbSet<AccountOtp> AccountOtps { get; set; }
         public DbSet<Notification> Notifications { get; set; }
+        public DbSet<AuditLog> AuditLogs { get; set; }
         public DbSet<User> Users { get; set; }
         public DbSet<VaccinationRecord> VaccinationRecords { get; set; }
         public DbSet<VaccinationTimeline> VaccinationTimelines { get; set; }
@@ -86,17 +87,6 @@ modelBuilder.Entity<QueueQRCode>()
 
             modelBuilder.Entity<VaccinationRecord>()
                 .HasKey(v => v.VaccinationRecordID);
-                modelBuilder.Entity<AccountOtp>()
-    .HasOne(o => o.Parent)
-    .WithMany()
-    .HasForeignKey(o => o.ParentID)
-    .OnDelete(DeleteBehavior.Cascade);
-
-modelBuilder.Entity<AccountOtp>()
-    .HasOne(o => o.User)
-    .WithMany()
-    .HasForeignKey(o => o.UserID)
-    .OnDelete(DeleteBehavior.Cascade);
             modelBuilder.Entity<VaccinationTimeline>()
                 .HasKey(v => v.TimelineID);
 
@@ -113,12 +103,6 @@ modelBuilder.Entity<VaccinationRecord>()
     .HasOne(v => v.AdministeredBy)
     .WithMany()
     .HasForeignKey(v => v.AdministeredByUserID)
-    .OnDelete(DeleteBehavior.Restrict);
-
-modelBuilder.Entity<VaccinationRecord>()
-    .HasOne(v => v.DoctorDiagnosedBy)
-    .WithMany()
-    .HasForeignKey(v => v.DoctorDiagnosedByUserID)
     .OnDelete(DeleteBehavior.Restrict);
             base.OnModelCreating(modelBuilder);
         }

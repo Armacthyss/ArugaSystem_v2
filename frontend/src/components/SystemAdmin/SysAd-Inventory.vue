@@ -1,8 +1,12 @@
 <script setup>
+import { API_ORIGIN } from '@/utils/apiBase'
+import { toISODate } from '@/utils/format'
 import { ref, reactive, computed, watch, onMounted } from 'vue'
+import { useFloatingMenu } from '@/utils/floatingMenu'
 import axios from 'axios'
 import AppSidebar from './Components/AppSidebar.vue'
 import AppHeader from './Components/AppHeader.vue'
+import InventorySummary from '@/components/Shared/InventorySummary.vue'
 
 /* =========================================================================
    API LAYER
@@ -24,7 +28,7 @@ import AppHeader from './Components/AppHeader.vue'
       different property name (e.g. `IsActive` serialized differently),
       update the one line inside isVaccineActive().
 ========================================================================= */
-const API_BASE = 'http://localhost:57147/api'
+const API_BASE = `${API_ORIGIN}/api`
 const api = {
   getInventory:          ()          => axios.get(`${API_BASE}/VaccineInventory`).then(r => r.data),
   getInventoryByVaccine: (vaccineId) => axios.get(`${API_BASE}/VaccineInventory/vaccine/${vaccineId}`).then(r => r.data),
@@ -56,6 +60,7 @@ const vaccines = ref([])    // raw Vaccine rows
 const isLoading = ref(false)
 const isSaving = ref(false)
 const error = ref(null)
+const summaryKey = ref(0)   // reloads the Inventory Summary with the batches
 
 async function loadAll() {
   isLoading.value = true
@@ -71,6 +76,7 @@ async function loadAll() {
     error.value = 'Failed to load inventory. Please try again.'
   } finally {
     isLoading.value = false
+    summaryKey.value++
   }
 }
 onMounted(loadAll)
@@ -85,10 +91,15 @@ function formatDate(iso) {
   const d = new Date(iso)
   return isNaN(d) ? iso : d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
 }
+// "2027-12-31T00:00:00" -> "2027-12-31". Not through toISOString(): in
+// Philippine time (UTC+8) that turns midnight into the previous day, so every
+// save moved the expiry date one day earlier.
 function toDateInputValue(iso) {
   if (!iso) return ''
+  const s = String(iso)
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10)
   const d = new Date(iso)
-  return isNaN(d) ? String(iso).slice(0, 10) : d.toISOString().slice(0, 10)
+  return isNaN(d) ? '' : toISODate(d)
 }
 const startOfToday = new Date(new Date().toDateString())
 function daysUntil(iso) {
@@ -241,7 +252,8 @@ const summary = computed(() => {
   return {
     totalVaccineTypes: new Set(active.map(i => i.vaccineID)).size,
     totalBatches: active.length,
-    totalDoses: active.reduce((sum, i) => sum + (i.currentQuantity || 0), 0),
+    // Expired doses can't be given, so they aren't "available"
+    totalDoses: withStatus.filter(x => x.status !== 'Expired').reduce((sum, x) => sum + (x.i.currentQuantity || 0), 0),
     lowStock: withStatus.filter(x => x.status === 'Low Stock').length,
     expiringSoon: withStatus.filter(x => {
       const d = daysUntil(x.i.expirationDate)
@@ -269,9 +281,7 @@ const expiredList = computed(() =>
 )
 
 /* ------------------------------ Row actions menu ---------------------------- */
-const openMenuId = ref(null)
-const toggleMenu = (id) => (openMenuId.value = openMenuId.value === id ? null : id)
-const closeMenu = () => (openMenuId.value = null)
+const { openMenuId, menuStyle, toggleMenu, closeMenu } = useFloatingMenu()
 
 /* --------------------------------- Batch details drawer --------------------------------- */
 const showDrawer = ref(false)
@@ -290,12 +300,12 @@ const showReceiveModal = ref(false)
 const formError = ref(null)
 const receiveForm = reactive({
   vaccineID: '', lotNumber: '', initialQuantity: '', minimumStock: '',
-  expirationDate: '', receivedDate: '', supplier: '',
+  expirationDate: '', manufacturingDate: '', receivedDate: '', supplier: '',
 })
 function openReceiveModal() {
   Object.assign(receiveForm, {
     vaccineID: '', lotNumber: '', initialQuantity: '', minimumStock: '',
-    expirationDate: '', receivedDate: '', supplier: '',
+    expirationDate: '', manufacturingDate: '', receivedDate: '', supplier: '',
   })
   formError.value = null
   showReceiveModal.value = true
@@ -305,6 +315,10 @@ async function submitReceiveStock() {
   if (!receiveForm.vaccineID || !receiveForm.lotNumber || !receiveForm.initialQuantity
       || !receiveForm.minimumStock || !receiveForm.expirationDate || !receiveForm.receivedDate) {
     formError.value = 'Please fill all required fields.'
+    return
+  }
+  if (receiveForm.manufacturingDate && receiveForm.manufacturingDate >= receiveForm.expirationDate) {
+    formError.value = 'The manufacturing date must be before the expiration date.'
     return
   }
   // Belt-and-suspenders: re-check the chosen vaccine is still active right before
@@ -325,6 +339,7 @@ async function submitReceiveStock() {
       currentQuantity: qty, // a fresh batch always starts full
       minimumStock: Number(receiveForm.minimumStock),
       expirationDate: receiveForm.expirationDate,
+      manufacturingDate: receiveForm.manufacturingDate || null,
       receivedDate: receiveForm.receivedDate,
       supplier: receiveForm.supplier || '',
       status: true, // new batches are active by default
@@ -343,7 +358,7 @@ async function submitReceiveStock() {
 /* --------------------------------- Edit modal (restricted field set) --------------------------------- */
 const showEditModal = ref(false)
 const editForm = reactive({
-  id: null, lotNumber: '', minimumStock: '', expirationDate: '', supplier: '', isActive: true, raw: null,
+  id: null, lotNumber: '', minimumStock: '', expirationDate: '', manufacturingDate: '', supplier: '', isActive: true, raw: null,
 })
 function openEditModal(item) {
   Object.assign(editForm, {
@@ -351,6 +366,7 @@ function openEditModal(item) {
     lotNumber: item.lotNumber,
     minimumStock: item.minimumStock,
     expirationDate: toDateInputValue(item.expirationDate),
+    manufacturingDate: item.manufacturingDate ? toDateInputValue(item.manufacturingDate) : '',
     supplier: item.supplier || '',
     isActive: isActive(item),
     raw: item,
@@ -370,12 +386,14 @@ async function submitEdit() {
     // VaccineID / InitialQuantity / CurrentQuantity / ReceivedDate stay untouched here —
     // dose counts should only change through vaccination-administration actions.
     await api.updateInventory(editForm.id, {
+      inventoryID: editForm.id,
       vaccineID: raw.vaccineID,
       lotNumber: editForm.lotNumber,
       initialQuantity: raw.initialQuantity,
       currentQuantity: raw.currentQuantity,
       minimumStock: Number(editForm.minimumStock),
       expirationDate: editForm.expirationDate,
+      manufacturingDate: editForm.manufacturingDate || null,
       receivedDate: raw.receivedDate,
       supplier: editForm.supplier || '',
       status: editForm.isActive,
@@ -413,12 +431,14 @@ async function setActiveState(item, nextActive) {
   isSaving.value = true
   try {
     await api.updateInventory(item.inventoryID, {
+      inventoryID: item.inventoryID,
       vaccineID: item.vaccineID,
       lotNumber: item.lotNumber,
       initialQuantity: item.initialQuantity,
       currentQuantity: item.currentQuantity,
       minimumStock: item.minimumStock,
       expirationDate: item.expirationDate,
+      manufacturingDate: item.manufacturingDate || null,
       receivedDate: item.receivedDate,
       supplier: item.supplier || '',
       status: nextActive,
@@ -440,7 +460,7 @@ async function setActiveState(item, nextActive) {
 
     <!-- ============================ MAIN ============================ -->
     <div class="flex-1 min-w-0 flex flex-col">
-      <AppHeader title="Inventory Management" breadcrumb="Dashboard / Inventory" />
+      <AppHeader title="Inventory Management" breadcrumb="Admin / Inventory" />
 
       <main class="p-6 space-y-5">
         <div v-if="error" class="rounded-lg bg-rose-50 border border-rose-200 px-4 py-3 text-sm text-rose-700 flex items-center justify-between">
@@ -483,6 +503,9 @@ async function setActiveState(item, nextActive) {
             </div>
           </div>
         </section>
+
+        <!-- ============ Inventory summary per vaccine ============ -->
+        <InventorySummary :refresh-key="summaryKey" />
 
         <!-- ============ Toolbar ============ -->
         <section class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
@@ -536,9 +559,9 @@ async function setActiveState(item, nextActive) {
         </section>
 
         <!-- ============ Table + Alerts ============ -->
-        <section class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+        <section class="grid grid-cols-1 2xl:grid-cols-[minmax(0,1fr)_20rem] gap-6 items-start">
           <!-- Grouped inventory -->
-          <div class="lg:col-span-2 bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+          <div class="min-w-0 bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
             <div class="flex items-center justify-between px-5 py-3 border-b border-slate-200 bg-slate-50/60">
               <p class="text-xs font-semibold text-slate-500">
                 {{ totalGroups }} vaccine{{ totalGroups === 1 ? '' : 's' }} · {{ totalBatchesFiltered }} batch{{ totalBatchesFiltered === 1 ? '' : 'es' }}
@@ -579,12 +602,13 @@ async function setActiveState(item, nextActive) {
                 </button>
 
                 <!-- Batch rows (lots) under this vaccine group -->
-                <div v-if="expandedGroups.has(group.vaccineID)" class="bg-slate-50/40">
+                <div v-if="expandedGroups.has(group.vaccineID)" class="bg-slate-50/40 overflow-x-auto">
                   <table class="w-full text-sm">
                     <thead>
-                      <tr class="text-left text-xs uppercase tracking-wide text-slate-400">
+                      <tr class="text-left text-xs uppercase tracking-wide text-slate-400 whitespace-nowrap">
                         <th class="font-medium pl-12 pr-3 py-2">Lot Number</th>
                         <th class="font-medium px-3 py-2">Current / Min</th>
+                        <th class="font-medium px-3 py-2">Manufactured</th>
                         <th class="font-medium px-3 py-2">Expiration</th>
                         <th class="font-medium px-3 py-2">Supplier</th>
                         <th class="font-medium px-3 py-2">Status</th>
@@ -609,8 +633,9 @@ async function setActiveState(item, nextActive) {
                           <span class="font-semibold text-slate-900">{{ item.currentQuantity }}</span>
                           <span class="text-slate-400"> / {{ item.minimumStock }}</span>
                         </td>
+                        <td class="px-3 py-2.5 whitespace-nowrap text-slate-500">{{ item.manufacturingDate ? formatDate(item.manufacturingDate) : '—' }}</td>
                         <td class="px-3 py-2.5 whitespace-nowrap text-slate-600">{{ formatDate(item.expirationDate) }}</td>
-                        <td class="px-3 py-2.5 whitespace-nowrap text-slate-500">{{ item.supplier || '—' }}</td>
+                        <td class="px-3 py-2.5 min-w-[10rem] max-w-[14rem] text-slate-500 leading-snug">{{ item.supplier || '—' }}</td>
                         <td class="px-3 py-2.5">
                           <span :class="[statusMeta[computeStatus(item)].tint, statusMeta[computeStatus(item)].text]" class="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap">
                             <span :class="statusMeta[computeStatus(item)].dot" class="w-1.5 h-1.5 rounded-full"></span>
@@ -628,14 +653,15 @@ async function setActiveState(item, nextActive) {
                         </td>
                         <td class="pr-5 py-2.5 text-right relative">
                           <button
-                            @click.stop="toggleMenu(item.inventoryID)"
+                            @click.stop="toggleMenu(item.inventoryID, $event)"
                             class="text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg w-8 h-8 inline-flex items-center justify-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                           >⋮</button>
 
+                          <Teleport to="body">
                           <div
                             v-if="openMenuId === item.inventoryID"
                             @click.stop
-                            class="absolute right-5 top-10 z-30 w-44 bg-white border border-slate-200 rounded-lg shadow-md py-1 text-left"
+                            :style="menuStyle" class="fixed z-50 w-44 bg-white border border-slate-200 rounded-lg shadow-md py-1 text-left"
                           >
                             <button @click="openDrawer(item)" class="w-full text-left px-3.5 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors">View Details</button>
                             <button @click="openEditModal(item)" class="w-full text-left px-3.5 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors">Edit Batch</button>
@@ -650,6 +676,7 @@ async function setActiveState(item, nextActive) {
                               class="w-full text-left px-3.5 py-2 text-sm text-emerald-700 hover:bg-emerald-50 transition-colors"
                             >Activate</button>
                           </div>
+                          </Teleport>
                         </td>
                       </tr>
                     </tbody>
@@ -687,7 +714,7 @@ async function setActiveState(item, nextActive) {
           </div>
 
           <!-- Inventory Alerts panel -->
-          <div class="lg:col-span-1 bg-white border border-slate-200 rounded-xl shadow-sm p-5 space-y-5">
+          <div class="bg-white border border-slate-200 rounded-xl shadow-sm p-5 space-y-5">
             <h2 class="text-sm font-bold text-slate-900">Inventory Alerts</h2>
 
             <div>
@@ -759,15 +786,19 @@ async function setActiveState(item, nextActive) {
             </div>
             <div>
               <label class="block text-xs font-semibold text-slate-500 mb-1.5">Initial Quantity</label>
-              <input v-model="receiveForm.initialQuantity" type="number" min="1" class="w-full text-sm rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-colors" />
+              <input v-model="receiveForm.initialQuantity" v-digits type="number" min="1" class="w-full text-sm rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-colors" />
             </div>
             <div>
               <label class="block text-xs font-semibold text-slate-500 mb-1.5">Minimum Stock</label>
-              <input v-model="receiveForm.minimumStock" type="number" min="0" class="w-full text-sm rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-colors" />
+              <input v-model="receiveForm.minimumStock" v-digits type="number" min="0" class="w-full text-sm rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-colors" />
             </div>
             <div>
               <label class="block text-xs font-semibold text-slate-500 mb-1.5">Expiration Date</label>
               <input v-model="receiveForm.expirationDate" type="date" class="w-full text-sm rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-colors" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-500 mb-1.5">Manufacturing Date <span class="font-normal text-slate-400">(optional)</span></label>
+              <input v-model="receiveForm.manufacturingDate" type="date" class="w-full text-sm rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-colors" />
             </div>
             <div>
               <label class="block text-xs font-semibold text-slate-500 mb-1.5">Received Date</label>
@@ -806,11 +837,15 @@ async function setActiveState(item, nextActive) {
             </div>
             <div>
               <label class="block text-xs font-semibold text-slate-500 mb-1.5">Minimum Stock</label>
-              <input v-model="editForm.minimumStock" type="number" min="0" class="w-full text-sm rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-colors" />
+              <input v-model="editForm.minimumStock" v-digits type="number" min="0" class="w-full text-sm rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-colors" />
             </div>
             <div>
               <label class="block text-xs font-semibold text-slate-500 mb-1.5">Expiration Date</label>
               <input v-model="editForm.expirationDate" type="date" class="w-full text-sm rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-colors" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-500 mb-1.5">Manufacturing Date <span class="font-normal text-slate-400">(optional)</span></label>
+              <input v-model="editForm.manufacturingDate" type="date" class="w-full text-sm rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-colors" />
             </div>
             <div class="sm:col-span-2">
               <label class="block text-xs font-semibold text-slate-500 mb-1.5">Supplier</label>
@@ -885,7 +920,8 @@ async function setActiveState(item, nextActive) {
               <div><p class="text-xs text-slate-500">Current Quantity</p><p class="text-sm font-medium text-slate-900">{{ selectedBatch.currentQuantity }}</p></div>
               <div><p class="text-xs text-slate-500">Minimum Stock</p><p class="text-sm font-medium text-slate-900">{{ selectedBatch.minimumStock }}</p></div>
               <div><p class="text-xs text-slate-500">Expiration Date</p><p class="text-sm font-medium text-slate-900">{{ formatDate(selectedBatch.expirationDate) }}</p></div>
-              <div class="col-span-2"><p class="text-xs text-slate-500">Received Date</p><p class="text-sm font-medium text-slate-900">{{ formatDate(selectedBatch.receivedDate) }}</p></div>
+              <div><p class="text-xs text-slate-500">Manufacturing Date</p><p class="text-sm font-medium text-slate-900">{{ selectedBatch.manufacturingDate ? formatDate(selectedBatch.manufacturingDate) : '—' }}</p></div>
+              <div><p class="text-xs text-slate-500">Received Date</p><p class="text-sm font-medium text-slate-900">{{ formatDate(selectedBatch.receivedDate) }}</p></div>
             </div>
           </div>
           <p class="text-xs text-slate-400">
@@ -895,7 +931,7 @@ async function setActiveState(item, nextActive) {
         </div>
 
         <div class="border-t border-slate-200 p-4 flex items-center gap-2 shrink-0">
-          <button @click="openEditModal(selectedBatch)" class="flex-1 text-sm font-semibold px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors">Edit Batch</button>
+          <button @click="closeDrawer(); openEditModal(selectedBatch)" class="flex-1 text-sm font-semibold px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors">Edit Batch</button>
           <button @click="closeDrawer" class="text-sm font-semibold px-4 py-2 rounded-lg text-slate-500 hover:bg-slate-50 transition-colors">Close</button>
         </div>
       </aside>
@@ -912,4 +948,4 @@ async function setActiveState(item, nextActive) {
 @media (prefers-reduced-motion: reduce) {
   * { transition-duration: 0.01ms !important; }
 }
-</style>
+</style>

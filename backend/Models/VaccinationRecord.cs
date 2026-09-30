@@ -33,11 +33,10 @@ namespace AndroidWebAPI.Models
 
         public string? NurseObservation { get; set; }
 
-        public string? DoctorDiagnosis { get; set; }
-
-        public Guid? DoctorDiagnosedByUserID { get; set; }
-
-        public DateTime? DoctorDiagnosedAt { get; set; }
+        // Where the dose was given ("Left thigh", "Right upper arm",
+        // "Mouth (oral)"...), so a later swelling can be traced to the
+        // vaccine (asked for by City Hall). Null for older/Yellow Book doses.
+        public string? InjectionSite { get; set; }
 
         // Completed / Cancelled / Deferred
         public string Status { get; set; } = "Completed";
@@ -64,8 +63,5 @@ namespace AndroidWebAPI.Models
 
         [ForeignKey(nameof(AdministeredByUserID))]
         public virtual User? AdministeredBy { get; set; }
-
-        [ForeignKey(nameof(DoctorDiagnosedByUserID))]
-        public virtual User? DoctorDiagnosedBy { get; set; }
     }
 }

@@ -180,12 +180,22 @@ namespace AndroidWebAPI.Data
             c.PlaceOfBirth,
             c.Sex,
             c.Barangay,
+            c.FamilyNo,
             c.Address,
             c.HealthCenter,
+            c.BirthWeight,
+            c.BirthHeight,
 
             cpr.RelationshipType,
             cpr.IsPrimaryContact,
-            cpr.CanReceiveNotifications
+            cpr.CanReceiveNotifications,
+
+            -- Everyone linked to the child: 'Maria Santos (Mother); Rosario Santos (Grandmother)'
+            (SELECT STRING_AGG(gp.FirstName + ' ' + gp.LastName + ' (' + g.RelationshipType + ')', '; ')
+                    WITHIN GROUP (ORDER BY g.IsPrimaryContact DESC, gp.FirstName)
+             FROM dbo.ChildParentRelationship g
+             JOIN dbo.Parents gp ON gp.ParentID = g.ParentID
+             WHERE g.ChildID = c.ChildID AND g.Status = 'Active') AS Guardians
 
         FROM dbo.Parents p
 
@@ -223,6 +233,7 @@ public async Task<Parent> CreateAsync(Parent parent)
             PasswordHash,
             MustChangePassword,
             TemporaryPasswordExpiresAt,
+            ConsentRecordedAt,
             CreatedAt,
             UpdatedAt
         )
@@ -239,6 +250,7 @@ public async Task<Parent> CreateAsync(Parent parent)
             @PasswordHash,
             @MustChangePassword,
             @TemporaryPasswordExpiresAt,
+            @ConsentRecordedAt,
             GETDATE(),
             GETDATE()
         )";

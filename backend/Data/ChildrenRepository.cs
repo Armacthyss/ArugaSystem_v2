@@ -59,6 +59,7 @@ namespace AndroidWebAPI.Data
                 PlaceOfBirth = dto.PlaceOfBirth ?? string.Empty,
                 Sex = dto.Sex ?? string.Empty,
                 Barangay = dto.Barangay,
+                FamilyNo = string.IsNullOrWhiteSpace(dto.FamilyNo) ? null : dto.FamilyNo.Trim(),
                 Address = dto.Address ?? string.Empty,
                 HealthCenter = dto.HealthCenter ?? string.Empty,
                 Allergies = dto.Allergies,
@@ -107,6 +108,8 @@ namespace AndroidWebAPI.Data
             if (child == null)
                 return null;
 
+            bool birthDateChanged = child.BirthDate.Date != dto.BirthDate.Date;
+
             child.FirstName = dto.FirstName;
             child.MiddleName = dto.MiddleName ?? string.Empty;
             child.LastName = dto.LastName;
@@ -114,6 +117,7 @@ namespace AndroidWebAPI.Data
             child.PlaceOfBirth = dto.PlaceOfBirth ?? string.Empty;
             child.Sex = dto.Sex ?? string.Empty;
             child.Barangay = dto.Barangay;
+            child.FamilyNo = string.IsNullOrWhiteSpace(dto.FamilyNo) ? null : dto.FamilyNo.Trim();
             child.Address = dto.Address ?? string.Empty;
             child.HealthCenter = dto.HealthCenter ?? string.Empty;
             child.Allergies = dto.Allergies;
@@ -122,6 +126,10 @@ namespace AndroidWebAPI.Data
             child.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
+
+            // A corrected birth date moves every dose that hasn't been given yet
+            if (birthDateChanged)
+                await _timelineRepository.RescheduleChildAsync(childId);
 
             return child;
         }

@@ -18,10 +18,7 @@ namespace AndroidWebAPI.DTOs
 
         public string? NurseObservation { get; set; }
 
-        public string? DoctorDiagnosis { get; set; }
-
-        public Guid? DoctorDiagnosedByUserID { get; set; }
-
-        public DateTime? DoctorDiagnosedAt { get; set; }
+        // "Left thigh", "Right upper arm", "Mouth (oral)"... (Services/InjectionSites.cs)
+        public string? InjectionSite { get; set; }
     }
 }

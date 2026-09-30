@@ -12,7 +12,10 @@
         <span class="text-xl shrink-0">{{ child.sex === 'Female' ? '👧' : '👶' }}</span>
         <div class="min-w-0">
           <p class="text-xs font-bold text-slate-800 leading-tight truncate">{{ child.firstName }} {{ child.lastName }}</p>
-          <p class="text-[9px] text-slate-400 font-medium mt-0.5">ID: #{{ child.childID.substring(0, 8) }}</p>
+          <!-- Leveriza knows families by Family No. and Barangay, not a system ID -->
+          <p v-if="child.familyNo || child.barangay" class="text-[9px] text-slate-400 font-medium mt-0.5">
+            <span v-if="child.familyNo">Family No. {{ child.familyNo }}</span><span v-if="child.familyNo && child.barangay"> · </span><span v-if="child.barangay">Brgy. {{ child.barangay }}</span>
+          </p>
         </div>
       </button>
     </div>

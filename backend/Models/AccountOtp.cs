@@ -4,20 +4,21 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace AndroidWebAPI.Models
 {
-    [Table("AccountOtps")]
+    // One-time codes sent to an account (Forgot Password). Only the BCrypt
+    // hash of the code is stored, never the code itself.
+    [Table("AccountOTPs")]
     public class AccountOtp
     {
         [Key]
         public Guid OTPID { get; set; }
 
-        public Guid? ParentID { get; set; }
-
-        public Guid? UserID { get; set; }
+        public Guid AccountID { get; set; }
 
         [Required]
         [MaxLength(255)]
-        public string OTPCodeHash { get; set; } = string.Empty;
+        public string OTPHash { get; set; } = string.Empty;
 
+        // "PasswordReset"
         [Required]
         [MaxLength(50)]
         public string Purpose { get; set; } = string.Empty;
@@ -26,17 +27,12 @@ namespace AndroidWebAPI.Models
 
         public bool IsUsed { get; set; } = false;
 
-        public int AttemptCount { get; set; } = 0;
+        // Wrong guesses so far; the code stops working after 5.
+        public int Attempts { get; set; } = 0;
 
         public DateTime CreatedAt { get; set; }
 
-        public DateTime? UsedAt { get; set; }
-
-        // Navigation properties
-        [ForeignKey(nameof(ParentID))]
-        public virtual Parent? Parent { get; set; }
-
-        [ForeignKey(nameof(UserID))]
-        public virtual User? User { get; set; }
+        [ForeignKey(nameof(AccountID))]
+        public virtual Account? Account { get; set; }
     }
 }

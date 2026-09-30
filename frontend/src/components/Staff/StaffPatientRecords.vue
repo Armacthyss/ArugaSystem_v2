@@ -1,18 +1,25 @@
 <script setup>
-import { ref, reactive, computed, watch, onMounted, h } from "vue";
+import { API_ORIGIN } from '@/utils/apiBase'
+import { ref, reactive, computed, watch, onMounted, onUnmounted, h } from "vue";
 import { useRoute } from "vue-router";
 import {
   Users, Syringe, Search,
-  UserPlus, Eye, Pencil, Link2, KeyRound, Ban, Archive as ArchiveIcon,
+  UserPlus, Eye, Pencil, Link2, KeyRound, Ban,
   MoreHorizontal, X, MapPin, Phone, Mail, Baby, Check,
   ArrowRightLeft, UserCircle2, Star, ShieldCheck, Trash2, AlertTriangle,
 } from "lucide-vue-next";
 import axios from "axios";
-import { addDays, isMonday, isWednesday, isFriday } from "date-fns";
+
 import StaffSidebar from "./StaffSidebar.vue";
 import StaffTopbar from "./StaffTopbar.vue";
+import PrivacyConsentCheckbox from "@/components/Shared/PrivacyConsentCheckbox.vue";
+import { barangayChoices, isServedBarangay, BARANGAY_HINT } from "@/utils/barangays";
+import { toISODate } from "@/utils/format";
+import { showAlert } from "@/utils/dialog";
 
 const route = useRoute();
+// Birth dates and Yellow Book doses can't be in the future
+const todayISO = toISODate();
 
 onMounted(() => {
     loadAll();
@@ -32,12 +39,13 @@ onMounted(() => {
    have a shared axios instance with baseURL / auth headers configured, 
    swap this `axios` import for that instance.)
 ========================================================================= */
-const API_BASE = "http://localhost:57147/api";
+const API_BASE = `${API_ORIGIN}/api`;
 const api = {
   getAllParents:                ()            => axios.get(`${API_BASE}/Parents/all`).then(r => r.data),
   createParent:                 (payload)     => axios.post(`${API_BASE}/Parents`, payload).then(r => r.data),
   updateParent:                 (id, payload) => axios.put(`${API_BASE}/Parents/${id}`, payload).then(r => r.data),
   getAllChildren:               ()            => axios.get(`${API_BASE}/Children/all`).then(r => r.data),
+  getChildrenOverview:          ()            => axios.get(`${API_BASE}/Children/overview`).then(r => r.data),
   getChildrenByParent:          (parentId)    => axios.get(`${API_BASE}/Children/parent/${parentId}`).then(r => r.data),
   createChild:                  (payload)     => axios.post(`${API_BASE}/Children`, payload).then(r => r.data),
   updateChild:                  (id, payload) => axios.put(`${API_BASE}/Children/${id}`, payload).then(r => r.data),
@@ -50,11 +58,17 @@ const api = {
   getRelationshipsByParent:     (parentId)    => axios.get(`${API_BASE}/ChildParentRelationships/parent/${parentId}`).then(r => r.data),
   createRelationship:           (payload)     => axios.post(`${API_BASE}/ChildParentRelationships`, payload).then(r => r.data),
   deleteRelationship:           (relationshipId) => axios.delete(`${API_BASE}/ChildParentRelationships/${relationshipId}`).then(r => r.data),
+  makePrimaryContact:           (relationshipId) => axios.patch(`${API_BASE}/ChildParentRelationships/${relationshipId}/primary`).then(r => r.data),
+  setReminderRecipients:        (childId, mode)  => axios.patch(`${API_BASE}/ChildParentRelationships/child/${childId}/notifications`, { mode }).then(r => r.data),
+
+  // A parent's portal login (AccountController; staff may change parent logins only)
+  setAccountStatus:             (accountId, status) => axios.patch(`${API_BASE}/accounts/${accountId}/status`, { status }).then(r => r.data),
+  resetAccountPassword:         (accountId)   => axios.post(`${API_BASE}/accounts/${accountId}/reset-password`).then(r => r.data),
 };
 
 /* ---------- tiny render-fn components (badge / avatar markup, used everywhere) ---------- */
-const statusStyle = { Active:"bg-emerald-50 text-emerald-700", Inactive:"bg-stone-100 text-stone-600", Pending:"bg-amber-50 text-amber-700", Archived:"bg-rose-50 text-rose-700" };
-const statusDot   = { Active:"bg-emerald-600", Inactive:"bg-stone-400", Pending:"bg-amber-500", Archived:"bg-rose-600" };
+const statusStyle = { Active:"bg-emerald-50 text-emerald-700", Inactive:"bg-stone-100 text-stone-600", Pending:"bg-amber-50 text-amber-700", Archived:"bg-rose-50 text-rose-700", "No Login":"bg-sky-50 text-sky-700" };
+const statusDot   = { Active:"bg-emerald-600", Inactive:"bg-stone-400", Pending:"bg-amber-500", Archived:"bg-rose-600", "No Login":"bg-sky-500" };
 const vaccStyle   = { "Fully Vaccinated":"bg-emerald-50 text-emerald-700", "In Progress":"bg-amber-50 text-amber-700", Delayed:"bg-rose-50 text-rose-700", Upcoming:"bg-sky-50 text-sky-700" };
 const avatarSize  = { sm:"h-9 w-9 text-[11px]", md:"h-10 w-10 text-[11px]", lg:"h-14 w-14 text-[15px]" };
 
@@ -113,174 +127,68 @@ function calculateAge(birth) {
 }
 function toDateInputValue(iso) {
   if (!iso) return "";
+  // "2026-07-22T00:00:00" -> "2026-07-22". Don't go through toISOString():
+  // that converts to UTC and shifts Philippine dates back one day.
+  if (/^\d{4}-\d{2}-\d{2}/.test(String(iso))) return String(iso).slice(0, 10);
   const d = new Date(iso);
-  return isNaN(d) ? String(iso).slice(0,10) : d.toISOString().slice(0,10);
+  return isNaN(d) ? "" : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 const mapParent = (p) => ({
-  id:p.parentID, initials:`${p.firstName[0]}${p.lastName[0]}`.toUpperCase(), name:`${p.firstName} ${p.lastName}`,
-  relationship:"Parent", contact:p.contactNo, email:p.email, username:p.email.split("@")[0],
-  // NOTE: ParentsController has no Status field/endpoint — hardcoded until the API exposes one.
-  status:"Active", address:p.address, barangay:p.barangayNo,
+  id:p.parentID, initials:`${p.firstName?.[0] || ""}${p.lastName?.[0] || ""}`.toUpperCase(), name:`${p.firstName} ${p.lastName}`,
+  // A contact-only guardian (no portal login) has no email
+  relationship:"Parent", contact:p.contactNo, email:p.email || "", username:p.username || (p.email || "").split("@")[0] || "—",
+  // Portal login: Active / Inactive (deactivated), or "No Login" for a contact-only guardian
+  accountId:p.accountID || null, status:p.accountStatus || "Active", address:p.address, barangay:p.barangayNo,
   raw:p, // original API record, kept so edits that don't touch every field don't lose data
 });
-// ── Vaccine master (DOH schedule) — duplicated per-page, see HARD RULE 1 ───
-// Ported from Scheduled.vue (parent side) so "next vaccine due" is computed
-// identically here for staff. Keep in sync with that file if the schedule
-// ever changes.
-const VACCINE_MASTER = [
-  { vaccineId: 5,  name: 'BCG Vaccine',                      doses: [{ n: 1, gap: 0   }] },
-  { vaccineId: 6,  name: 'Hepatitis B Vaccine',              doses: [{ n: 1, gap: 0   }] },
-  { vaccineId: 7,  name: 'Pentavalent (DPT-Hep B-HIB)',      doses: [{ n: 1, gap: 45  }, { n: 2, gap: 28 }, { n: 3, gap: 28 }] },
-  { vaccineId: 8,  name: 'Oral Polio Vaccine (OPV)',         doses: [{ n: 1, gap: 45  }, { n: 2, gap: 28 }, { n: 3, gap: 28 }] },
-  { vaccineId: 9,  name: 'Inactivated Polio Vaccine (IPV)',  doses: [{ n: 1, gap: 105 }, { n: 2, gap: 165}] },
-  { vaccineId: 10, name: 'Pneumococcal Conj. Vaccine (PCV)', doses: [{ n: 1, gap: 45  }, { n: 2, gap: 28 }, { n: 3, gap: 28 }] },
-  { vaccineId: 11, name: 'MMR Vaccine',                      doses: [{ n: 1, gap: 270 }, { n: 2, gap: 90 }] },
-];
 
-function snapToClinicDay(date) {
-  let d = new Date(date);
-  while (!(isMonday(d) || isWednesday(d) || isFriday(d))) d = addDays(d, 1);
-  return d;
-}
+// "Next Vaccine" and the status badge come from GET /api/Children/overview,
+// i.e. the child's real vaccination timeline (the same schedule parents and
+// health workers see, recalculated after every dose), instead of a copy of
+// the DOH schedule computed here in the browser.
+const OVERVIEW_STATUS = { "Partially Vaccinated": "In Progress" };
 
-// Same cascade math as Scheduled.vue's computedVaccineList, but callable
-// per-child in a loop (that file's version is a Vue `computed` bound to a
-// single selectedChild, which doesn't fit mapping a whole list here).
-function computeVaccineList(birthDateRaw, completedRecords) {
-  if (!birthDateRaw) return [];
-  const birth = new Date(birthDateRaw);
-  const result = [];
-
-  for (const vaccine of VACCINE_MASTER) {
-    let prevActualDate = null;
-    let prevOriginalDate = null;
-
-    for (const dose of vaccine.doses) {
-      const record = completedRecords.find(r =>
-        Number(r.vaccineID ?? r.vaccineId) === vaccine.vaccineId &&
-        Number(r.doseNumber ?? r.DoseNumber) === dose.n &&
-        r.status === 'Completed' &&
-        r.dateAdministered
-      );
-
-      const originalDueDate = dose.n === 1
-        ? snapToClinicDay(addDays(birth, dose.gap))
-        : snapToClinicDay(addDays(prevOriginalDate ?? birth, dose.gap));
-
-      let scheduledDate;
-      if (record) {
-        scheduledDate = new Date(record.dateAdministered);
-      } else if (dose.n === 1) {
-        scheduledDate = snapToClinicDay(addDays(birth, dose.gap));
-      } else {
-        const base = prevActualDate ?? prevOriginalDate ?? birth;
-        scheduledDate = snapToClinicDay(addDays(base, dose.gap));
-      }
-
-      prevOriginalDate = originalDueDate;
-      prevActualDate = record ? new Date(record.dateAdministered) : null;
-
-      result.push({
-        vaccineId: vaccine.vaccineId,
-        name: vaccine.name,
-        doseNumber: dose.n,
-        scheduledDate,
-        isCompleted: !!record,
-      });
-    }
-  }
-  return result;
-}
-
-// Derives the table's "Next Vaccine" text and "Vaccination Status" badge
-// from the same per-dose list the calendar/detail view uses, instead of
-// the previous hardcoded "Upcoming" / "—" stubs.
-function deriveVaccineSummary(birthDateRaw, completedRecords) {
-  const list = computeVaccineList(birthDateRaw, completedRecords);
-  if (list.length === 0) return { nextVaccine: "—", vaccStatus: "Upcoming" };
-
-  const pending = list.filter(d => !d.isCompleted);
-  const completedCount = list.length - pending.length;
-
-  if (pending.length === 0) {
-    return { nextVaccine: "—", vaccStatus: "Fully Vaccinated" };
-  }
-
-  const next = pending.reduce((a, b) => (a.scheduledDate <= b.scheduledDate ? a : b));
-  const nextVaccine = `${next.name} (Dose ${next.doseNumber}) · ${next.scheduledDate.toLocaleDateString("en-US",{year:"numeric",month:"short",day:"numeric"})}`;
-
-  const today = new Date();
-  const isOverdue = pending.some(d => d.scheduledDate < today);
-  const vaccStatus = isOverdue ? "Delayed" : (completedCount > 0 ? "In Progress" : "Upcoming");
-
-  return { nextVaccine, vaccStatus };
-}
-
-const mapChild = (c, completedRecords = []) => {
+const mapChild = (c, overview = null) => {
   const birth = new Date(c.birthDate);
-  const { nextVaccine, vaccStatus } = deriveVaccineSummary(c.birthDate, completedRecords);
+  const vaccStatus = OVERVIEW_STATUS[overview?.vaccinationStatus] || overview?.vaccinationStatus || "Upcoming";
+  const nextVaccine = overview?.nextVaccine
+    ? `${overview.nextVaccine} · ${new Date(overview.nextDueDate).toLocaleDateString("en-US",{year:"numeric",month:"short",day:"numeric"})}`
+    : "—";
   return {
     id:c.childID, name:`${c.firstName} ${c.middleName||""} ${c.lastName}`.trim(),
     birthDate:birth.toLocaleDateString("en-US",{year:"numeric",month:"short",day:"numeric"}),
     birthDateRaw:c.birthDate, // ISO value straight from the API, used for editing/saving
     birthPlace:c.placeOfBirth||"—", age:calculateAge(birth), sex:c.sex||"—",
     height:c.birthHeight?`${c.birthHeight} cm`:"—", weight:c.birthWeight?`${c.birthWeight} kg`:"—",
-    // vaccStatus/nextVaccine now computed from real VaccinationRecords via
-    // the same DOH-schedule cascade Scheduled.vue uses (see deriveVaccineSummary above).
-    vaccStatus, nextVaccine, status:"Active", address:c.address||"—", barangay:c.barangay||"—", notifyMode:"primary",
+    allergies:c.allergies||"",
+    existingConditions:c.existingConditions||"",
+    familyNo:c.familyNo||"",
+    vaccStatus, nextVaccine, status:"Active", address:c.address||"—", barangay:c.barangay||"—",
     raw:c, // original API record, kept so edits that don't touch every field don't lose data
   };
 };
 
 
 async function loadAll() {
-    console.log("loadAll started");
-
     isLoading.value = true;
 
     try {
-        const [pd, cd] = await Promise.all([
+        // One request for every child's schedule summary (not one per child)
+        const [pd, cd, ov] = await Promise.all([
             api.getAllParents(),
-            api.getAllChildren()
+            api.getAllChildren(),
+            api.getChildrenOverview().catch(() => []),
         ]);
-
-        console.log("typeof parents:", typeof pd);
-        console.log("parents raw:", pd);
-        console.log("Array?", Array.isArray(pd));
-
-        console.log("typeof children:", typeof cd);
-        console.log("children raw:", cd);
-        console.log("Array?", Array.isArray(cd));
 
         parents.value = Array.isArray(pd)
             ? pd.map(mapParent)
             : [];
 
         const childList = Array.isArray(cd) ? cd : [];
+        const overviewById = new Map((Array.isArray(ov) ? ov : []).map(o => [String(o.childID).toLowerCase(), o]));
 
-        // One vaccination-history call per child — there's no bulk
-        // "next dose for all children" endpoint yet. Fine at current
-        // patient volume; worth revisiting if this list grows a lot.
-        // A failed fetch for one child (e.g. no records yet) shouldn't
-        // block the rest of the table from loading.
-        const recordsPerChild = await Promise.all(
-            childList.map(c =>
-                api.getChildVaccinations(c.childID)
-                    .then(records => Array.isArray(records) ? records : [])
-                    .catch(() => [])
-            )
-        );
-
-        // Normalize field names the same way Scheduled.vue does — the
-        // backend returns vaccinationDate, not dateAdministered.
-        children.value = childList.map((c, i) => {
-            const normalizedRecords = recordsPerChild[i].map(r => ({
-                ...r,
-                dateAdministered: r.dateAdministered ?? r.vaccinationDate ?? null,
-            }));
-            return mapChild(c, normalizedRecords);
-        });
+        children.value = childList.map(c => mapChild(c, overviewById.get(String(c.childID).toLowerCase())));
 
         // Load actual parent-child links after children are available.
         await loadRelationships();
@@ -366,14 +274,28 @@ const childrenOf = (parent) => relationshipsOfParent(parent)
   }))
   .filter(x => x.child);
 
-function setPrimary(childId, relId) {
-  // The current backend does not yet expose a PUT/PATCH endpoint for
-  // changing IsPrimaryContact. Keep this as a local UI change for now.
-  relationships.value.forEach(r => {
-    if (r.childId === childId && r.status === "Active") {
-      r.isPrimary = r.id === relId;
-    }
-  });
+async function setPrimary(childId, relId) {
+  try {
+    await api.makePrimaryContact(relId);
+    await loadRelationships();
+  } catch (e) {
+    showAlert({ title: "Couldn't change the primary contact", message: e.response?.data?.message || e.message, tone: "error" });
+  }
+}
+
+// Reminders go to every linked account unless some links are switched off,
+// in which case only the primary contact gets them (CanReceiveNotifications).
+const notifyModeOf = (child) =>
+  relationshipsOfChild(child).every(r => r.canReceiveNotifications) ? "all" : "primary";
+
+async function setNotifyMode(child, mode) {
+  if (notifyModeOf(child) === mode) return;
+  try {
+    await api.setReminderRecipients(child.id, mode);
+    await loadRelationships();
+  } catch (e) {
+    showAlert({ title: "Couldn't change who gets reminders", message: e.response?.data?.message || e.message, tone: "error" });
+  }
 }
 
 /* ============================= Summary cards (per tab) ============================= */
@@ -393,13 +315,14 @@ const childSummary = computed(() => [
 
 /* ============================= Search ============================= */
 const searchQuery = ref("");
+const searchTerm = () => searchQuery.value.trim().toLowerCase();
 const filteredParents = computed(() => {
-  const q = searchQuery.value.trim().toLowerCase();
-  return q ? parents.value.filter(p=>p.name.toLowerCase().includes(q)||p.id.toLowerCase().includes(q)||p.contact.includes(q)) : parents.value;
+  const q = searchTerm();
+  return q ? parents.value.filter(p=>p.name.toLowerCase().includes(q)||p.id.toLowerCase().includes(q)||(p.contact||"").includes(q)||(p.email||"").toLowerCase().includes(q)||String(p.barangay||"").toLowerCase().includes(q)) : parents.value;
 });
 const filteredChildren = computed(() => {
-  const q = searchQuery.value.trim().toLowerCase();
-  return q ? children.value.filter(c=>c.name.toLowerCase().includes(q)||c.id.toLowerCase().includes(q)) : children.value;
+  const q = searchTerm();
+  return q ? children.value.filter(c=>c.name.toLowerCase().includes(q)||c.familyNo.toLowerCase().includes(q)||String(c.barangay).toLowerCase().includes(q)||c.id.toLowerCase().includes(q)) : children.value;
 });
 
 /* ============================= Pagination ============================= */
@@ -469,7 +392,7 @@ function goToPage(n) {
 ========================================================================= */
 const parentColumns = [
   { key:"avatar", badge:"avatar" },
-  { key:"id", label:"Parent ID" },
+  { key:"barangay", label:"Barangay No.", muted:true, value:(p)=>p.barangay || "—" },
   { key:"name", label:"Full Name" },
   { key:"relationship", label:"Relationship", muted:true },
   { key:"contact", label:"Contact Number", muted:true },
@@ -479,7 +402,9 @@ const parentColumns = [
 ];
 const childColumns = [
   { key:"avatar", badge:"childIcon" },
-  { key:"id", label:"Patient ID" },
+  // The health center identifies families by Family No. and Barangay, not by a system ID
+  { key:"familyNo", label:"Family No.", value:(c)=>c.familyNo || "—" },
+  { key:"barangay", label:"Barangay", muted:true },
   { key:"name", label:"Child Name" },
   { key:"age", label:"Age", muted:true },
   { key:"sex", label:"Sex", muted:true },
@@ -490,24 +415,92 @@ const childColumns = [
 ];
 
 /* -- row "..." action menus, same idea: config array instead of two hand-written dropdowns -- */
-const parentMenuItems = [
+// Login actions only apply to a parent who has a portal login.
+const parentMenuItems = (p) => [
   { icon:Baby, label:"Register Child", action:(p)=>openRegisterModal("child", { parent:p }) },
   { icon:Link2, label:"Link Existing Child", action:(p)=>openPicker("linkChild",{parent:p}) },
-  { divider:true },
-  { icon:KeyRound, label:"Reset Password", action:()=>{} },
-  { icon:Ban, label:"Deactivate", class:"text-amber-700 hover:bg-amber-50", action:()=>{} },
-  { icon:ArchiveIcon, label:"Archive", class:"text-rose-700 hover:bg-rose-50", action:()=>{} },
+  ...(p.accountId ? [
+    { divider:true },
+    { icon:KeyRound, label:"Reset Password", action:(p)=>askResetPassword(p) },
+    p.status === "Inactive"
+      ? { icon:ShieldCheck, label:"Reactivate Login", class:"text-emerald-700 hover:bg-emerald-50", action:(p)=>askSetLoginActive(p, true) }
+      : { icon:Ban, label:"Deactivate Login", class:"text-amber-700 hover:bg-amber-50", action:(p)=>askSetLoginActive(p, false) },
+  ] : []),
 ];
 const childMenuItems = [
   { icon:Link2, label:"Link Parent / Guardian", action:(c)=>openPicker("linkParent",{child:c}) },
   { icon:UserCircle2, label:"Manage Linked Accounts", action:(c)=>viewChild(c) },
   { icon:Syringe, label:"Add Historical Vaccination Records", action:(c)=>{ selectedChild.value=c; loadChildVaccinations(c.id); openHistoricalModal(); } },
-  { divider:true },
-  { icon:ArchiveIcon, label:"Archive", class:"text-rose-700 hover:bg-rose-50", action:()=>{} },
 ];
 
+// The tables scroll sideways, which cut the menu off, so the menu is drawn on
+// top of the page at the button's position (opening upward near the bottom).
 const actionsMenuOpenFor = ref(null);
-const toggleActionsMenu = (id) => { actionsMenuOpenFor.value = actionsMenuOpenFor.value===id ? null : id; };
+const actionsMenuStyle = ref({});
+const toggleActionsMenu = (id, event) => {
+  if (actionsMenuOpenFor.value === id) { actionsMenuOpenFor.value = null; return; }
+  const r = event.currentTarget.getBoundingClientRect();
+  const left = `${Math.max(8, r.right - 224)}px`;   // menu is w-56 (224px), right-aligned to the button
+  actionsMenuStyle.value = window.innerHeight - r.bottom < 240
+    ? { left, bottom: `${window.innerHeight - r.top + 6}px` }
+    : { left, top: `${r.bottom + 6}px` };
+  actionsMenuOpenFor.value = id;
+};
+const closeActionsMenu = () => { actionsMenuOpenFor.value = null; };
+onMounted(() => { window.addEventListener("scroll", closeActionsMenu, true); window.addEventListener("resize", closeActionsMenu); });
+onUnmounted(() => { window.removeEventListener("scroll", closeActionsMenu, true); window.removeEventListener("resize", closeActionsMenu); });
+
+/* ---- Parent login: deactivate / reactivate / reset password (confirm window) ---- */
+const accountDialog = ref(null); // { title, message, confirmLabel, danger, run, busy, error, result }
+
+function askSetLoginActive(p, active) {
+  accountDialog.value = {
+    title: active ? `Reactivate ${p.name}'s login?` : `Deactivate ${p.name}'s login?`,
+    message: active
+      ? "They'll be able to sign in to the parent portal again."
+      : "They won't be able to sign in to the parent portal until the login is reactivated. Their children's records, schedule and reminders stay as they are.",
+    confirmLabel: active ? "Reactivate" : "Deactivate",
+    danger: !active,
+    run: async () => {
+      await api.setAccountStatus(p.accountId, active);
+      await loadAll();
+      return { text: `${p.name}'s login is now ${active ? "active" : "deactivated"}.` };
+    },
+  };
+}
+
+// "It was also emailed to x and sent by text." (empty when neither went out)
+function sentNote(emailed, texted, email) {
+  if (emailed && texted) return `It was also emailed to ${email} and sent by text.`;
+  if (emailed) return `It was also emailed to ${email}.`;
+  if (texted) return "It was also sent to them by text.";
+  return "";
+}
+
+function askResetPassword(p) {
+  accountDialog.value = {
+    title: `Reset ${p.name}'s password?`,
+    message: "A temporary password is made and shown here. They must choose a new password the next time they sign in.",
+    confirmLabel: "Reset Password",
+    danger: false,
+    run: async () => {
+      const r = await api.resetAccountPassword(p.accountId);
+      const realEmail = p.email && !/@example\.com$|@demo\./i.test(p.email);
+      return {
+        text: sentNote(realEmail && r.emailed, r.texted, p.email) || "Give it to the parent; it wasn't emailed or texted.",
+        password: r.temporaryPassword,
+      };
+    },
+  };
+}
+
+async function runAccountDialog() {
+  const d = accountDialog.value;
+  d.busy = true; d.error = null;
+  try { d.result = await d.run(); }
+  catch (e) { d.error = e.response?.status === 403 ? "You're not allowed to change this account." : (e.response?.data?.message || e.message); }
+  finally { d.busy = false; }
+}
 
 /* ============================= View drawers ============================= */
 const showParentDrawer = ref(false);
@@ -568,6 +561,7 @@ async function submitHistoricalVaccinations() {
     if (!row.vaccineID) { m.error = "Every row needs a vaccine selected."; return; }
     if (!row.doseNumber || Number(row.doseNumber) <= 0) { m.error = "Dose number must be greater than 0."; return; }
     if (!row.vaccinationDate) { m.error = "Every row needs a vaccination date."; return; }
+    if (row.vaccinationDate > todayISO) { m.error = "A vaccination date can't be in the future."; return; }
   }
   // prevent obvious accidental duplicates: same vaccine + dose + date entered twice in this submission
   const seen = new Set();
@@ -632,8 +626,8 @@ const manageFromLinkedAccountsModal = () => { showLinkedAccountsModal.value=fals
    .child / .rel carry whatever context the caller had.
 ========================================================================= */
 const PICKER_CONFIG = {
-  linkChild:  { title:"Link Existing Child",   searchPlaceholder:"Search by Patient ID, Child Name, or Birth Date...", showPrimary:true },
-  linkParent: { title:"Link Parent / Guardian", searchPlaceholder:"Search by Parent ID, Name, Phone, or Email...",     showPrimary:true },
+  linkChild:  { title:"Link Existing Child",   searchPlaceholder:"Search by Child Name, Family No., or Birth Date...", showPrimary:true },
+  linkParent: { title:"Link Parent / Guardian", searchPlaceholder:"Search by Name, Phone, Email, or Barangay...",     showPrimary:true },
   transfer:   { title:"Transfer Guardian",      searchPlaceholder:"Search for a parent account...",                    showPrimary:false },
 };
 const picker = ref({
@@ -678,16 +672,16 @@ const pickerResults = computed(() => {
   if (s.mode==="linkChild") {
     const linked = s.parent ? relationshipsOfParent(s.parent).map(r=>r.childId) : [];
     const list = children.value.filter(c=>!linked.includes(c.id));
-    return q ? list.filter(c=>c.name.toLowerCase().includes(q)||c.id.toLowerCase().includes(q)||c.birthDate.toLowerCase().includes(q)) : list;
+    return q ? list.filter(c=>c.name.toLowerCase().includes(q)||c.familyNo.toLowerCase().includes(q)||c.birthDate.toLowerCase().includes(q)) : list;
   }
   if (s.mode==="linkParent") {
     const linked = s.child ? relationshipsOfChild(s.child).map(r=>r.parentId) : [];
     const list = parents.value.filter(p=>!linked.includes(p.id));
-    return q ? list.filter(p=>p.name.toLowerCase().includes(q)||p.id.toLowerCase().includes(q)||p.contact.includes(q)||p.email.toLowerCase().includes(q)) : list;
+    return q ? list.filter(p=>p.name.toLowerCase().includes(q)||(p.contact||"").includes(q)||(p.email||"").toLowerCase().includes(q)||String(p.barangay||"").includes(q)) : list;
   }
   if (s.mode==="transfer") {
     const list = parents.value.filter(p=>p.id!==s.rel?.parentId);
-    return q ? list.filter(p=>p.name.toLowerCase().includes(q)||p.id.toLowerCase().includes(q)||p.contact.includes(q)) : list;
+    return q ? list.filter(p=>p.name.toLowerCase().includes(q)||(p.contact||"").includes(q)||(p.email||"").toLowerCase().includes(q)) : list;
   }
   return [];
 });
@@ -739,6 +733,8 @@ async function confirmPicker() {
       if (freshChild) selectedChild.value = freshChild;
     }
 
+    // closePicker() won't close while a save is running, so finish it first
+    s.submitting = false;
     closePicker();
   } catch (e) {
     console.error("Error saving parent-child relationship:", e);
@@ -752,54 +748,81 @@ async function confirmPicker() {
    GENERIC EDIT MODAL — replaces Edit Parent / Edit Child. Fields v-model
    onto a working copy (editModal.item).
 ========================================================================= */
+// Names are edited as separate First / Middle / Last fields: splitting one
+// "Full Name" box on spaces broke two-word first names ("Mark Anthony").
 const EDIT_FIELDS = {
   parent: [
-    { key:"name", label:"Full Name" }, { key:"relationship", label:"Relationship", type:"select", options:relationshipOptions },
-    { key:"contact", label:"Contact Number" }, { key:"email", label:"Email" }, { key:"address", label:"Address" },
+    { key:"firstName", label:"First Name", group:"name" }, { key:"middleName", label:"Middle Name", group:"name" }, { key:"lastName", label:"Last Name", group:"name" },
+    { key:"contact", label:"Contact Number", group:"contact" }, { key:"barangay", label:"Barangay No.", type:"barangay", group:"contact" },
+    { key:"email", label:"Email" }, { key:"address", label:"Address" },
   ],
   child: [
     { key:"firstName", label:"First Name", group:"name" }, { key:"middleName", label:"Middle Name", group:"name" }, { key:"lastName", label:"Last Name", group:"name" },
-    { key:"birthDate", label:"Birth Date" },
-    { key:"height", label:"Birth Height (cm)", group:"metrics" }, { key:"weight", label:"Birth Weight (kg)", group:"metrics" }, { key:"address", label:"Address" },
+    { key:"birthDateInput", label:"Birth Date", type:"date", group:"birth" }, { key:"sex", label:"Sex", type:"select", options:["Male","Female"], group:"birth" },
+    { key:"familyNo", label:"Family No.", group:"family" }, { key:"barangayInput", label:"Barangay", type:"barangay", group:"family" },
+    { key:"height", label:"Birth Height (cm)", type:"number", group:"metrics" }, { key:"weight", label:"Birth Weight (kg)", type:"number", group:"metrics" },
+    { key:"allergies", label:"Allergies (leave blank if none)" },
+    { key:"address", label:"Address" },
   ],
 };
 const editModal = ref({ open:false, kind:null, item:null });
 function openEdit(kind, item) {
   const working = { ...item };
+  const raw = item.raw || {};
   if (kind === "child") {
-    // The child row's `.name` is a display-only concatenation of first/middle/last —
-    // editing that combined string and re-splitting it on save was corrupting names
-    // (middle name got duplicated on every save). Edit the three real parts instead,
-    // seeded from the original API record so nothing gets guessed from whitespace.
-    const raw = item.raw || {};
+    // Seed every field from the original API record, not from the display
+    // strings in the table ("50 cm", "—", "Jan 5, 2026").
     working.firstName = raw.firstName || "";
     working.middleName = raw.middleName || "";
     working.lastName = raw.lastName || "";
+    working.birthDateInput = toDateInputValue(raw.birthDate);
+    working.sex = raw.sex || "";
+    working.height = raw.birthHeight ?? "";
+    working.weight = raw.birthWeight ?? "";
+    working.allergies = raw.allergies || "";
+    working.familyNo = raw.familyNo || "";
+    working.barangayInput = raw.barangay == null ? "" : String(raw.barangay);
+    working.address = raw.address || "";
+  } else {
+    working.firstName = raw.firstName || "";
+    working.middleName = raw.middleName || "";
+    working.lastName = raw.lastName || "";
+    working.contact = raw.contactNo || "";
+    working.barangay = raw.barangayNo ? String(raw.barangayNo).trim() : "";
+    working.email = raw.email || "";
+    working.address = raw.address || "";
   }
   editModal.value = { open:true, kind, item:working };
   actionsMenuOpenFor.value = null;
 }
 
+const toNumberOrNull = (v) => (v === "" || v == null || isNaN(parseFloat(v)) ? null : parseFloat(v));
+
 async function submitEdit() {
   const kind = editModal.value.kind, item = editModal.value.item;
   try {
     if (kind==="parent") {
+      if (!item.firstName?.trim() || !item.lastName?.trim()) { error.value = "First and last name are required."; return; }
       await api.updateParent(item.id, {
-        firstName:item.name.split(" ")[0], lastName:item.name.split(" ").slice(1).join(" ")||"—",
-        email:item.email, contactNo:item.contact, address:item.address, barangayNo:item.barangay||"",
+        firstName:item.firstName.trim(), middleName:item.middleName?.trim() || "", lastName:item.lastName.trim(),
+        email:item.email?.trim() || null, contactNo:item.contact, address:item.address || "", barangayNo:item.barangay || "",
       });
     } else {
       const raw = item.raw || {};
+      if (!item.firstName?.trim() || !item.lastName?.trim()) { error.value = "First and last name are required."; return; }
+      if (!item.birthDateInput) { error.value = "Birth date is required."; return; }
       // UpdateChild (see ChildrenController) overwrites every column from the DTO, so fields this
       // form doesn't edit are re-sent from the last-known raw record to avoid wiping them out.
       await api.updateChild(item.id, {
-        firstName:item.firstName, middleName:item.middleName || "", lastName:item.lastName,
-        birthDate:item.birthDateRaw||raw.birthDate,
-        placeOfBirth:raw.placeOfBirth||"", sex:raw.sex||"", barangay:raw.barangay ?? null,
-        birthHeight:item.height !== "" && item.height != null ? parseFloat(item.height) : (raw.birthHeight ?? null),
-        birthWeight:item.weight !== "" && item.weight != null ? parseFloat(item.weight) : (raw.birthWeight ?? null),
-        address:item.address, healthCenter:raw.healthCenter||"",
-        motherName:raw.motherName||"", fatherName:raw.fatherName||"", guardianName:raw.guardianName||"",
+        firstName:item.firstName.trim(), middleName:item.middleName || "", lastName:item.lastName.trim(),
+        birthDate:item.birthDateInput,
+        placeOfBirth:raw.placeOfBirth||"", sex:item.sex || raw.sex || "",
+        barangay:item.barangayInput === "" || item.barangayInput == null ? null : parseInt(item.barangayInput, 10),
+        familyNo:item.familyNo?.trim() || null,
+        birthHeight:toNumberOrNull(item.height),
+        birthWeight:toNumberOrNull(item.weight),
+        allergies:item.allergies?.trim() || null,
+        address:item.address || "", healthCenter:raw.healthCenter||"",
       });
     }
     await loadAll();
@@ -854,14 +877,11 @@ function openRegisterModal(kind, ctx = {}) {
 const closeRegisterModal = () => { registerModal.value.open = false; };
 
 // ── PARENT FORM ─────────────────────────────────────────────────────
-const regParentForm = reactive({ GivenName:"", MiddleName:"", LastName:"", Email:"", ContactNo:"", BarangayNo:"", Address:"", Password:"", CreateLogin:true });
+const regParentForm = reactive({ GivenName:"", MiddleName:"", LastName:"", Email:"", ContactNo:"", BarangayNo:"", Address:"", CreateLogin:true, PrivacyConsent:false });
 // Letters/spaces/hyphens/apostrophes/periods only — blocks digits in name fields (allows names like "St. Clair", "O'Brien").
 const lettersOnlyInput = (field) => (e) => { regParentForm[field] = e.target.value.replace(/[^a-zA-Z\s.'-]/g, ""); };
-// Digits only — blocks letters in number fields (Contact No, Barangay No).
-const numbersOnlyInput = (field) => (e) => { regParentForm[field] = e.target.value.replace(/[^0-9]/g, ""); };
-const regParentPasswordValid = computed(() => !regParentForm.CreateLogin || (regParentForm.Password.length >= 8 && regParentForm.Password.length <= 16));
 function resetParentForm() {
-  Object.assign(regParentForm, { GivenName:"", MiddleName:"", LastName:"", Email:"", ContactNo:"", BarangayNo:"", Address:"", Password:"", CreateLogin:true });
+  Object.assign(regParentForm, { GivenName:"", MiddleName:"", LastName:"", Email:"", ContactNo:"", BarangayNo:"", Address:"", CreateLogin:true, PrivacyConsent:false });
   regChildSearch.value = "";
   regLinkedChildren.value = [];
 }
@@ -892,10 +912,12 @@ async function submitParentRegister() {
     error.value = "Please fill all required parent fields."; return;
   }
   if (regParentForm.CreateLogin) {
-    if (!regParentForm.Email || !regParentForm.Password) {
-      error.value = "Email and password are required to give this guardian a login."; return;
+    if (!regParentForm.Email) {
+      error.value = "Email is required to give this guardian a login."; return;
     }
-    if (!regParentPasswordValid.value) { error.value = "Password must be between 8 and 16 characters."; return; }
+  }
+  if (!regParentForm.PrivacyConsent) {
+    error.value = "The parent/guardian must agree to the Data Privacy Notice before they can be registered."; return;
   }
 
   registerSubmitting.value = true;
@@ -907,8 +929,11 @@ async function submitParentRegister() {
       contactNo: regParentForm.ContactNo,
       address: regParentForm.Address,
       barangayNo: regParentForm.BarangayNo,
-      password: regParentForm.CreateLogin ? regParentForm.Password : null,
+      // No password: the system makes a temporary one (same as the admin's
+      // Add User) and returns it once so staff can hand it to the parent.
+      password: null,
       createLogin: regParentForm.CreateLogin,
+      privacyConsent: regParentForm.PrivacyConsent,
     });
 
     // NOTE: assumes ParentsController's POST returns the created parent's
@@ -931,9 +956,23 @@ async function submitParentRegister() {
 
     await loadAll();
     closeRegisterModal();
+    if (created?.temporaryPassword) {
+      const realEmail = created.email && !/@example\.com$|@demo\./i.test(created.email);
+      accountDialog.value = {
+        result: {
+          password: created.temporaryPassword,
+          text: `Give this to ${created.firstName} ${created.lastName}. They sign in with ${created.email} and will choose their own password the first time.`
+            + " " + sentNote(realEmail && created.emailed, created.texted, created.email),
+        },
+      };
+    }
     if (linkFailures > 0) {
       error.value = null;
-      alert(`Parent registered, but ${linkFailures} child link(s) failed to save. You can link them from the parent's profile instead.`);
+      showAlert({
+        title: "Parent registered, but some children weren't linked",
+        message: `${linkFailures} child link(s) failed to save. You can link them from the parent's profile instead.`,
+        tone: "error",
+      });
     }
   } catch (e) {
     console.error("Error registering parent:", e);
@@ -1001,6 +1040,12 @@ function regLinkExistingParent(parent) {
   regChildForm[`${role}ID`] = parent.id;
   regChildForm[`${role}Email`] = parent.email;
   regParentSearch.value = "";
+  // Siblings share the family's Family No., barangay and address: fill
+  // them in from the parent (and an existing child) when still empty.
+  const sibling = relationshipsOfParent(parent).map(r => children.value.find(c => c.id === r.childId)).find(Boolean);
+  if (!regChildForm.FamilyNo && sibling?.familyNo) regChildForm.FamilyNo = sibling.familyNo;
+  if (!regChildForm.Barangay && parent.barangay && isServedBarangay(parent.barangay)) regChildForm.Barangay = String(parent.barangay).trim();
+  if (!regChildForm.Address && parent.address) regChildForm.Address = parent.address;
 }
 function regClearParentRole(role) {
   regChildForm[`${role}Name`] = ""; regChildForm[`${role}ID`] = null; regChildForm[`${role}Email`] = "";
@@ -1013,6 +1058,7 @@ function regClearParentRole(role) {
 async function submitChildRegister() {
   if (!regChildForm.FirstName || !regChildForm.LastName) { error.value = "Please enter the child's name."; return; }
   if (!regChildForm.BirthDate) { error.value = "Please enter a birth date."; return; }
+  if (regChildForm.BirthDate > todayISO) { error.value = "The birth date can't be in the future."; return; }
 
   const linkedParents = [];
   for (const role of ["Mother", "Father", "Guardian"]) {
@@ -1035,6 +1081,7 @@ async function submitChildRegister() {
       if (!row.vaccineID) { error.value = "Every prior vaccination row needs a vaccine selected."; return; }
       if (!row.doseNumber || Number(row.doseNumber) <= 0) { error.value = "Dose number must be greater than 0 for every prior vaccination row."; return; }
       if (!row.vaccinationDate) { error.value = "Every prior vaccination row needs a vaccination date."; return; }
+      if (row.vaccinationDate > todayISO || row.vaccinationDate < regChildForm.BirthDate) { error.value = "Prior vaccination dates must be between the birth date and today."; return; }
     }
     const seen = new Set();
     for (const row of rows) {
@@ -1056,10 +1103,8 @@ async function submitChildRegister() {
       birthDate: regChildForm.BirthDate, placeOfBirth: regChildForm.PlaceOfBirth || null, sex: regChildForm.Sex,
       barangay: regChildForm.Barangay ? Number(regChildForm.Barangay) : null,
       address: regChildForm.Address || null, healthCenter: regChildForm.HealthCenter || null,
-      // NOTE: Child model has no BirthHeight/BirthWeight columns on the backend yet (confirmed
-      // gap) — these are sent so the values flow through the moment those columns exist, but
-      // until then the backend will just silently ignore them (extra JSON properties on a DTO
-      // don't error). Don't remove this once the backend catches up.
+      familyNo: regChildForm.FamilyNo?.trim() || null,
+      // Saved to Children.BirthHeight (cm) / BirthWeight (kg)
       birthHeight: regChildForm.BirthHeight !== null && regChildForm.BirthHeight !== "" ? Number(regChildForm.BirthHeight) : null,
       birthWeight: regChildForm.BirthWeight !== null && regChildForm.BirthWeight !== "" ? Number(regChildForm.BirthWeight) : null,
       parents: linkedParents,
@@ -1072,12 +1117,14 @@ async function submitChildRegister() {
     // Records" from the child's row.
     const newChildID = createdChild?.childID;
     let priorVaccinationSaveFailed = false;
+    let priorVaccinationError = "";
     if (priorVaccinationsToSave.length > 0 && newChildID) {
       try {
         await api.saveHistoricalVaccinations({ childID: newChildID, vaccinations: priorVaccinationsToSave });
       } catch (e) {
         console.error("Error saving prior vaccinations at registration:", e);
         priorVaccinationSaveFailed = true;
+        priorVaccinationError = e.response?.data?.message || "";
       }
     } else if (priorVaccinationsToSave.length > 0) {
       priorVaccinationSaveFailed = true;
@@ -1087,7 +1134,12 @@ async function submitChildRegister() {
     closeRegisterModal();
     if (priorVaccinationSaveFailed) {
       error.value = null;
-      alert("Child registered, but the prior vaccination history couldn't be saved. Add it from the child's row via \"Add Historical Vaccination Records\" instead.");
+      showAlert({
+        title: "Child registered, but the Yellow Book doses weren't saved",
+        message: (priorVaccinationError ? `${priorVaccinationError}\n\n` : "")
+          + "Add them from the child's row with \"Add Historical Vaccination Records\".",
+        tone: "error",
+      });
     }
   } catch (e) {
     console.error("Error registering child:", e);
@@ -1126,7 +1178,7 @@ async function submitChildRegister() {
             </div>
             <div class="flex items-center gap-2 flex-1 min-w-[240px] rounded-xl border border-stone-200 px-3 py-2.5">
               <Search :size="16" class="text-stone-400 shrink-0" />
-              <input v-model="searchQuery" type="text" :placeholder="activeTab === 'parents' ? 'Search by name, parent ID, or contact...' : 'Search by name or patient ID...'" class="flex-1 text-[13px] outline-none placeholder:text-stone-400" />
+              <input v-model="searchQuery" type="text" :placeholder="activeTab === 'parents' ? 'Search by name, contact, email or barangay...' : 'Search by name, Family No. or barangay...'" class="flex-1 text-[13px] outline-none placeholder:text-stone-400" />
             </div>
             <div class="flex-1"></div>
             <button v-if="activeTab === 'parents'" @click="openRegisterModal('parent')" class="flex items-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-semibold text-white bg-emerald-700 hover:bg-emerald-800 shadow-sm"><UserPlus :size="16" /> Register Parent</button>
@@ -1154,15 +1206,20 @@ async function submitChildRegister() {
                     <div class="flex items-center gap-1 relative">
                       <button @click="viewParent(p)" class="p-1.5 rounded-lg hover:bg-stone-100" title="View Details"><Eye :size="15" class="text-stone-500" /></button>
                       <button @click="openEdit('parent', p)" class="p-1.5 rounded-lg hover:bg-stone-100" title="Edit Parent"><Pencil :size="15" class="text-stone-500" /></button>
-                      <button @click="toggleActionsMenu(p.id)" class="p-1.5 rounded-lg hover:bg-stone-100" title="More actions"><MoreHorizontal :size="15" class="text-stone-500" /></button>
-                      <div v-if="actionsMenuOpenFor === p.id" class="absolute right-0 top-9 z-10 w-56 rounded-xl border border-stone-200 bg-white shadow-lg py-1.5">
-                        <template v-for="(m,i) in parentMenuItems" :key="i">
-                          <div v-if="m.divider" class="my-1 border-t border-stone-100"></div>
-                          <button v-else @click="m.action(p)" class="flex w-full items-center gap-2.5 px-3.5 py-2 text-[12.5px] hover:bg-stone-50" :class="m.class || 'text-stone-700'">
-                            <component :is="m.icon" :size="15" :class="m.class ? '' : 'text-stone-500'" /> {{ m.label }}
-                          </button>
+                      <button @click="toggleActionsMenu(p.id, $event)" class="p-1.5 rounded-lg hover:bg-stone-100" title="More actions"><MoreHorizontal :size="15" class="text-stone-500" /></button>
+                      <Teleport to="body">
+                        <template v-if="actionsMenuOpenFor === p.id">
+                          <div class="fixed inset-0 z-40" @click="closeActionsMenu"></div>
+                          <div class="fixed z-50 w-56 rounded-xl border border-stone-200 bg-white shadow-lg py-1.5" :style="actionsMenuStyle">
+                            <template v-for="(m,i) in parentMenuItems(p)" :key="i">
+                              <div v-if="m.divider" class="my-1 border-t border-stone-100"></div>
+                              <button v-else @click="closeActionsMenu(); m.action(p)" class="flex w-full items-center gap-2.5 px-3.5 py-2 text-[12.5px] hover:bg-stone-50" :class="m.class || 'text-stone-700'">
+                                <component :is="m.icon" :size="15" :class="m.class ? '' : 'text-stone-500'" /> {{ m.label }}
+                              </button>
+                            </template>
+                          </div>
                         </template>
-                      </div>
+                      </Teleport>
                     </div>
                   </td>
                 </tr>
@@ -1199,15 +1256,20 @@ async function submitChildRegister() {
                     <div class="flex items-center gap-1 relative">
                       <button @click="viewChild(ch)" class="p-1.5 rounded-lg hover:bg-stone-100" title="View Child"><Eye :size="15" class="text-stone-500" /></button>
                       <button @click="openEdit('child', ch)" class="p-1.5 rounded-lg hover:bg-stone-100" title="Edit Child"><Pencil :size="15" class="text-stone-500" /></button>
-                      <button @click="toggleActionsMenu(ch.id)" class="p-1.5 rounded-lg hover:bg-stone-100" title="More actions"><MoreHorizontal :size="15" class="text-stone-500" /></button>
-                      <div v-if="actionsMenuOpenFor === ch.id" class="absolute right-0 top-9 z-10 w-56 rounded-xl border border-stone-200 bg-white shadow-lg py-1.5">
-                        <template v-for="(m,i) in childMenuItems" :key="i">
-                          <div v-if="m.divider" class="my-1 border-t border-stone-100"></div>
-                          <button v-else @click="m.action(ch)" class="flex w-full items-center gap-2.5 px-3.5 py-2 text-[12.5px] hover:bg-stone-50" :class="m.class || 'text-stone-700'">
-                            <component :is="m.icon" :size="15" :class="m.class ? '' : 'text-stone-500'" /> {{ m.label }}
-                          </button>
+                      <button @click="toggleActionsMenu(ch.id, $event)" class="p-1.5 rounded-lg hover:bg-stone-100" title="More actions"><MoreHorizontal :size="15" class="text-stone-500" /></button>
+                      <Teleport to="body">
+                        <template v-if="actionsMenuOpenFor === ch.id">
+                          <div class="fixed inset-0 z-40" @click="closeActionsMenu"></div>
+                          <div class="fixed z-50 w-56 rounded-xl border border-stone-200 bg-white shadow-lg py-1.5" :style="actionsMenuStyle">
+                            <template v-for="(m,i) in childMenuItems" :key="i">
+                              <div v-if="m.divider" class="my-1 border-t border-stone-100"></div>
+                              <button v-else @click="closeActionsMenu(); m.action(ch)" class="flex w-full items-center gap-2.5 px-3.5 py-2 text-[12.5px] hover:bg-stone-50" :class="m.class || 'text-stone-700'">
+                                <component :is="m.icon" :size="15" :class="m.class ? '' : 'text-stone-500'" /> {{ m.label }}
+                              </button>
+                            </template>
+                          </div>
                         </template>
-                      </div>
+                      </Teleport>
                     </div>
                   </td>
                 </tr>
@@ -1321,10 +1383,14 @@ async function submitChildRegister() {
             <div><p class="text-[16px] font-bold">{{ selectedChild.name }}</p><p class="text-[12px] text-stone-500">{{ selectedChild.age }} · {{ selectedChild.sex }}</p></div>
           </div>
           <div class="grid grid-cols-2 gap-3">
+            <div class="rounded-xl bg-stone-50 p-3"><p class="text-[10.5px] uppercase tracking-wide text-stone-500">Family No.</p><p class="text-[13px] font-medium mt-0.5">{{ selectedChild.familyNo || "—" }}</p></div>
+            <div class="rounded-xl bg-stone-50 p-3"><p class="text-[10.5px] uppercase tracking-wide text-stone-500">Barangay</p><p class="text-[13px] font-medium mt-0.5">{{ selectedChild.barangay }}</p></div>
             <div class="rounded-xl bg-stone-50 p-3"><p class="text-[10.5px] uppercase tracking-wide text-stone-500">Birth Date</p><p class="text-[13px] font-medium mt-0.5">{{ selectedChild.birthDate }}</p></div>
             <div class="rounded-xl bg-stone-50 p-3"><p class="text-[10.5px] uppercase tracking-wide text-stone-500">Birth Place</p><p class="text-[13px] font-medium mt-0.5">{{ selectedChild.birthPlace }}</p></div>
             <div class="rounded-xl bg-stone-50 p-3"><p class="text-[10.5px] uppercase tracking-wide text-stone-500">Birth Height</p><p class="text-[13px] font-medium mt-0.5">{{ selectedChild.height }}</p></div>
             <div class="rounded-xl bg-stone-50 p-3"><p class="text-[10.5px] uppercase tracking-wide text-stone-500">Birth Weight</p><p class="text-[13px] font-medium mt-0.5">{{ selectedChild.weight }}</p></div>
+            <div class="rounded-xl bg-stone-50 p-3 col-span-2"><p class="text-[10.5px] uppercase tracking-wide text-stone-500">Allergies</p><p class="text-[13px] font-medium mt-0.5" :class="selectedChild.allergies ? 'text-rose-700' : ''">{{ selectedChild.allergies || "None recorded" }}</p></div>
+            <div class="rounded-xl bg-stone-50 p-3 col-span-2"><p class="text-[10.5px] uppercase tracking-wide text-stone-500">Existing Conditions</p><p class="text-[13px] font-medium mt-0.5" :class="selectedChild.existingConditions ? 'text-rose-700' : ''">{{ selectedChild.existingConditions || "None recorded" }}</p></div>
           </div>
           <div class="border-t border-stone-200 pt-5">
             <p class="text-[13px] font-semibold mb-3">Vaccination Summary</p>
@@ -1347,6 +1413,7 @@ async function submitChildRegister() {
                   <th class="text-left font-semibold px-3 py-2 text-[10.5px] uppercase tracking-wide text-stone-500">Vaccine</th>
                   <th class="text-left font-semibold px-3 py-2 text-[10.5px] uppercase tracking-wide text-stone-500">Dose</th>
                   <th class="text-left font-semibold px-3 py-2 text-[10.5px] uppercase tracking-wide text-stone-500">Date</th>
+                  <th class="text-left font-semibold px-3 py-2 text-[10.5px] uppercase tracking-wide text-stone-500">Site</th>
                   <th class="text-left font-semibold px-3 py-2 text-[10.5px] uppercase tracking-wide text-stone-500">Status</th>
                 </tr></thead>
                 <tbody>
@@ -1354,6 +1421,7 @@ async function submitChildRegister() {
                     <td class="px-3 py-2">{{ v.vaccineName || vaccineNameById(v.vaccineID) }}</td>
                     <td class="px-3 py-2">{{ v.doseNumber }}</td>
                     <td class="px-3 py-2">{{ formatVaccDate(v.vaccinationDate) }}</td>
+                    <td class="px-3 py-2 whitespace-nowrap">{{ v.injectionSite || '—' }}</td>
                     <td class="px-3 py-2"><span class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium bg-emerald-50 text-emerald-700">{{ v.status }}</span></td>
                   </tr>
                 </tbody>
@@ -1368,8 +1436,8 @@ async function submitChildRegister() {
             <div class="rounded-xl bg-stone-50 p-3 mb-3">
               <p class="text-[11px] font-medium text-stone-500 mb-2">Vaccination reminders notify</p>
               <div class="flex items-center rounded-lg border border-stone-200 p-1 bg-white w-fit">
-                <button @click="selectedChild.notifyMode = 'primary'" class="rounded-md px-3 py-1.5 text-[12px] font-medium transition-colors" :class="selectedChild.notifyMode === 'primary' ? 'bg-emerald-700 text-white' : 'text-stone-500'">Primary Contact Only</button>
-                <button @click="selectedChild.notifyMode = 'all'" class="rounded-md px-3 py-1.5 text-[12px] font-medium transition-colors" :class="selectedChild.notifyMode === 'all' ? 'bg-emerald-700 text-white' : 'text-stone-500'">All Linked Accounts</button>
+                <button @click="setNotifyMode(selectedChild, 'primary')" class="rounded-md px-3 py-1.5 text-[12px] font-medium transition-colors" :class="notifyModeOf(selectedChild) === 'primary' ? 'bg-emerald-700 text-white' : 'text-stone-500'">Primary Contact Only</button>
+                <button @click="setNotifyMode(selectedChild, 'all')" class="rounded-md px-3 py-1.5 text-[12px] font-medium transition-colors" :class="notifyModeOf(selectedChild) === 'all' ? 'bg-emerald-700 text-white' : 'text-stone-500'">All Linked Accounts</button>
               </div>
             </div>
             <div class="space-y-2">
@@ -1424,7 +1492,7 @@ async function submitChildRegister() {
           <button v-for="item in pickerResults" :key="item.id" @click="picker.selected = item" class="flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-colors" :class="picker.selected?.id === item.id ? 'border-emerald-500 bg-emerald-50' : 'border-stone-200 hover:bg-stone-50'">
             <div v-if="picker.mode === 'linkChild'" class="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 shrink-0"><Baby :size="17" class="text-emerald-700" /></div>
             <Avatar v-else :text="item.initials" size="md" />
-            <div class="flex-1 min-w-0"><p class="text-[12.5px] font-semibold">{{ item.name }}</p><p class="text-[11px] text-stone-500">{{ item.id }} · <template v-if="picker.mode === 'linkChild'">Born {{ item.birthDate }}</template><template v-else>{{ item.contact }}</template></p></div>
+            <div class="flex-1 min-w-0"><p class="text-[12.5px] font-semibold">{{ item.name }}</p><p class="text-[11px] text-stone-500"><template v-if="picker.mode === 'linkChild'">Family No. {{ item.familyNo || "—" }} · Born {{ item.birthDate }}</template><template v-else>Brgy {{ item.barangay || "—" }} · {{ item.contact }}</template></p></div>
             <Check v-if="picker.selected?.id === item.id" :size="17" class="text-emerald-700 shrink-0" />
           </button>
           <p v-if="pickerResults.length === 0" class="text-[12.5px] text-stone-500 py-4 text-center">No matches found.</p>
@@ -1509,14 +1577,17 @@ async function submitChildRegister() {
             </div>
             <div class="space-y-1">
               <label class="text-[10px] font-bold text-stone-400 uppercase ml-1">Contact No</label>
-              <input :value="regParentForm.ContactNo" @input="numbersOnlyInput('ContactNo')($event)" type="text" inputmode="numeric" class="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:border-emerald-500 outline-none" />
+              <input v-model="regParentForm.ContactNo" v-digits type="text" class="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:border-emerald-500 outline-none" />
             </div>
           </div>
 
           <div class="grid grid-cols-3 gap-4">
             <div class="col-span-1 space-y-1">
               <label class="text-[10px] font-bold text-stone-400 uppercase ml-1">Barangay No</label>
-              <input :value="regParentForm.BarangayNo" @input="numbersOnlyInput('BarangayNo')($event)" type="text" inputmode="numeric" class="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:border-emerald-500 outline-none" />
+              <select v-model="regParentForm.BarangayNo" :title="BARANGAY_HINT" class="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:border-emerald-500 outline-none">
+                <option value="">Select barangay</option>
+                <option v-for="b in barangayChoices()" :key="b.value" :value="b.value">{{ b.label }}</option>
+              </select>
             </div>
             <div class="col-span-2 space-y-1">
               <label class="text-[10px] font-bold text-stone-400 uppercase ml-1">Complete Address</label>
@@ -1524,12 +1595,10 @@ async function submitChildRegister() {
             </div>
           </div>
 
+          <PrivacyConsentCheckbox v-model="regParentForm.PrivacyConsent" />
+
           <div v-if="regParentForm.CreateLogin" class="space-y-1">
-            <div class="flex justify-between items-center">
-              <label class="text-[10px] font-bold text-stone-400 uppercase ml-1">Password</label>
-              <span :class="regParentPasswordValid ? 'text-emerald-600' : 'text-rose-500'" class="text-[10px] font-bold">{{ regParentForm.Password.length }}/8-16 characters</span>
-            </div>
-            <input v-model="regParentForm.Password" type="password" maxlength="16" placeholder="8 to 16 characters" class="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:border-emerald-500 outline-none" />
+            <p class="text-[11px] text-stone-500 ml-1">A temporary password will be made automatically and shown after you register. Give it to the parent; they'll choose their own password the first time they sign in.</p>
           </div>
 
           <!-- LINK TO EXISTING CHILD (OPTIONAL) -->
@@ -1625,7 +1694,7 @@ async function submitChildRegister() {
             <div class="grid grid-cols-3 gap-4">
               <div class="space-y-1">
                 <label class="text-[11px] font-bold text-stone-500 ml-1">Birth Date</label>
-                <input v-model="regChildForm.BirthDate" type="date" class="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm outline-none" />
+                <input v-model="regChildForm.BirthDate" type="date" :max="todayISO" class="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm outline-none" />
               </div>
               <div class="space-y-1">
                 <label class="text-[11px] font-bold text-stone-500 ml-1">Sex</label>
@@ -1647,15 +1716,18 @@ async function submitChildRegister() {
             <div class="grid grid-cols-4 gap-4">
               <div class="space-y-1">
                 <label class="text-[11px] font-bold text-stone-500 ml-1">Birth Weight (kg)</label>
-                <input v-model="regChildForm.BirthWeight" type="number" step="0.01" class="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm outline-none" />
+                <input v-model="regChildForm.BirthWeight" v-digits.decimal type="number" step="0.01" min="0.5" max="7" placeholder="e.g. 3.2" class="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm outline-none" />
               </div>
               <div class="space-y-1">
                 <label class="text-[11px] font-bold text-stone-500 ml-1">Birth Height (cm)</label>
-                <input v-model="regChildForm.BirthHeight" type="number" step="0.1" class="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm outline-none" />
+                <input v-model="regChildForm.BirthHeight" v-digits.decimal type="number" step="0.1" min="25" max="65" placeholder="e.g. 50" class="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm outline-none" />
               </div>
               <div class="space-y-1">
                 <label class="text-[11px] font-bold text-stone-500 ml-1">Barangay</label>
-                <input v-model="regChildForm.Barangay" type="text" placeholder="e.g. 704" class="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm outline-none" />
+                <select v-model="regChildForm.Barangay" :title="BARANGAY_HINT" class="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm outline-none">
+                  <option value="">Select barangay</option>
+                  <option v-for="b in barangayChoices()" :key="b.value" :value="b.value">{{ b.label }}</option>
+                </select>
               </div>
               <div class="space-y-1">
                 <label class="text-[11px] font-bold text-stone-500 ml-1">Family No.</label>
@@ -1706,7 +1778,7 @@ async function submitChildRegister() {
                   </div>
                   <div>
                     <label class="text-[11px] font-medium text-stone-500">Vaccination Date</label>
-                    <input v-model="row.vaccinationDate" type="date" class="mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-[13px] outline-none focus:border-emerald-500" />
+                    <input v-model="row.vaccinationDate" type="date" :max="todayISO" class="mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-[13px] outline-none focus:border-emerald-500" />
                   </div>
                 </div>
               </div>
@@ -1721,7 +1793,7 @@ async function submitChildRegister() {
           <button @click="closeRegisterModal" class="rounded-xl px-4 py-2.5 text-[13px] font-medium text-stone-600 hover:bg-stone-50">Cancel</button>
           <button
             @click="registerModal.kind === 'parent' ? submitParentRegister() : submitChildRegister()"
-            :disabled="registerSubmitting || (registerModal.kind === 'parent' && !regParentPasswordValid)"
+            :disabled="registerSubmitting || (registerModal.kind === 'parent' && !regParentForm.PrivacyConsent)"
             class="rounded-xl px-5 py-2.5 text-[13px] font-semibold text-white bg-emerald-700 hover:bg-emerald-800 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {{ registerSubmitting ? 'Saving...' : `Register ${registerModal.kind === 'parent' ? 'Parent' : 'Child'}` }}
@@ -1744,9 +1816,17 @@ async function submitChildRegister() {
               <select v-if="f.type === 'select'" v-model="editModal.item[f.key]" class="mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-[13px] outline-none focus:border-emerald-500">
                 <option v-for="o in f.options" :key="o">{{ o }}</option>
               </select>
-              <input v-else v-model="editModal.item[f.key]" class="mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-[13px] outline-none focus:border-emerald-500" />
+              <select v-else-if="f.type === 'barangay'" v-model="editModal.item[f.key]" :title="BARANGAY_HINT" class="mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-[13px] outline-none focus:border-emerald-500">
+                <option value="">Select barangay</option>
+                <option v-for="b in barangayChoices(editModal.item[f.key])" :key="b.value" :value="b.value">{{ b.label }}</option>
+              </select>
+              <input v-else v-model="editModal.item[f.key]" :type="f.type || 'text'" :step="f.type === 'number' ? '0.01' : undefined" class="mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-[13px] outline-none focus:border-emerald-500" />
             </div>
           </div>
+          <p v-if="editModal.kind === 'child'" class="text-[11px] text-stone-400">
+            Changing the birth date moves the child's upcoming vaccine dates. The parent is notified of any change.
+          </p>
+          <div v-if="error" class="rounded-xl bg-rose-50 p-3 text-[12px] text-rose-700">{{ error }}</div>
         </div>
         <div class="flex items-center justify-end gap-3 px-6 py-4 border-t border-stone-200">
           <button @click="editModal.open = false" class="rounded-xl px-4 py-2.5 text-[13px] font-medium text-stone-600 hover:bg-stone-50">Cancel</button>
@@ -1787,7 +1867,7 @@ async function submitChildRegister() {
               </div>
               <div>
                 <label class="text-[11px] font-medium text-stone-500">Vaccination Date</label>
-                <input v-model="row.vaccinationDate" type="date" class="mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-[13px] outline-none focus:border-emerald-500" />
+                <input v-model="row.vaccinationDate" type="date" :max="todayISO" class="mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-[13px] outline-none focus:border-emerald-500" />
               </div>
             </div>
           </div>
@@ -1809,6 +1889,35 @@ async function submitChildRegister() {
           <button :disabled="historicalModal.submitting" @click="submitHistoricalVaccinations" class="rounded-xl px-5 py-2.5 text-[13px] font-semibold text-white bg-emerald-700 hover:bg-emerald-800 shadow-sm disabled:opacity-50">
             {{ historicalModal.submitting ? "Saving..." : "Save Historical Vaccinations" }}
           </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ======================= PARENT LOGIN: CONFIRM / RESULT ======================= -->
+    <div v-if="accountDialog" class="fixed inset-0 z-[60] flex items-center justify-center bg-stone-900/40 px-4" @click.self="!accountDialog.busy && (accountDialog = null)">
+      <div class="w-full max-w-md rounded-2xl bg-white shadow-xl">
+        <div class="px-6 pt-6 pb-4">
+          <p class="text-[15px] font-semibold">{{ accountDialog.result ? "Done" : accountDialog.title }}</p>
+          <template v-if="!accountDialog.result">
+            <p class="mt-2 text-[13px] text-stone-600">{{ accountDialog.message }}</p>
+            <p v-if="accountDialog.error" class="mt-3 rounded-xl bg-rose-50 p-3 text-[12px] text-rose-700">{{ accountDialog.error }}</p>
+          </template>
+          <template v-else>
+            <div v-if="accountDialog.result.password" class="mt-3 rounded-xl bg-stone-50 border border-stone-200 p-4 text-center">
+              <p class="text-[11px] uppercase tracking-wide text-stone-500">Temporary password</p>
+              <p class="mt-1 font-mono text-[18px] font-semibold tracking-wider select-all">{{ accountDialog.result.password }}</p>
+            </div>
+            <p class="mt-3 text-[13px] text-stone-600">{{ accountDialog.result.text }}</p>
+          </template>
+        </div>
+        <div class="flex justify-end gap-3 px-6 py-4 border-t border-stone-200">
+          <template v-if="!accountDialog.result">
+            <button :disabled="accountDialog.busy" @click="accountDialog = null" class="rounded-xl px-4 py-2.5 text-[13px] font-medium text-stone-600 hover:bg-stone-50">Cancel</button>
+            <button :disabled="accountDialog.busy" @click="runAccountDialog" class="rounded-xl px-5 py-2.5 text-[13px] font-semibold text-white disabled:opacity-50" :class="accountDialog.danger ? 'bg-amber-600 hover:bg-amber-700' : 'bg-emerald-700 hover:bg-emerald-800'">
+              {{ accountDialog.busy ? "Please wait..." : accountDialog.confirmLabel }}
+            </button>
+          </template>
+          <button v-else @click="accountDialog = null" class="rounded-xl px-5 py-2.5 text-[13px] font-semibold text-white bg-emerald-700 hover:bg-emerald-800">Close</button>
         </div>
       </div>
     </div>

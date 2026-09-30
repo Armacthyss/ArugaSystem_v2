@@ -2,6 +2,7 @@ using AndroidWebAPI.Data;
 using AndroidWebAPI.DTOs;
 using AndroidWebAPI.Models;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace AndroidWebAPI.Controllers
 {
@@ -25,19 +26,21 @@ namespace AndroidWebAPI.Controllers
             const string characters =
                 "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
 
-            var random = new Random();
-
             return new string(
                 Enumerable
                     .Range(0, 10)
-                    .Select(_ => characters[random.Next(characters.Length)])
+                    .Select(_ => characters[System.Security.Cryptography.RandomNumberGenerator.GetInt32(characters.Length)])
                     .ToArray()
             );
         }
 
 // ── CREATE: POST /api/Parents ─────────────────────────────
+[Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.StaffOrAdmin)]
 [HttpPost]
-public async Task<IActionResult> CreateParent([FromBody] CreateParentDto dto)
+public async Task<IActionResult> CreateParent(
+    [FromBody] CreateParentDto dto,
+    [FromServices] AndroidWebAPI.Services.MessageSender sender,
+    [FromServices] AndroidWebAPI.Services.AuditService audit)
 {
     try
     {
@@ -50,6 +53,14 @@ public async Task<IActionResult> CreateParent([FromBody] CreateParentDto dto)
 
         if (string.IsNullOrWhiteSpace(dto.ContactNo))
             return BadRequest(new { message = "ContactNo is required." });
+
+        if (!AndroidWebAPI.Services.Barangays.IsServed(dto.BarangayNo))
+            return BadRequest(new { message = AndroidWebAPI.Services.Barangays.Error });
+
+        // Data Privacy Act (RA 10173): the parent/guardian must agree to
+        // their information being kept in Aruga before it is saved.
+        if (!dto.PrivacyConsent)
+            return BadRequest(new { message = "The parent or guardian must agree to the Data Privacy Notice before they can be registered." });
 
         // Email (and therefore login) is only required when this
         // guardian is meant to have portal access.
@@ -88,7 +99,13 @@ public async Task<IActionResult> CreateParent([FromBody] CreateParentDto dto)
                     return BadRequest(new { message = complexityError });
 
                 passwordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password);
-                mustChangePassword = false;
+                // Staff typed this password in directly — it's still an
+                // account someone other than the parent set up, so force
+                // the parent to set their own private password on first
+                // login, same as the auto-generated-temp-password path
+                // below. No expiry here since this isn't a time-boxed
+                // temporary password.
+                mustChangePassword = true;
                 temporaryPasswordExpiresAt = null;
             }
             else
@@ -119,6 +136,8 @@ public async Task<IActionResult> CreateParent([FromBody] CreateParentDto dto)
             // Null for a contact-only guardian (CreateLogin = false).
             PasswordHash = passwordHash,
 
+            ConsentRecordedAt = DateTime.Now,
+
             MustChangePassword = mustChangePassword,
             TemporaryPasswordExpiresAt = temporaryPasswordExpiresAt
         };
@@ -126,6 +145,8 @@ public async Task<IActionResult> CreateParent([FromBody] CreateParentDto dto)
         var created = await _parentRepo.CreateAsync(parent);
 
         Guid? accountId = null;
+        bool emailed = false;
+        bool texted = false;
 
         if (dto.CreateLogin)
         {
@@ -152,7 +173,36 @@ public async Task<IActionResult> CreateParent([FromBody] CreateParentDto dto)
 
             await _accountRepository.CreateAsync(account);
             accountId = account.AccountID;
+
+            // Welcome email with how to sign in. The password is only
+            // included when the system made it up; a password the staff
+            // typed in was already given to the parent in person.
+            emailed = await sender.SendEmailAsync(dto.Email, "Your Aruga parent account is ready",
+                $"Hi {dto.FirstName},\n\n" +
+                "Leveriza Health Center created your Aruga parent account. With it you can see your child's " +
+                "vaccination schedule and records, get reminders before each vaccine, and check in at the clinic.\n\n" +
+                $"Sign in with: {dto.Email}\n" +
+                (temporaryPassword != null
+                    ? $"Temporary password: {temporaryPassword}\n"
+                    : "Password: the temporary password the health center staff gave you\n") +
+                "\nYou'll be asked to choose your own password the first time you sign in.");
+
+            // Same details by text, so the parent doesn't have to read them
+            // off the staff screen. Test accounts are never texted.
+            if (temporaryPassword != null)
+            {
+                bool testAccount = AndroidWebAPI.Services.MessageSender.IsTestAddress(dto.Email);
+                texted = await sender.SendSmsAsync(dto.ContactNo,
+                    $"Aruga - Leveriza Health Center: your parent account is ready. Sign in with {dto.Email} " +
+                    $"Temporary password: {temporaryPassword} You will choose your own password the first time you sign in.",
+                    demoRecipient: testAccount) && sender.SmsEnabled && !testAccount;
+            }
         }
+
+        await audit.LogAsync("Patient Management", "Create",
+            $"Parent – {created.FirstName} {created.LastName}",
+            (dto.CreateLogin ? "Registered a parent/guardian with a portal login." : "Registered a parent/guardian (contact only, no login).")
+            + " They agreed to the Data Privacy Notice (Data Privacy Act of 2012, RA 10173).");
 
         return CreatedAtAction(
             nameof(GetParentById),
@@ -177,7 +227,9 @@ public async Task<IActionResult> CreateParent([FromBody] CreateParentDto dto)
                 // TESTING ONLY — shown to the admin so they can
                 // hand it to the parent. Null when the client supplied
                 // its own password, or when no login was created.
-                temporaryPassword = temporaryPassword
+                temporaryPassword = temporaryPassword,
+                emailed,
+                texted
             }
         );
     }
@@ -201,6 +253,7 @@ public async Task<IActionResult> CreateParent([FromBody] CreateParentDto dto)
         [HttpGet("{id}")]
         public async Task<IActionResult> GetParentById(Guid id)
         {
+            if (!AndroidWebAPI.Services.AccessGuard.CanSeeParent(User, id)) return Forbid();
             var parent = await _parentRepo.GetByIdAsync(id);
             if (parent == null)
                 return NotFound(new { message = "Parent not found" });
@@ -224,32 +277,81 @@ public async Task<IActionResult> CreateParent([FromBody] CreateParentDto dto)
 
                 lastLogin = parent.LastLogin,
 
+                consentRecordedAt = parent.ConsentRecordedAt,
+                privacyConsentAt = parent.PrivacyConsentAt,
+
                 role = "Parent"
 
             });
         }
 
+        // ── POST /api/Parents/{id}/privacy-consent ────────────────
+        // The parent ticks "I agree" on the Data Privacy Notice (RA 10173)
+        // the first time they sign in. Until then the parent portal only
+        // shows the notice.
+        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.Parent)]
+        [HttpPost("{id:guid}/privacy-consent")]
+        public async Task<IActionResult> AcceptPrivacyNotice(
+            Guid id,
+            [FromServices] AndroidWebAPI.Data.AppDbContext context,
+            [FromServices] AndroidWebAPI.Services.AuditService audit)
+        {
+            if (!AndroidWebAPI.Services.AccessGuard.CanSeeParent(User, id)) return Forbid();
+            var parent = await context.Parents.FirstOrDefaultAsync(p => p.ParentID == id);
+            if (parent == null) return NotFound(new { message = "Parent not found." });
+
+            if (parent.PrivacyConsentAt == null)
+            {
+                parent.PrivacyConsentAt = DateTime.Now;
+                await context.SaveChangesAsync();
+                await audit.LogAsync("Patient Management", "Privacy Consent",
+                    $"Parent – {parent.FirstName} {parent.LastName}",
+                    "Agreed to the Data Privacy Notice (Data Privacy Act of 2012, RA 10173) in the parent portal.",
+                    userId: parent.ParentID);
+            }
+
+            return Ok(new { message = "Thank you. Your consent was recorded.", privacyConsentAt = parent.PrivacyConsentAt });
+        }
+
         // ── READ: GET /api/Parents/all ────────────────────────────
+        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.ClinicTeam)]
         [HttpGet("all")]
-        public async Task<IActionResult> GetAllParents()
+        public async Task<IActionResult> GetAllParents([FromServices] AndroidWebAPI.Data.AppDbContext context)
         {
             var parents = await _parentRepo.GetAllAsync();
-            var result = parents.Select(p => new
+
+            // Each parent's portal login (a contact-only guardian has none)
+            var logins = (await context.Accounts
+                    .Where(a => a.AccountType == "Parent")
+                    .Select(a => new { a.ReferenceID, a.AccountID, a.Username, a.Status })
+                    .ToListAsync())
+                .GroupBy(a => a.ReferenceID)
+                .ToDictionary(g => g.Key, g => g.First());
+
+            var result = parents.Select(p =>
             {
-                parentID = p.ParentID,
-                firstName = p.FirstName,
-                middleName = p.MiddleName,
-                lastName = p.LastName,
-                email = p.Email,
-                contactNo = p.ContactNo,
-                barangayNo = p.BarangayNo,
-                address = p.Address
+                logins.TryGetValue(p.ParentID, out var login);
+                return new
+                {
+                    parentID = p.ParentID,
+                    firstName = p.FirstName,
+                    middleName = p.MiddleName,
+                    lastName = p.LastName,
+                    email = p.Email,
+                    contactNo = p.ContactNo,
+                    barangayNo = p.BarangayNo,
+                    address = p.Address,
+                    accountID = login?.AccountID,
+                    username = login?.Username,
+                    accountStatus = login == null ? "No Login" : login.Status ? "Active" : "Inactive",
+                };
             });
 
             return Ok(result);
         }
 
         // ── UPDATE: PUT /api/Parents/{id} ─────────────────────────
+        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.StaffOrAdmin)]
         [HttpPut("{id}")]
         public async Task<IActionResult> UpdateParent(Guid id, [FromBody] UpdateParentDto dto)
         {
@@ -265,6 +367,11 @@ public async Task<IActionResult> CreateParent([FromBody] CreateParentDto dto)
                     return BadRequest(new { message = "FirstName is required." });
                 if (string.IsNullOrWhiteSpace(dto.LastName))
                     return BadRequest(new { message = "LastName is required." });
+                // Older records may still have a barangay from before the
+                // jurisdiction check; only a changed barangay is checked.
+                if (dto.BarangayNo != null && dto.BarangayNo != existing.BarangayNo
+                    && !AndroidWebAPI.Services.Barangays.IsServed(dto.BarangayNo))
+                    return BadRequest(new { message = AndroidWebAPI.Services.Barangays.Error });
 
                 var parent = new Parent
                 {
@@ -374,6 +481,7 @@ public async Task<IActionResult> CreateParent([FromBody] CreateParentDto dto)
             Guid id,
             [FromBody] ChangePasswordDto dto)
         {
+            if (!AndroidWebAPI.Services.AccessGuard.CanSeeParent(User, id)) return Forbid();
             if (string.IsNullOrWhiteSpace(dto.CurrentPassword))
                 return BadRequest(new
                 {
@@ -415,6 +523,7 @@ public async Task<IActionResult> CreateParent([FromBody] CreateParentDto dto)
         [HttpGet("dashboard/{id}")]
         public async Task<IActionResult> GetDashboard(Guid id)
         {
+            if (!AndroidWebAPI.Services.AccessGuard.CanSeeParent(User, id)) return Forbid();
             var data = await _parentRepo.GetDashboardData(id);
             if (data == null)
                 return NotFound(new { message = "Parent not found" });

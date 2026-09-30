@@ -1,18 +1,23 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from "vue";
+import { API_ORIGIN } from '@/utils/apiBase'
+import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import {
   Syringe, FileText, Search, QrCode, UserPlus, CalendarDays,
   Clock, CheckCircle2, AlertTriangle, Activity, MoreHorizontal,
   Eye, UserCog, DoorOpen, TrendingUp, TrendingDown, RefreshCw,
-  ClipboardCheck, X,
+  ClipboardCheck, X, Megaphone, Undo2, Check, Loader2,
 } from "lucide-vue-next";
 import StaffSidebar from "./StaffSidebar.vue";
 import StaffTopbar from "./StaffTopbar.vue";
+import { getToken } from "@/utils/auth";
+import { withRelationship } from "@/utils/format";
+import { visitProgress, unfinishedChildren } from "@/utils/visitProgress";
+import { askConfirm, showAlert } from "@/utils/dialog";
 
 const router = useRouter();
 
-const API_BASE = "http://localhost:57147/api";
+const API_BASE = `${API_ORIGIN}/api`;
 
 const waitingCount = computed(() =>
   queue.value.filter(q => q.status === "Waiting").length
@@ -36,9 +41,9 @@ const lateCount = computed(() =>
 
 const summaryCards = computed(() => [
   {
-    label: "Today's Appointments",
-    value: "—",
-    trend: "Coming next",
+    label: "Due for Vaccination",
+    value: expected.value.length,
+    trend: `${expected.value.filter(e => e.status === "Not Arrived").length} not yet arrived`,
     up: null,
     icon: CalendarDays,
     tint: "text-emerald-700",
@@ -81,11 +86,11 @@ const summaryCards = computed(() => [
     tintBg: "bg-rose-50",
   },
   {
-    label: "Available Healthworkers",
-    value: stations.value.filter(s => !s.isOccupied).length,
-    trend: `${stations.value.length} total`,
+    label: "Vaccination Room",
+    value: nowServing.value ? `#${nowServing.value.queueNumber}` : "Free",
+    trend: nowServing.value ? "family inside now" : waitingList.value.length ? "press Call Next" : "nobody waiting",
     up: null,
-    icon: UserCog,
+    icon: DoorOpen,
     tint: "text-sky-700",
     tintBg: "bg-sky-50",
   },
@@ -98,7 +103,7 @@ const summaryCards = computed(() => [
 // than pretending to work.
 const quickActions = [
   { icon: UserPlus, label: "Register Child", action: () => router.push("/staff/patient-records?tab=children&openRegister=1") },
-  { icon: QrCode, label: "Scan Queue QR", disabled: true },
+  { icon: QrCode, label: "Check-in QR", action: () => router.push("/staff/checkin-qr") },
   // For an already-registered patient who walks in without their parent's
   // login (no QR, no parent account access) — this opens a modal to look
   // up the parent/child and add them straight to today's queue, instead of
@@ -107,9 +112,11 @@ const quickActions = [
   { icon: UserPlus, label: "Add Walk-in Patient", action: () => router.push("/staff/patient-records?tab=children&openRegister=1&walkin=1") },
   { icon: Search, label: "Search Patient", action: () => router.push("/staff/patient-records?tab=parents") },
   { icon: CalendarDays, label: "View Today's Queue", action: () => scrollToQueue() },
+  { icon: Megaphone, label: "Vaccination Room", action: () => roomSectionRef.value?.scrollIntoView({ behavior: "smooth", block: "start" }) },
 ];
 
 const queueSectionRef = ref(null);
+const roomSectionRef = ref(null);
 const scrollToQueue = () => {
   queueSectionRef.value?.scrollIntoView({ behavior: "smooth", block: "start" });
 };
@@ -140,37 +147,96 @@ const visibleQueue = computed(() =>
   queue.value.filter((q) => q.status !== "Completed")
 );
 
-// Merged in from AdminHomepage.vue: GetRooms/AssignRoom/CompleteSession are
-// real endpoints on the Vaccination controller. A "room" already comes
-// bundled with the doctor stationed there, so assigning a room IS assigning
-// a healthworker — there's no separate healthworker-only assignment
-// endpoint, so this dashboard no longer pretends there is one.
-const VACCINATION_BASE = `${API_BASE}/Vaccination`;
 // Confirmed from the real ParentsController.cs ([Route("api/[controller]")],
 // GetAllParents action mapped to "all") — GetAllParents lives at
-// GET /api/Parents/all, NOT under /Vaccination. Children not confirmed the
-// same way yet, but earlier project notes point to the same convention
-// (ChildrenController -> GET /api/Children/all); flagged below in case its
-// field names turn out to differ from Parents' confirmed shape.
+// GET /api/Parents/all. Children: GET /api/Children/all.
 const PARENTS_BASE = `${API_BASE}/Parents`;
 const CHILDREN_BASE = `${API_BASE}/Children`;
 
-const stations = ref([]);
-const loadingStations = ref(false);
+// Sends the signed-in staff member's token so the audit log knows who
+// did what.
+const authJson = () => ({ "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` });
 
-const fetchStations = async () => {
-  loadingStations.value = true;
+/* -------------------- Vaccination room (Call Next) --------------------
+   Leveriza has one vaccination room and one person vaccinating. The Nurse
+   presses Call Next: the next family in line is called in, and their phone
+   shows "It's your turn" (with a sound) plus one SMS. Then Start
+   Vaccinating for each child, and Complete Visit when done. */
+const nowServing = computed(() => queue.value.find(q => q.status === "In Progress") || null);
+const waitingList = computed(() =>
+  queue.value.filter(q => q.status === "Waiting").sort((a, b) => a.queueNumber - b.queueNumber)
+);
+const roomBusy = ref(false);
+const roomMessage = ref("");
+const roomError = ref(false);
+
+const flashRoom = (msg, isError = false) => {
+  roomMessage.value = msg;
+  roomError.value = isError;
+  setTimeout(() => { if (roomMessage.value === msg) roomMessage.value = ""; }, 5000);
+};
+
+const roomAction = async (url, fallbackError) => {
+  roomBusy.value = true;
   try {
-    const response = await fetch(`${VACCINATION_BASE}/GetRooms`);
-    if (!response.ok) throw new Error(`Failed to load rooms. Status: ${response.status}`);
-    stations.value = await response.json();
+    const res = await fetch(url, { method: "PATCH", headers: authJson() });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.message || fallbackError);
+    if (body.message) flashRoom(body.message);
   } catch (error) {
-    console.error("Station loading error:", error);
-    stations.value = [];
+    flashRoom(error.message || fallbackError, true);
   } finally {
-    loadingStations.value = false;
+    roomBusy.value = false;
+    await loadQueue();
   }
 };
+
+const callNext = () => roomAction(`${API_BASE}/Queue/call-next`, "Could not call the next family.");
+// Out of turn (the next in line stepped out), or "Call Again" for the family already called
+const callVisit = (q) => {
+  assignMenuOpen.value = null;
+  return roomAction(`${API_BASE}/Queue/${q.queueID}/call`, "Could not call this family.");
+};
+const backToWaiting = async (q) => {
+  const ok = await askConfirm({
+    title: `${q.no} did not come in?`,
+    message: `${q.child}, brought by ${q.parent || "their parent"}, will go back to the waiting list and keep queue number ${q.no}. You can call them again later.`,
+    confirmText: "Back to Waiting",
+    cancelText: "They're here",
+  });
+  if (!ok) return;
+  return roomAction(`${API_BASE}/Queue/${q.queueID}/back-to-waiting`, "Could not update this family.");
+};
+// Each child's progress in the family inside (done / not yet), so nobody
+// is forgotten before Complete Visit. Reloaded when a new family is called
+// in, and when the Nurse comes back to the Dashboard from a visit page.
+const roomProgress = ref({});
+const loadRoomProgress = async () => {
+  roomProgress.value = nowServing.value ? await visitProgress(nowServing.value.children) : {};
+};
+watch(() => nowServing.value?.queueID, loadRoomProgress);
+
+const completeVisit = async (q) => {
+  await loadRoomProgress();
+  const left = unfinishedChildren(q.children, roomProgress.value);
+  const ok = await askConfirm(left.length
+    ? {
+        title: `Complete ${q.no} anyway?`,
+        message: "These are still due today and not recorded:",
+        details: left,
+        confirmText: "Complete Anyway",
+        cancelText: "Go Back",
+        tone: "danger",
+      }
+    : {
+        title: `Complete the visit for ${q.no}?`,
+        message: `${q.child}. The parents get a text of the vaccines given today.`,
+        confirmText: "Complete Visit",
+      });
+  if (!ok) return;
+  return roomAction(`${API_BASE}/Queue/${q.queueID}/complete`, "Could not complete the visit.");
+};
+const startVaccinating = (q, c) => router.push(`/staff/vaccination/${q.queueID}?child=${c.childID}`);
 
 /* -------------------- Check-In Patient modal -------------------- */
 // Staff-initiated check-in for an existing patient, bypassing the need for
@@ -309,7 +375,7 @@ const submitCheckIn = async () => {
 };
 
 const expandedRow = ref(null);
-const assignMenuOpen = ref(null); // queueID | `${queueID}-more` | null
+const assignMenuOpen = ref(null); // `${queueID}-more` | null
 const menuPosition = ref({ top: "0px", left: "0px" });
 
 const toggleExpand = (q) => {
@@ -332,10 +398,6 @@ const toggleMenu = (key, event) => {
   assignMenuOpen.value = key;
 };
 
-const activeAssignQueue = computed(() =>
-  queue.value.find(q => q.queueID === assignMenuOpen.value)
-);
-
 const activeMoreQueue = computed(() => {
   const key = assignMenuOpen.value;
   if (!key || !key.toString().endsWith("-more")) return null;
@@ -348,72 +410,117 @@ const closeMenus = (event) => {
   assignMenuOpen.value = null;
 };
 
-const openAssignMenu = (q) => {
-  assignMenuOpen.value = assignMenuOpen.value === q.queueID ? null : q.queueID;
-};
-
-const assignStation = async (q, station) => {
-  try {
-    await fetch(`${VACCINATION_BASE}/AssignRoom`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ queueId: q.queueID, roomId: station.roomId }),
-    });
-    assignMenuOpen.value = null;
-    await Promise.all([loadQueue(), fetchStations()]);
-  } catch (error) {
-    console.error("Assign station error:", error);
-    alert("Could not assign this patient to a station. Please try again.");
-  }
-};
-
-const completeSession = async (station) => {
-  try {
-    await fetch(`${VACCINATION_BASE}/CompleteSession/${station.roomID ?? station.roomId}`, {
-      method: "POST",
-    });
-    await Promise.all([loadQueue(), fetchStations()]);
-  } catch (error) {
-    console.error("Complete session error:", error);
-    alert("Could not mark this station's session as done. Please try again.");
-  }
-};
-
-// No backend endpoint exists to remove a queue entry outright — this stays
-// local-state only until one does.
-const removeFromQueue = (q) => {
-  queue.value = queue.value.filter(r => r.queueID !== q.queueID);
+// DELETE /api/Queue/{id}
+const removeFromQueue = async (q) => {
   assignMenuOpen.value = null;
+  const ok = await askConfirm({
+    title: `Remove ${q.no} from today's queue?`,
+    message: `${q.child}, brought by ${q.parent}, will be taken off today's list. This can't be undone.`,
+    confirmText: "Remove",
+    tone: "danger",
+  });
+  if (!ok) return;
+  try {
+    const res = await fetch(`${API_BASE}/Queue/${q.queueID}`, { method: "DELETE", headers: authJson() });
+    if (!res.ok) throw new Error(`Status ${res.status}`);
+  } catch (error) {
+    console.error("Remove from queue error:", error);
+    showAlert({ title: "Could not remove this entry", message: "Please try again.", tone: "error" });
+  } finally {
+    await loadQueue();
+  }
 };
 
-const expected = [
-  { child: "Julian Reyes", time: "9:15 AM", parent: "Mark Reyes", status: "Checked In" },
-  { child: "Ava Dizon", time: "9:15 AM", parent: "Carmen Dizon", status: "Checked In" },
-  { child: "Noah Bautista", time: "9:30 AM", parent: "Ramon Bautista", status: "Checked In" },
-  { child: "Zoe Manalo", time: "10:00 AM", parent: "Paolo Manalo", status: "Not Arrived" },
-  { child: "Leo Fernandez", time: "10:15 AM", parent: "Dina Fernandez", status: "Not Arrived" },
-  { child: "Sophia Ramos", time: "8:45 AM", parent: "Ana Ramos", status: "Late" },
-];
+/* ---------------- Expected Patients (children due today) ----------------
+   From each child's vaccination timeline: everyone with a dose due today,
+   plus whether they've already checked in (i.e. are in today's queue). */
+const dueToday = ref([]);
+const stockSummary = ref([]);
+const activities = ref([]);
+
+const loadExpected = async () => {
+  try {
+    const today = new Date();
+    const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    const res = await fetch(`${API_BASE}/VaccinationTimeline/schedule?from=${iso}&to=${iso}&includeOverdue=false`);
+    if (!res.ok) throw new Error(`Status ${res.status}`);
+    dueToday.value = await res.json();
+  } catch (e) {
+    console.error("loadExpected:", e);
+  }
+};
+
+const expected = computed(() => {
+  const byChild = new Map();
+  for (const t of dueToday.value) {
+    if (!byChild.has(t.childID)) {
+      byChild.set(t.childID, { childID: t.childID, child: t.childName, parent: t.parentName || "—", vaccines: [], allDone: true });
+    }
+    const e = byChild.get(t.childID);
+    e.vaccines.push(t.abbreviation || t.vaccineName);
+    if (t.status !== "Completed") e.allDone = false;
+  }
+  const queued = new Set(queue.value.flatMap(q => q.childIDs || []));
+  return [...byChild.values()].map(e => ({
+    ...e,
+    time: e.vaccines.join(", "),
+    status: e.allDone ? "Vaccinated" : queued.has(e.childID) ? "Checked In" : "Not Arrived",
+  }));
+});
 const arrivalStyle = {
   "Checked In": "bg-emerald-50 text-emerald-700",
+  Vaccinated: "bg-sky-50 text-sky-700",
   "Not Arrived": "bg-stone-100 text-stone-600",
-  Late: "bg-rose-50 text-rose-700",
 };
-// NOTE: "Expected Today" is still mock data — there's no real appointments/
-// schedule endpoint anywhere in the uploaded files to source this from
-// (AdminHomepage.vue's version was equally mocked). Leaving as-is until
-// that endpoint exists.
 
+/* ---------------- Vaccine stock alerts ----------------
+   Per vaccine: total usable doses vs. the batches' minimum stock, plus
+   any batch expiring within 30 days. */
+const loadStock = async () => {
+  try {
+    const [invRes, vacRes] = await Promise.all([fetch(`${API_BASE}/VaccineInventory`), fetch(`${API_BASE}/Vaccines`)]);
+    if (!invRes.ok || !vacRes.ok) throw new Error("inventory request failed");
+    const inventory = await invRes.json();
+    const vaccines = await vacRes.json();
+    const now = new Date();
+    stockSummary.value = vaccines.map(v => {
+      const usable = inventory.filter(i => i.vaccineID === v.vaccineID && i.status && new Date(i.expirationDate) >= now);
+      const stock = usable.reduce((s, i) => s + i.currentQuantity, 0);
+      const minimum = usable.reduce((s, i) => s + i.minimumStock, 0) || 20;
+      const expiring = usable
+        .filter(i => i.currentQuantity > 0)
+        .map(i => Math.ceil((new Date(i.expirationDate) - now) / 86400000))
+        .filter(d => d <= 30)
+        .sort((a, b) => a - b)[0];
+      const level = stock === 0 ? "Critical" : stock < minimum ? "Low" : expiring !== undefined ? "Watch" : null;
+      return {
+        vaccineID: v.vaccineID,
+        name: v.abbreviation || v.vaccineName,
+        detail: `${stock} doses remaining`,
+        note: stock === 0 ? "Out of stock" : stock < minimum ? `Below minimum of ${minimum}` : expiring !== undefined ? `A batch expires in ${expiring} day${expiring === 1 ? "" : "s"}` : "",
+        level,
+      };
+    }).filter(s => s.level);
+  } catch (e) {
+    console.error("loadStock:", e);
+  }
+};
+const stockAlerts = computed(() => stockSummary.value);
 
-// "Available Healthworkers" section below is now driven by `stations`
-// (from GetRooms), each of which already carries its stationed doctor's
-// name and occupancy — replacing the old hardcoded healthworkers mock.
-
-const stockAlerts = [
-  { name: "MMR", detail: "20 doses remaining", note: "Expires in 5 days", level: "Critical" },
-  { name: "Pentavalent", detail: "15 doses remaining", note: "Low stock", level: "Low" },
-  { name: "BCG", detail: "60 doses remaining", note: "Expires in 30 days", level: "Watch" },
-];
+// "Notify parents" on an out-of-stock vaccine: parents of children due for it
+// this week are told not to come for that dose yet (and told again when it's
+// back). The same check also runs by itself every morning.
+const stockNotice = ref({});
+const notifyStockParents = async (s) => {
+  stockNotice.value = { ...stockNotice.value, [s.vaccineID]: "Sending…" };
+  try {
+    const res = await fetch(`${API_BASE}/Notifications/stock-notices?vaccineId=${s.vaccineID}`, { method: "POST", headers: authJson() });
+    const data = await res.json().catch(() => ({}));
+    stockNotice.value = { ...stockNotice.value, [s.vaccineID]: data.message || (res.ok ? "Done." : "Could not send the notices.") };
+  } catch {
+    stockNotice.value = { ...stockNotice.value, [s.vaccineID]: "Could not send the notices." };
+  }
+};
 const stockStyle = {
   Critical: "bg-rose-50 text-rose-700",
   Low: "bg-amber-50 text-amber-700",
@@ -425,14 +532,40 @@ const stockNoteColor = {
   Watch: "text-sky-700",
 };
 
-const activities = [
-  { icon: UserPlus, text: "Zoe Manalo registered as a walk-in patient.", time: "3 min ago" },
-  { icon: DoorOpen, text: "Julian Reyes checked in and assigned to Room 1.", time: "10 min ago" },
-  { icon: UserCog, text: "Mika Santos assigned to Nurse Bea Fernandez.", time: "16 min ago" },
-  { icon: Syringe, text: "Vaccination completed for Gabriel Torres.", time: "24 min ago" },
-  { icon: FileText, text: "Parent contact info updated for Ava Dizon.", time: "38 min ago" },
-  { icon: AlertTriangle, text: "Sophia Ramos flagged as late for her 8:45 AM slot.", time: "51 min ago" },
-];
+/* ---------------- Recent clinic activity (audit log) ---------------- */
+const ACTIVITY_ICON = {
+  "Patient Management": UserPlus,
+  Vaccination: Syringe,
+  Inventory: ClipboardCheck,
+  Authentication: DoorOpen,
+  "User Management": UserCog,
+};
+function timeAgo(value) {
+  const mins = Math.floor((Date.now() - new Date(value).getTime()) / 60000);
+  if (mins < 1) return "Just now";
+  if (mins < 60) return `${mins} min ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours} hr ago`;
+  return `${Math.floor(hours / 24)} d ago`;
+}
+const loadActivities = async () => {
+  try {
+    // Clinic work only; the full audit trail is the Super Admin's
+    const res = await fetch(`${API_BASE}/AuditLogs/activity`);
+    if (!res.ok) throw new Error(`Status ${res.status}`);
+    const logs = await res.json();
+    activities.value = logs
+      .filter(l => l.module !== "Authentication")
+      .slice(0, 10)
+      .map(l => ({
+        icon: ACTIVITY_ICON[l.module] || FileText,
+        text: `${l.user}: ${l.action.toLowerCase()} — ${l.affectedRecord !== "—" ? l.affectedRecord : l.description}`,
+        time: timeAgo(l.timestamp),
+      }));
+  } catch (e) {
+    console.error("loadActivities:", e);
+  }
+};
 
 /* Queue overview donut chart */
 
@@ -518,15 +651,20 @@ queue.value = data.map((q) => ({
   child:
     q.children?.map(c => c.name).join(", ") || "—",
 
+  // "Rosario Santos (Grandmother)": who brought the child
   parent:
-    q.requestBy || "—",
+    withRelationship(q.requestBy, q.requestByRelationship),
 
-  time: "—",
-  worker: "—",
-  room: "—",
+  // Check-in time
+  time: q.checkedInAt
+    ? new Date(q.checkedInAt).toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" })
+    : "—",
+  children: q.children || [],
 
+  // Backend stores "InProgress"; this page labels it "In Progress".
   status:
-    q.status || "Waiting",
+    q.status === "InProgress" ? "In Progress" : (q.status || "Waiting"),
+  childIDs: (q.children || []).map(c => c.childID),
 }));
   } catch (error) {
     console.error("Queue loading error:", error);
@@ -539,18 +677,28 @@ let queueRefreshInterval = null;
 
 onMounted(() => {
   loadQueue();
-  fetchStations();
+  loadExpected();
+  loadStock();
+  loadActivities();
   document.addEventListener("click", closeMenus);
 
-  queueRefreshInterval = setInterval(() => {
-    loadQueue();
-    fetchStations();
-  }, 5000);
+  queueRefreshInterval = setInterval(loadQueue, 5000);
+  // Slower-moving panels
+  slowRefreshInterval = setInterval(() => {
+    loadExpected();
+    loadStock();
+    loadActivities();
+  }, 30000);
 });
+
+let slowRefreshInterval = null;
 
 onUnmounted(() => {
   if (queueRefreshInterval) {
     clearInterval(queueRefreshInterval);
+  }
+  if (slowRefreshInterval) {
+    clearInterval(slowRefreshInterval);
   }
   document.removeEventListener("click", closeMenus);
 });
@@ -563,7 +711,7 @@ onUnmounted(() => {
 
     <!-- ---------------- Main ---------------- -->
     <main class="flex-1 min-w-0">
-      <StaffTopbar title="Staff Dashboard" breadcrumb="Aruga / Dashboard" />
+      <StaffTopbar title="Staff / Nurse Dashboard" breadcrumb="Aruga / Dashboard" />
 
       <div class="px-8 py-6 space-y-6">
         <!-- Summary cards -->
@@ -622,7 +770,7 @@ onUnmounted(() => {
     <p class="text-[14px] font-semibold">Today's Queue</p>
 
     <span class="text-[12px] text-stone-500">
-      {{ visibleQueue.length }} patients in queue
+      {{ visibleQueue.length }} {{ visibleQueue.length === 1 ? 'family' : 'families' }} in queue
     </span>
   </div>
 
@@ -644,7 +792,7 @@ onUnmounted(() => {
                 <thead>
                   <tr class="bg-stone-50">
                     <th
-                      v-for="h in ['Queue No.', 'Child', 'Parent', 'Time', 'Healthworker', 'Room', 'Status', '']"
+                      v-for="h in ['Queue No.', 'Child', 'Parent', 'Checked In', 'Status', '']"
                       :key="h"
                       class="text-left font-semibold px-5 py-3 whitespace-nowrap text-[11px] uppercase tracking-wide text-stone-500"
                     >
@@ -656,11 +804,10 @@ onUnmounted(() => {
                   <template v-for="q in visibleQueue" :key="q.queueID">
                    <tr class="border-t border-stone-200">
                     <td class="px-5 py-3 font-medium whitespace-nowrap">{{ q.no }}</td>
-                    <td class="px-5 py-3 whitespace-nowrap">{{ q.child }}</td>
-                    <td class="px-5 py-3 whitespace-nowrap text-stone-500">{{ q.parent }}</td>
+                    <!-- names wrap, so the action buttons stay on screen -->
+                    <td class="px-5 py-3 min-w-[140px]">{{ q.child }}</td>
+                    <td class="px-5 py-3 min-w-[140px] text-stone-500">{{ q.parent }}</td>
                     <td class="px-5 py-3 whitespace-nowrap text-stone-500">{{ q.time }}</td>
-                    <td class="px-5 py-3 whitespace-nowrap">{{ q.worker }}</td>
-                    <td class="px-5 py-3 whitespace-nowrap text-stone-500">{{ q.room }}</td>
                     <td class="px-5 py-3 whitespace-nowrap">
                       <span
                         class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium"
@@ -675,8 +822,14 @@ onUnmounted(() => {
                         <button @click="toggleExpand(q)" class="p-1.5 rounded-lg hover:bg-stone-100" title="View Patient">
                           <Eye :size="15" class="text-stone-500" />
                         </button>
-                        <button @click="toggleMenu(q.queueID, $event)" class="menu-trigger p-1.5 rounded-lg hover:bg-stone-100" title="Assign Station">
-                          <DoorOpen :size="15" class="text-stone-500" />
+                        <button
+                          v-if="q.status === 'Waiting'"
+                          @click="callVisit(q)"
+                          :disabled="roomBusy || !!nowServing"
+                          class="p-1.5 rounded-lg hover:bg-emerald-50 disabled:opacity-30 disabled:cursor-not-allowed"
+                          :title="nowServing ? 'Complete the visit in the room first' : 'Call this family into the vaccination room (out of turn)'"
+                        >
+                          <Megaphone :size="15" class="text-emerald-700" />
                         </button>
                         <button @click="toggleMenu(`${q.queueID}-more`, $event)" class="menu-trigger p-1.5 rounded-lg hover:bg-stone-100" title="More">
                           <MoreHorizontal :size="15" class="text-stone-500" />
@@ -685,10 +838,12 @@ onUnmounted(() => {
                     </td>
                   </tr>
                   <tr v-if="expandedRow === q.queueID" class="bg-stone-50 border-t border-stone-100">
-                    <td colspan="8" class="px-5 py-3 text-[12.5px] text-stone-600">
+                    <td colspan="6" class="px-5 py-3 text-[12.5px] text-stone-600">
                       <span class="font-medium text-stone-800">Queue {{ q.no }}</span> —
-                      Child: {{ q.child }} · Parent: {{ q.parent }} · Status: {{ q.status }}
-                      <span class="text-stone-400"> (full profile view isn't wired to a route yet — needs the Children Record page to accept lookup by name/ID.)</span>
+                      Child: {{ q.child }} · Parent: {{ q.parent }} · Checked in {{ q.time }} · Status: {{ q.status }}
+                      <span v-if="q.status === 'In Progress'" class="text-violet-700"> · In the vaccination room</span>
+                      <span v-else-if="q.status === 'Waiting'" class="text-amber-700"> · Waiting to be called</span>
+                      <button @click="router.push('/staff/patient-records?tab=children')" class="ml-2 text-emerald-700 font-medium hover:underline">Open Patient Records</button>
                     </td>
                   </tr>
                   </template>
@@ -728,7 +883,7 @@ onUnmounted(() => {
               <div class="space-y-1 max-h-70 overflow-y-auto pr-1">
                 <div
                   v-for="p in expected"
-                  :key="p.child"
+                  :key="p.childID"
                   class="flex items-center justify-between rounded-xl px-3 py-2.5 bg-stone-50"
                 >
                   <div class="min-w-0">
@@ -742,55 +897,114 @@ onUnmounted(() => {
                     {{ p.status }}
                   </span>
                 </div>
+                <p v-if="expected.length === 0" class="text-[12.5px] text-stone-400 px-3 py-2">No vaccinations are due today.</p>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- Stations (real data from GET /api/Vaccination/GetRooms) -->
-        <div>
-          <div class="flex items-center justify-between mb-3">
-            <p class="text-[14px] font-semibold">Stations</p>
-            <span v-if="loadingStations" class="text-[11px] text-stone-400">Loading…</span>
-          </div>
-          <div class="grid grid-cols-5 gap-4">
-            <div
-              v-for="s in stations"
-              :key="s.roomId"
-              class="rounded-2xl border p-4 shadow-sm"
-              :class="s.isOccupied ? 'border-amber-200 bg-amber-50/30' : 'border-emerald-200 bg-emerald-50/20'"
-            >
-              <div class="flex items-center gap-3">
-                <div
-                  class="flex h-10 w-10 items-center justify-center rounded-full text-white text-[12px] font-semibold shrink-0"
-                  :class="s.isOccupied ? 'bg-amber-600' : 'bg-emerald-700'"
-                >
-                  {{ s.doctorName?.split(' ').filter(Boolean).slice(0,2).map(w => w[0]).join('') || '—' }}
-                </div>
-                <div class="min-w-0">
-                  <p class="text-[12.5px] font-semibold truncate">{{ s.doctorName || 'Unassigned' }}</p>
-                  <p class="text-[11px] truncate text-stone-500">{{ s.roomName }}</p>
-                </div>
+        <!-- Vaccination Room: one room, one vaccinator. Call Next alerts the
+             parent's phone (banner + sound + SMS). -->
+        <div ref="roomSectionRef" class="rounded-2xl border shadow-sm overflow-hidden"
+          :class="nowServing ? 'border-violet-200 bg-violet-50/30' : 'border-emerald-200 bg-white'">
+          <div class="flex items-center justify-between gap-4 px-5 py-4 border-b" :class="nowServing ? 'border-violet-100' : 'border-stone-200'">
+            <div class="flex items-center gap-3">
+              <div class="flex h-10 w-10 items-center justify-center rounded-xl" :class="nowServing ? 'bg-violet-100' : 'bg-emerald-50'">
+                <DoorOpen :size="18" :class="nowServing ? 'text-violet-700' : 'text-emerald-700'" />
               </div>
-              <div class="mt-3 flex items-center justify-between">
-                <span
-                  class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium"
-                  :class="s.isOccupied ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'"
-                >
-                  {{ s.isOccupied ? 'Busy' : 'Available' }}
-                </span>
-                <button
-                  v-if="s.isOccupied"
-                  @click="completeSession(s)"
-                  class="text-[10.5px] font-semibold px-2 py-1 rounded-lg bg-amber-100 text-amber-700 hover:bg-emerald-600 hover:text-white transition-colors"
-                >
-                  Mark Done
-                </button>
+              <div>
+                <p class="text-[14px] font-semibold">Vaccination Room</p>
+                <p class="text-[11.5px] text-stone-500">
+                  <template v-if="nowServing">A family is inside. Record their vaccines, then Complete Visit.</template>
+                  <template v-else-if="waitingList.length">{{ waitingList.length }} waiting. Call Next alerts the next parent's phone.</template>
+                  <template v-else>Nobody is waiting right now.</template>
+                </p>
               </div>
             </div>
-            <p v-if="!loadingStations && stations.length === 0" class="col-span-5 text-[12.5px] text-stone-400">
-              No stations returned from the server.
-            </p>
+            <button
+              @click="callNext"
+              :disabled="roomBusy || !!nowServing || waitingList.length === 0"
+              class="flex items-center gap-2 rounded-xl bg-emerald-700 px-5 py-3 text-[14px] font-semibold text-white shadow-sm hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-40"
+              :title="nowServing ? 'Complete the visit in the room first' : waitingList.length === 0 ? 'Nobody is waiting' : ''"
+            >
+              <Loader2 v-if="roomBusy" :size="17" class="animate-spin" />
+              <Megaphone v-else :size="17" />
+              Call Next<span v-if="!nowServing && waitingList.length"> · #{{ waitingList[0].queueNumber }}</span>
+            </button>
+          </div>
+
+          <div v-if="roomMessage" class="px-5 py-2.5 text-[12.5px] border-b"
+            :class="roomError ? 'bg-rose-50 text-rose-800 border-rose-100' : 'bg-sky-50 text-sky-800 border-sky-100'">
+            {{ roomMessage }}
+          </div>
+
+          <div class="grid grid-cols-12 gap-0">
+            <!-- Inside the room now -->
+            <div class="col-span-8 p-5">
+              <p class="text-[11px] font-semibold uppercase tracking-wide text-stone-500 mb-2">Inside the room</p>
+              <div v-if="!nowServing" class="rounded-xl border border-dashed border-stone-200 px-4 py-8 text-center text-[12.5px] text-stone-400">
+                The room is free.
+              </div>
+              <div v-else class="rounded-xl border border-violet-200 bg-white p-4">
+                <div class="flex items-start justify-between gap-3">
+                  <div>
+                    <p class="text-[22px] font-bold leading-none">{{ nowServing.no }}</p>
+                    <p class="text-[12px] text-stone-500 mt-1">Brought by {{ nowServing.parent }} · checked in {{ nowServing.time }}</p>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <button @click="callVisit(nowServing)" :disabled="roomBusy"
+                      class="flex items-center gap-1.5 rounded-lg border border-stone-200 px-3 py-1.5 text-[12px] font-medium text-stone-600 hover:bg-stone-50 disabled:opacity-40"
+                      title="Alert the parent's phone again (no second SMS)">
+                      <Megaphone :size="13" /> Call Again
+                    </button>
+                    <button @click="backToWaiting(nowServing)" :disabled="roomBusy"
+                      class="flex items-center gap-1.5 rounded-lg border border-stone-200 px-3 py-1.5 text-[12px] font-medium text-stone-600 hover:bg-stone-50 disabled:opacity-40"
+                      title="They didn't come in: back to waiting, same number">
+                      <Undo2 :size="13" /> Not Here
+                    </button>
+                  </div>
+                </div>
+                <div class="mt-3 divide-y divide-stone-100">
+                  <div v-for="c in nowServing.children" :key="c.childID" class="flex items-center justify-between py-2.5">
+                    <div class="flex items-center gap-2">
+                      <span class="text-[13.5px] font-medium">{{ c.name }}</span>
+                      <span v-if="roomProgress[c.childID]?.state === 'done'" class="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+                        <Check :size="11" /> Done
+                      </span>
+                      <span v-else-if="roomProgress[c.childID]" class="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                        {{ roomProgress[c.childID].due }} vaccine{{ roomProgress[c.childID].due === 1 ? '' : 's' }} due
+                      </span>
+                    </div>
+                    <button @click="startVaccinating(nowServing, c)"
+                      class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-semibold"
+                      :class="roomProgress[c.childID]?.state === 'done' ? 'border border-stone-200 text-stone-600 hover:bg-stone-50' : 'bg-emerald-700 text-white hover:bg-emerald-800'">
+                      <Syringe :size="13" /> {{ roomProgress[c.childID]?.state === 'done' ? 'Open' : 'Start Vaccinating' }}
+                    </button>
+                  </div>
+                </div>
+                <div class="mt-3 flex justify-end">
+                  <button @click="completeVisit(nowServing)" :disabled="roomBusy"
+                    class="flex items-center gap-1.5 rounded-lg bg-stone-800 px-4 py-2 text-[12.5px] font-semibold text-white hover:bg-stone-900 disabled:opacity-40">
+                    <Check :size="14" /> Complete Visit
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Next in line -->
+            <div class="col-span-4 border-l border-stone-200 p-5">
+              <p class="text-[11px] font-semibold uppercase tracking-wide text-stone-500 mb-2">Next in line</p>
+              <p v-if="waitingList.length === 0" class="text-[12.5px] text-stone-400">Nobody is waiting.</p>
+              <div class="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                <div v-for="(q, i) in waitingList" :key="q.queueID" class="flex items-center justify-between rounded-xl bg-stone-50 px-3 py-2">
+                  <div class="min-w-0">
+                    <p class="text-[12.5px] font-semibold">{{ q.no }} <span v-if="i === 0" class="ml-1 text-[10.5px] font-medium text-emerald-700">next</span></p>
+                    <p class="text-[11px] text-stone-500 truncate">{{ q.child }}</p>
+                  </div>
+                  <span class="text-[11px] text-stone-400 shrink-0">{{ q.time }}</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -799,6 +1013,7 @@ onUnmounted(() => {
           <div class="col-span-4 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
             <p class="text-[14px] font-semibold mb-3">Vaccine Stock Alerts</p>
             <div class="space-y-2.5">
+              <p v-if="stockAlerts.length === 0" class="text-[12.5px] text-emerald-700 px-3 py-2">All vaccines are sufficiently stocked.</p>
               <div
                 v-for="s in stockAlerts"
                 :key="s.name"
@@ -808,6 +1023,14 @@ onUnmounted(() => {
                   <p class="text-[12.5px] font-semibold">{{ s.name }}</p>
                   <p class="text-[11px] text-stone-500">{{ s.detail }}</p>
                   <p class="text-[11px]" :class="stockNoteColor[s.level]">{{ s.note }}</p>
+                  <button
+                    v-if="s.level === 'Critical'"
+                    @click="notifyStockParents(s)"
+                    class="mt-1 text-[11px] font-semibold text-emerald-700 hover:underline"
+                  >
+                    Notify parents with a child due for it
+                  </button>
+                  <p v-if="stockNotice[s.vaccineID]" class="text-[10.5px] text-stone-500 mt-0.5">{{ stockNotice[s.vaccineID] }}</p>
                 </div>
                 <span
                   class="text-[10.5px] font-semibold px-2 py-1 rounded-full shrink-0"
@@ -822,6 +1045,7 @@ onUnmounted(() => {
           <div class="col-span-8 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
             <p class="text-[14px] font-semibold mb-3">Recent Clinic Activities</p>
             <div class="space-y-3 max-h-[260px] overflow-y-auto pr-1">
+              <p v-if="activities.length === 0" class="text-[12.5px] text-stone-400">No recent activity yet.</p>
               <div v-for="(a, i) in activities" :key="i" class="flex items-start gap-3">
                 <div class="flex h-8 w-8 items-center justify-center rounded-full shrink-0 bg-emerald-50">
                   <component :is="a.icon" :size="14" class="text-emerald-800" />
@@ -836,26 +1060,6 @@ onUnmounted(() => {
         </div>
       </div>
         <Teleport to="body">
-    <div
-      v-if="activeAssignQueue"
-      class="menu-popover fixed z-50 w-64 rounded-xl border border-stone-200 bg-white shadow-lg p-2"
-      :style="menuPosition"
-    >
-      <p class="px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-stone-400">Assign to station</p>
-      <button
-        v-for="s in stations.filter(st => !st.isOccupied)"
-        :key="s.roomId"
-        @click="assignStation(activeAssignQueue, s)"
-        class="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-[12.5px] hover:bg-stone-50"
-      >
-        <span>{{ s.roomName }}</span>
-        <span class="text-[10.5px] text-stone-400">{{ s.doctorName }}</span>
-      </button>
-      <p v-if="stations.filter(st => !st.isOccupied).length === 0" class="px-2 py-1.5 text-[12px] text-stone-400">
-        No stations available right now.
-      </p>
-    </div>
-
     <div
       v-if="activeMoreQueue"
       class="menu-popover fixed z-50 w-48 rounded-xl border border-stone-200 bg-white shadow-lg p-2"

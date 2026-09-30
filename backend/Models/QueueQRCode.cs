@@ -12,6 +12,9 @@ namespace AndroidWebAPI.Models
 
         public string Token { get; set; } = string.Empty;
 
+        // 6-character code printed under the QR, for typing in by hand
+        public string ShortCode { get; set; } = string.Empty;
+
         public DateTime QRDate { get; set; }
 
         public DateTime ValidFrom { get; set; }

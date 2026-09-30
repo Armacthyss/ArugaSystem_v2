@@ -13,7 +13,6 @@ namespace AndroidWebAPI.Data
         Task UpdateAsync(VaccinationRecord record);
         Task DeleteAsync(Guid vaccinationRecordId);
         Task<VaccinationRecord> CompleteVaccinationAsync(Guid vaccinationRecordId, CompleteVaccinationDto dto);
-        Task<VaccinationRecord> UpdateDiagnosisAsync(Guid vaccinationRecordId, UpdateDiagnosisDto dto);
 
         Task<bool> AlreadyVaccinatedAsync(Guid childId, int vaccineId, int doseNumber);
         // Business Logic

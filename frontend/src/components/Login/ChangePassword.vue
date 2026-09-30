@@ -1,9 +1,10 @@
 <script setup>
+import { API_ORIGIN } from '@/utils/apiBase'
 import { ref, computed, onMounted } from "vue"
 import { useRouter } from "vue-router"
 import axios from "axios"
 
-const API_BASE_URL = "http://localhost:57147/api/auth"
+const API_BASE_URL = `${API_ORIGIN}/api/auth`
 
 const router = useRouter()
 
@@ -96,21 +97,22 @@ function redirectForRole(role) {
       router.push("/ParentOverview")
       break
 
-    case "Doctor":
-    case "Nurse":
-      router.push({ name: "DoctorHome" })
-      break
-
+    // Staff / Nurse
     case "Staff":
+    case "Nurse":
+    case "Admission":
       router.push("/staff/dashboard")
       break
 
-    case "Admin":
-      router.push("/AdminHome")
+    // Admin / Doctor
+    case "SystemAdmin":
+    case "Doctor":
+    case "Administrator":
+      router.push("/system-admin/home")
       break
 
-    case "SystemAdmin":
-      router.push("/system-admin/home")
+    case "SuperAdmin":
+      router.push("/super-admin/home")
       break
 
     default:
@@ -147,7 +149,7 @@ async function handleChangePassword() {
 
   if (!token) {
     errorMessage.value = "Your session has expired. Please log in again."
-    router.push("/login")
+    router.push("/")
     return
   }
 
@@ -177,7 +179,10 @@ async function handleChangePassword() {
     localStorage.setItem("account", JSON.stringify(updatedAccount))
     account.value = updatedAccount
 
-    redirectForRole(response.data?.role ?? updatedAccount.role)
+    // The session's portal role (Parent / Healthcare / Staff / SystemAdmin)
+    // is what the router guards on, so prefer it over the backend's
+    // job-title style role.
+    redirectForRole(updatedAccount.role ?? response.data?.role)
 
   } catch (error) {
     console.error("Change password error:", error)
@@ -188,12 +193,16 @@ async function handleChangePassword() {
 
       errorMessage.value = "Your session has expired. Please log in again."
       router.push("/")
+    } else if (error.response) {
+      // e.g. 400 "Current password is incorrect." (checked before
+      // error.request: a server reply also has error.request set)
+      errorMessage.value =
+        error.response.data?.message ||
+        "Unable to change your password. Please check your current password and try again."
     } else if (error.request) {
       errorMessage.value = "Can't reach the server. Please check your connection and try again."
     } else {
-      errorMessage.value =
-        error.response?.data?.message ||
-        "Unable to change your password. Please check your current password and try again."
+      errorMessage.value = "Unable to change your password. Please try again."
     }
   } finally {
     isLoading.value = false
@@ -383,4 +392,4 @@ function handleLogout() {
       </form>
     </div>
   </div>
-</template>
+</template>

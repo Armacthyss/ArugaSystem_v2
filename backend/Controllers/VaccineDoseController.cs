@@ -56,6 +56,7 @@ namespace AndroidWebAPI.Controllers
         // CREATE
         // POST: api/VaccineDoses
         // ========================================
+        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.Admin)]
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] VaccineDose dose)
         {
@@ -74,6 +75,7 @@ namespace AndroidWebAPI.Controllers
         // UPDATE
         // PUT: api/VaccineDoses/5
         // ========================================
+        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.Admin)]
         [HttpPut("{id}")]
         public async Task<IActionResult> Update(int id, [FromBody] VaccineDose dose)
         {
@@ -94,6 +96,7 @@ namespace AndroidWebAPI.Controllers
         // DELETE
         // DELETE: api/VaccineDoses/5
         // ========================================
+        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.Admin)]
         [HttpDelete("{id}")]
         public async Task<IActionResult> Delete(int id)
         {

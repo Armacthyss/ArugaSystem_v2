@@ -515,10 +515,11 @@
 
 <script setup>
 
+import { API_ORIGIN } from '@/utils/apiBase'
 import { ref, computed } from 'vue'
 import axios from 'axios'
 
-const API_BASE = 'http://localhost:57147/api'
+const API_BASE = `${API_ORIGIN}/api`
 
 /*
 |--------------------------------------------------------------------------

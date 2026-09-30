@@ -1,13 +1,9 @@
 <script setup>
-import { ref, computed, reactive } from 'vue'
+import { ref, computed, reactive, onMounted } from 'vue'
+import axios from 'axios'
 import AppSidebar from './Components/AppSidebar.vue'
 import AppHeader from './Components/AppHeader.vue'
-
-/* ----------------------------- Sidebar state ------------------------------ */
-const isCollapsed = ref(false)
-const toggleSidebar = () => (isCollapsed.value = !isCollapsed.value)
-
-
+import { API_BASE, formatDateTime, isSameDay, toISODate, downloadCSV } from '@/utils/format'
 
 /* -------------------------------- Status meta -------------------------------- */
 const statusMeta = {
@@ -15,92 +11,70 @@ const statusMeta = {
   Failed: { tint: 'bg-rose-50', text: 'text-rose-600', dot: 'bg-rose-500' },
   Warning: { tint: 'bg-amber-50', text: 'text-amber-700', dot: 'bg-amber-500' },
 }
+const metaFor = status => statusMeta[status] || statusMeta.Success
 
-const roleOptions = ['Parent', 'Staff', 'Healthworker', 'System Admin']
-const moduleOptions = ['User Management', 'Patient Management', 'Vaccine Management', 'Inventory', 'Notifications', 'Reports', 'Authentication']
-const actionOptions = ['Login', 'Logout', 'Create', 'Update', 'Archive', 'Restore', 'Link Parent', 'Unlink Parent', 'Receive Stock', 'Adjust Inventory', 'Vaccinate Child', 'Generate Report']
+const roleOptions = ['Parent', 'Staff / Nurse', 'Admin / Doctor']
+const moduleOptions = computed(() => [...new Set(logs.value.map(l => l.module))].sort())
+const actionOptions = computed(() => [...new Set(logs.value.map(l => l.action))].sort())
 
-/* -------------------------------- Log data -------------------------------- */
-const logs = ref([
-  {
-    id: 1, timestamp: 'Jul 12, 2026, 9:15 AM', user: 'Renzo Miguel', role: 'System Admin', module: 'User Management',
-    action: 'Create', affectedRecord: 'Staff Account – Carlo Reyes', ipAddress: '192.168.1.14', device: 'Chrome on Windows 11',
-    status: 'Success', description: 'Created a new Staff account with clinic front-desk permissions.',
-    oldValue: '—', newValue: 'Status: Active, Role: Staff',
-  },
-  {
-    id: 2, timestamp: 'Jul 12, 2026, 9:22 AM', user: 'Carlo Reyes', role: 'Staff', module: 'Patient Management',
-    action: 'Create', affectedRecord: 'Patient PT-00234 – Isabela Aquino', ipAddress: '192.168.1.28', device: 'Chrome on Windows 11',
-    status: 'Success', description: 'Registered a new patient and linked mother as primary guardian.',
-    oldValue: '—', newValue: 'Patient Status: Active',
-  },
-  {
-    id: 3, timestamp: 'Jul 12, 2026, 9:40 AM', user: 'Elena Cruz', role: 'Healthworker', module: 'Patient Management',
-    action: 'Vaccinate Child', affectedRecord: 'Patient PT-00231 – Miguel Bautista', ipAddress: '192.168.1.31', device: 'Safari on iPad',
-    status: 'Success', description: 'Administered MMR vaccine (1st dose) during scheduled visit.',
-    oldValue: 'Latest Vaccine: Pentavalent (3rd dose)', newValue: 'Latest Vaccine: MMR (1st dose)',
-  },
-  {
-    id: 4, timestamp: 'Jul 12, 2026, 10:05 AM', user: 'Renzo Miguel', role: 'System Admin', module: 'Inventory',
-    action: 'Receive Stock', affectedRecord: 'Batch MMR-2026-015', ipAddress: '192.168.1.14', device: 'Chrome on Windows 11',
-    status: 'Success', description: 'Received new vaccine stock delivery and added to inventory.',
-    oldValue: 'Remaining: 27', newValue: 'Remaining: 127 (+100 doses received)',
-  },
-  {
-    id: 5, timestamp: 'Jul 12, 2026, 10:22 AM', user: 'Unknown', role: 'Parent', module: 'Authentication',
-    action: 'Login', affectedRecord: 'Account – msantos', ipAddress: '203.177.42.9', device: 'Chrome on Android',
-    status: 'Failed', description: 'Failed login attempt due to incorrect password (3rd attempt).',
-    oldValue: '—', newValue: '—',
-  },
-  {
-    id: 6, timestamp: 'Jul 12, 2026, 11:03 AM', user: 'Bea Fernandez', role: 'Healthworker', module: 'Patient Management',
-    action: 'Update', affectedRecord: 'Patient PT-00198 – Diego Ramos', ipAddress: '192.168.1.42', device: 'Chrome on Windows 11',
-    status: 'Warning', description: 'Updated patient status to Inactive without a documented reason on first attempt.',
-    oldValue: 'Status: Active', newValue: 'Status: Inactive',
-  },
-  {
-    id: 7, timestamp: 'Jul 12, 2026, 11:47 AM', user: 'Renzo Miguel', role: 'System Admin', module: 'Vaccine Management',
-    action: 'Update', affectedRecord: 'Vaccine VX-006 – PCV', ipAddress: '192.168.1.14', device: 'Chrome on Windows 11',
-    status: 'Success', description: 'Updated dose interval information for Pneumococcal Conjugate Vaccine.',
-    oldValue: 'Interval: 6 weeks apart', newValue: 'Interval: 4 weeks apart',
-  },
-  {
-    id: 8, timestamp: 'Jul 12, 2026, 1:12 PM', user: 'Jhun Aquino', role: 'Staff', module: 'Notifications',
-    action: 'Generate Report', affectedRecord: 'Reminder Logs Report', ipAddress: '192.168.1.55', device: 'Edge on Windows 10',
-    status: 'Success', description: 'Generated Reminder Logs report for the current month.',
-    oldValue: '—', newValue: '—',
-  },
-  {
-    id: 9, timestamp: 'Jul 12, 2026, 1:40 PM', user: 'Angeli Torres', role: 'Parent', module: 'Authentication',
-    action: 'Login', affectedRecord: 'Account – atorres', ipAddress: '203.177.44.18', device: 'Safari on iPhone',
-    status: 'Success', description: 'Successful login to parent portal.',
-    oldValue: '—', newValue: '—',
-  },
-  {
-    id: 10, timestamp: 'Jul 12, 2026, 2:05 PM', user: 'Renzo Miguel', role: 'System Admin', module: 'Inventory',
-    action: 'Adjust Inventory', affectedRecord: 'Batch BT-2025-176 – IPV', ipAddress: '192.168.1.14', device: 'Chrome on Windows 11',
-    status: 'Success', description: 'Marked remaining doses as expired following expiration date.',
-    oldValue: 'Remaining: 8', newValue: 'Remaining: 0 (Status: Expired)',
-  },
-])
+/* -------------------------------- Log data (GET /api/AuditLogs) -------------------------------- */
+const logs = ref([])
+const loading = ref(false)
+const loadError = ref('')
+
+function rangeFor(range) {
+  const today = new Date()
+  if (range === 'Today') return { from: toISODate(today), to: toISODate(today) }
+  if (range === 'This Week') {
+    const start = new Date(today); start.setDate(today.getDate() - today.getDay())
+    return { from: toISODate(start), to: toISODate(today) }
+  }
+  if (range === 'This Month') return { from: toISODate(new Date(today.getFullYear(), today.getMonth(), 1)), to: toISODate(today) }
+  return { from: customFrom.value || toISODate(today), to: customTo.value || toISODate(today) }
+}
+
+async function fetchLogs() {
+  loading.value = true
+  loadError.value = ''
+  try {
+    const { from, to } = rangeFor(appliedFilters.dateRange)
+    const res = await axios.get(`${API_BASE}/AuditLogs`, { params: { from, to } })
+    logs.value = res.data.map(l => ({ ...l, rawTimestamp: l.timestamp, timestamp: formatDateTime(l.timestamp) }))
+  } catch (e) {
+    console.error('fetchLogs:', e)
+    loadError.value = 'Could not load audit logs. Check that the API is running.'
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(fetchLogs)
+
+const exportLogs = () => {
+  downloadCSV(`audit-logs-${toISODate()}.csv`, [
+    ['Date & Time', 'User', 'Role', 'Module', 'Action', 'Affected Record', 'Description', 'Status', 'IP Address', 'Device'],
+    ...filteredLogs.value.map(l => [l.timestamp, l.user, l.role, l.module, l.action, l.affectedRecord, l.description, l.status, l.ipAddress, l.device]),
+  ])
+}
 
 /* ---------------------------- Toolbar / filters ---------------------------- */
 const searchQuery = ref('')
 const roleFilter = ref('All')
 const moduleFilter = ref('All')
 const actionFilter = ref('All')
-const dateRangeFilter = ref('Today')
+const dateRangeFilter = ref('This Week')
 const customFrom = ref('')
 const customTo = ref('')
 
 const appliedFilters = reactive({
-  role: 'All', module: 'All', action: 'All', dateRange: 'Today',
+  role: 'All', module: 'All', action: 'All', dateRange: 'This Week',
 })
 
 const applyFilters = () => {
   Object.assign(appliedFilters, {
     role: roleFilter.value, module: moduleFilter.value, action: actionFilter.value, dateRange: dateRangeFilter.value,
   })
+  fetchLogs()
 }
 
 const filteredLogs = computed(() =>
@@ -118,7 +92,7 @@ const filteredLogs = computed(() =>
 
 /* -------------------------------- Summary ---------------------------------- */
 const summary = computed(() => ({
-  totalToday: logs.value.length,
+  totalToday: logs.value.filter((l) => isSameDay(l.rawTimestamp)).length,
   successfulLogins: logs.value.filter((l) => l.action === 'Login' && l.status === 'Success').length,
   failedLogins: logs.value.filter((l) => l.action === 'Login' && l.status === 'Failed').length,
   userChanges: logs.value.filter((l) => l.module === 'User Management').length,
@@ -134,6 +108,8 @@ const openDrawer = (log) => {
   showDrawer.value = true
 }
 const closeDrawer = () => (showDrawer.value = false)
+const hasValueChange = (log) =>
+  [log?.oldValue, log?.newValue].some(v => v && v !== '—')
 
 /* -------------------------------- Timeline ---------------------------- */
 const timeline = computed(() => logs.value.slice(0, 6))
@@ -149,7 +125,7 @@ const timeline = computed(() => logs.value.slice(0, 6))
       <!-- Top navbar -->
       <AppHeader
   title="Audit Logs"
-  breadcrumb="System Administration / Audit Logs"
+  breadcrumb="Super Admin / Audit Logs"
   user-initials="RM"
 />
 
@@ -258,7 +234,7 @@ const timeline = computed(() => logs.value.slice(0, 6))
               <button @click="applyFilters" class="text-sm font-semibold px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
                 Apply Filters
               </button>
-              <button class="text-sm font-semibold px-4 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
+              <button @click="exportLogs" class="text-sm font-semibold px-4 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
                 Export Logs
               </button>
             </div>
@@ -296,8 +272,8 @@ const timeline = computed(() => logs.value.slice(0, 6))
                   <td class="px-3 py-3 text-slate-500 whitespace-nowrap max-w-[220px] truncate" :title="log.affectedRecord">{{ log.affectedRecord }}</td>
                   <td class="px-3 py-3 text-slate-400 font-mono text-xs whitespace-nowrap">{{ log.ipAddress }}</td>
                   <td class="px-3 py-3">
-                    <span :class="[statusMeta[log.status].tint, statusMeta[log.status].text]" class="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap">
-                      <span :class="statusMeta[log.status].dot" class="w-1.5 h-1.5 rounded-full"></span>
+                    <span :class="[metaFor(log.status).tint, metaFor(log.status).text]" class="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap">
+                      <span :class="metaFor(log.status).dot" class="w-1.5 h-1.5 rounded-full"></span>
                       {{ log.status }}
                     </span>
                   </td>
@@ -312,7 +288,7 @@ const timeline = computed(() => logs.value.slice(0, 6))
                 </tr>
 
                 <tr v-if="filteredLogs.length === 0">
-                  <td colspan="9" class="px-5 py-12 text-center text-sm text-slate-400">No logs match your search or filters.</td>
+                  <td colspan="9" class="px-5 py-12 text-center text-sm" :class="loadError ? 'text-rose-500' : 'text-slate-400'">{{ loading ? 'Loading audit logs...' : (loadError || 'No logs match your search or filters.') }}</td>
                 </tr>
               </tbody>
             </table>
@@ -325,13 +301,13 @@ const timeline = computed(() => logs.value.slice(0, 6))
           <div class="space-y-0">
             <div v-for="(log, idx) in timeline" :key="'t-' + log.id" class="flex gap-3">
               <div class="flex flex-col items-center">
-                <span :class="statusMeta[log.status].dot" class="w-2.5 h-2.5 rounded-full shrink-0 mt-1"></span>
+                <span :class="metaFor(log.status).dot" class="w-2.5 h-2.5 rounded-full shrink-0 mt-1"></span>
                 <span v-if="idx !== timeline.length - 1" class="w-px flex-1 bg-slate-200"></span>
               </div>
               <div class="flex-1 min-w-0 pb-5">
                 <div class="flex items-center justify-between gap-2">
                   <p class="text-xs font-semibold text-slate-500">{{ log.timestamp.split(', ').slice(-1)[0] }}</p>
-                  <span :class="[statusMeta[log.status].tint, statusMeta[log.status].text]" class="text-xs font-semibold px-2 py-0.5 rounded-full">{{ log.status }}</span>
+                  <span :class="[metaFor(log.status).tint, metaFor(log.status).text]" class="text-xs font-semibold px-2 py-0.5 rounded-full">{{ log.status }}</span>
                 </div>
                 <p class="text-sm text-slate-800 mt-1">
                   <span class="font-semibold">{{ log.user }}</span> ({{ log.role }}) — {{ log.description }}
@@ -357,8 +333,8 @@ const timeline = computed(() => logs.value.slice(0, 6))
 
         <div v-if="selectedLog" class="flex-1 overflow-y-auto p-6 space-y-6">
           <div>
-            <span :class="[statusMeta[selectedLog.status].tint, statusMeta[selectedLog.status].text]" class="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full mb-3">
-              <span :class="statusMeta[selectedLog.status].dot" class="w-1.5 h-1.5 rounded-full"></span>
+            <span :class="[metaFor(selectedLog.status).tint, metaFor(selectedLog.status).text]" class="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full mb-3">
+              <span :class="metaFor(selectedLog.status).dot" class="w-1.5 h-1.5 rounded-full"></span>
               {{ selectedLog.status }}
             </span>
             <p class="text-base font-bold text-slate-900">{{ selectedLog.action }} — {{ selectedLog.module }}</p>
@@ -401,11 +377,12 @@ const timeline = computed(() => logs.value.slice(0, 6))
             </div>
             <div class="flex items-center justify-between px-4 py-3">
               <span class="text-xs text-slate-500">Result</span>
-              <span :class="[statusMeta[selectedLog.status].text]" class="text-sm font-semibold">{{ selectedLog.status }}</span>
+              <span :class="[metaFor(selectedLog.status).text]" class="text-sm font-semibold">{{ selectedLog.status }}</span>
             </div>
           </div>
 
-          <div>
+          <!-- Before/after values, only for actions that record them (edits, status changes) -->
+          <div v-if="hasValueChange(selectedLog)">
             <h3 class="text-xs font-bold uppercase tracking-wide text-slate-500 mb-2">Value Change</h3>
             <div class="grid grid-cols-1 gap-3">
               <div class="rounded-lg border border-rose-100 bg-rose-50/60 px-4 py-3">

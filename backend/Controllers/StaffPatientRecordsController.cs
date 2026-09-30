@@ -15,6 +15,7 @@ namespace AndroidWebAPI.Controllers
             _repository = repository;
         }
 
+        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.StaffOrAdmin)]
         [HttpGet]
         public async Task<IActionResult> GetAllFamilies()
         {
@@ -22,6 +23,7 @@ namespace AndroidWebAPI.Controllers
             return Ok(families);
         }
 /*
+        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.StaffOrAdmin)]
         [HttpPost]
         public async Task<IActionResult> RegisterFamily(RegisterFamilyDto dto)
         {

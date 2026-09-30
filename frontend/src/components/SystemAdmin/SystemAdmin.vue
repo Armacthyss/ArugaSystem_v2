@@ -1,68 +1,133 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import axios from 'axios'
 import AppSidebar from './Components/AppSidebar.vue'
 import AppHeader from './Components/AppHeader.vue'
 import {
   Users, Baby, Syringe, AlertTriangle, UserPlus, Package,
   FileText, KeyRound, ClipboardList, ChevronRight, CircleCheck,
-  CalendarClock,
+  CalendarClock, LogIn, Bell, Clock,
 } from 'lucide-vue-next'
+import { API_BASE, isSameDay, relativeTime, summarizeStock } from '@/utils/format'
 
+const router = useRouter()
 const activeNav = ref('Dashboard')
-function handleLogout() {
-  console.log('logout clicked')
-}
 function goTo(route) {
-  console.log('navigate to', route)
+  router.push(route)
 }
 
-/* Mock data — replace with API calls once the backend endpoints are ready */
-const summaryCards = [
-  { label: 'Total Users', value: 128, description: 'Registered system users', icon: Users, tint: 'bg-teal-50', text: 'text-teal-700' },
-  { label: 'Total Patients', value: 342, description: 'Registered children', icon: Baby, tint: 'bg-emerald-50', text: 'text-emerald-700' },
-  { label: 'Vaccinations This Month', value: 186, description: 'Vaccinations recorded', icon: Syringe, tint: 'bg-sky-50', text: 'text-sky-700' },
-  { label: 'Low Stock Vaccines', value: 4, description: 'Vaccines need attention', icon: AlertTriangle, tint: 'bg-amber-50', text: 'text-amber-700' },
-]
+// ─────────────────────────────────────────────────────────────
+// DATA — everything on this page comes from the live database.
+// Each source is loaded independently so one failing endpoint only
+// blanks its own card instead of the whole dashboard.
+// ─────────────────────────────────────────────────────────────
+const accounts  = ref([])
+const children  = ref([])
+const records   = ref([])
+const inventory = ref([])
+const vaccines  = ref([])
+const auditLogs = ref([])
+const loading   = ref(true)
 
-const userBreakdown = [
-  { role: 'Parent / Guardian', count: 82 },
-  { role: 'Healthcare', count: 24 },
-  { role: 'Staff', count: 21 },
-  { role: 'System Admin', count: 1 },
-]
-const maxUserCount = Math.max(...userBreakdown.map((u) => u.count))
+async function load(url, target) {
+  try {
+    const res = await axios.get(`${API_BASE}${url}`)
+    target.value = res.data
+  } catch (e) {
+    console.error(`Dashboard: ${url} failed`, e)
+  }
+}
 
-const vaccinationTrend = [
-  { month: 'Mar', count: 120 },
-  { month: 'Apr', count: 145 },
-  { month: 'May', count: 132 },
-  { month: 'Jun', count: 168 },
-  { month: 'Jul', count: 154 },
-  { month: 'Aug', count: 186 },
-]
-const maxVaccinationCount = Math.max(...vaccinationTrend.map((v) => v.count))
+onMounted(async () => {
+  await Promise.all([
+    load('/accounts', accounts),
+    load('/Children/overview', children),
+    load('/VaccinationRecords/all', records),
+    load('/VaccineInventory', inventory),
+    load('/Vaccines', vaccines),
+    load('/AuditLogs/activity', auditLogs),   // clinic work only (full log: Super Admin)
+  ])
+  loading.value = false
+})
+
+const adminName = (() => {
+  try { return JSON.parse(localStorage.getItem('account') || '{}').user?.FirstName || 'Admin' } catch { return 'Admin' }
+})()
+
+const greeting = computed(() => {
+  const h = new Date().getHours()
+  return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'
+})
+
+const completedRecords = computed(() => records.value.filter(r => (r.status ?? 'Completed') === 'Completed'))
+
+const stock = computed(() => summarizeStock(inventory.value, vaccines.value))
+const lowStock = computed(() => stock.value.filter(s => s.status !== 'Good'))
+
+const summaryCards = computed(() => {
+  const now = new Date()
+  const thisMonth = completedRecords.value.filter(r => {
+    const d = new Date(r.vaccinationDate)
+    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
+  }).length
+  return [
+    { label: 'Total Users', value: accounts.value.length, description: 'Registered system users', icon: Users, tint: 'bg-teal-50', text: 'text-teal-700' },
+    { label: 'Total Patients', value: children.value.length, description: 'Registered children', icon: Baby, tint: 'bg-emerald-50', text: 'text-emerald-700' },
+    { label: 'Vaccinations This Month', value: thisMonth, description: 'Vaccinations recorded', icon: Syringe, tint: 'bg-sky-50', text: 'text-sky-700' },
+    { label: 'Low Stock Vaccines', value: lowStock.value.length, description: 'Vaccines need attention', icon: AlertTriangle, tint: 'bg-amber-50', text: 'text-amber-700' },
+  ]
+})
+
+const userBreakdown = computed(() => {
+  const count = roles => accounts.value.filter(a => roles.includes(a.role)).length
+  return [
+    { role: 'Parent / Guardian', count: count(['Parent']) },
+    { role: 'Staff / Nurse', count: count(['Nurse', 'Staff', 'Admission', 'Healthcare']) },
+    { role: 'Admin / Doctor', count: count(['Doctor', 'Administrator']) },
+  ]
+})
+const maxUserCount = computed(() => Math.max(1, ...userBreakdown.value.map(u => u.count)))
+
+// Last 6 calendar months, oldest first
+const vaccinationTrend = computed(() => {
+  const now = new Date()
+  return Array.from({ length: 6 }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1)
+    const count = completedRecords.value.filter(r => {
+      const v = new Date(r.vaccinationDate)
+      return v.getFullYear() === d.getFullYear() && v.getMonth() === d.getMonth()
+    }).length
+    return { month: d.toLocaleDateString('en-PH', { month: 'short' }), count }
+  })
+})
+const maxVaccinationCount = computed(() => Math.max(1, ...vaccinationTrend.value.map(v => v.count)))
 
 const statusMeta = {
   Good: { tint: 'bg-emerald-50', text: 'text-emerald-700', dot: 'bg-emerald-500' },
   'Low Stock': { tint: 'bg-amber-50', text: 'text-amber-700', dot: 'bg-amber-500' },
   Critical: { tint: 'bg-red-100', text: 'text-red-800', dot: 'bg-red-700' },
 }
-const vaccineInventory = [
-  { name: 'BCG', stock: 42, status: 'Good' },
-  { name: 'Hepatitis B', stock: 18, status: 'Low Stock' },
-  { name: 'Pentavalent', stock: 65, status: 'Good' },
-  { name: 'Polio', stock: 12, status: 'Low Stock' },
-  { name: 'MMR', stock: 51, status: 'Good' },
-]
+const vaccineInventory = computed(() => stock.value)
 
-const recentActivity = [
-  { icon: UserPlus, description: 'Healthcare account created', detail: 'Juan Dela Cruz', time: '10 minutes ago' },
-  { icon: Package, description: 'Vaccine inventory updated', detail: 'Hepatitis B', time: '32 minutes ago' },
-  { icon: Baby, description: 'New patient record registered', detail: 'Maria Santos', time: '1 hour ago' },
-  { icon: CalendarClock, description: 'Vaccination schedule updated', detail: 'Pentavalent series', time: '2 hours ago' },
-  { icon: KeyRound, description: 'User account password reset', detail: 'Ana Reyes', time: '3 hours ago' },
-  { icon: FileText, description: 'System Admin viewed vaccination report', detail: 'August summary', time: '5 hours ago' },
-]
+const moduleIcon = {
+  'User Management': UserPlus,
+  'Patient Management': Baby,
+  Inventory: Package,
+  Vaccination: Syringe,
+  Authentication: LogIn,
+  Notifications: Bell,
+  Reports: FileText,
+}
+
+const recentActivity = computed(() =>
+  auditLogs.value.slice(0, 6).map(l => ({
+    icon: moduleIcon[l.module] || CalendarClock,
+    description: `${l.action} — ${l.module}`,
+    detail: `${l.user} · ${l.affectedRecord !== '—' ? l.affectedRecord : l.description}`,
+    time: relativeTime(l.timestamp),
+  }))
+)
 
 const quickActions = [
   { label: 'Add User', icon: UserPlus, route: '/system-admin/user-management' },
@@ -72,33 +137,45 @@ const quickActions = [
   { label: 'View Reports', icon: ClipboardList, route: '/system-admin/reports' },
 ]
 
-const notifications = [
-  { icon: AlertTriangle, text: '4 vaccines are running low', tint: 'text-amber-600' },
-  { icon: KeyRound, text: '2 user accounts require password changes', tint: 'text-sky-600' },
-  { icon: ClipboardList, text: '1 vaccination schedule rule needs review', tint: 'text-amber-600' },
-  { icon: CircleCheck, text: 'Daily system backup completed', tint: 'text-emerald-600' },
-]
+// Things that need the administrator's attention, computed live.
+const notifications = computed(() => {
+  const list = []
+  if (lowStock.value.length)
+    list.push({ icon: AlertTriangle, text: `${lowStock.value.length} vaccine(s) running low: ${lowStock.value.map(s => s.abbreviation || s.name).join(', ')}`, tint: 'text-amber-600' })
+  const expiring = stock.value.reduce((s, v) => s + v.expiringSoon, 0)
+  if (expiring)
+    list.push({ icon: Clock, text: `${expiring} batch(es) expire within 30 days`, tint: 'text-amber-600' })
+  const mustChange = accounts.value.filter(a => a.mustChangePassword).length
+  if (mustChange)
+    list.push({ icon: KeyRound, text: `${mustChange} account(s) still need to set their own password`, tint: 'text-sky-600' })
+  const delayed = children.value.filter(c => c.vaccinationStatus === 'Delayed').length
+  if (delayed)
+    list.push({ icon: CalendarClock, text: `${delayed} child(ren) have overdue vaccinations`, tint: 'text-rose-600' })
+  if (!list.length)
+    list.push({ icon: CircleCheck, text: 'Everything looks good — nothing needs attention', tint: 'text-emerald-600' })
+  return list
+})
 
-const todaysActivity = [
-  { label: 'New Users', value: 3 },
-  { label: 'New Patients', value: 7 },
-  { label: 'Vaccinations Recorded', value: 18 },
-  { label: 'Inventory Updates', value: 5 },
-]
+const todaysActivity = computed(() => [
+  { label: 'New Users', value: accounts.value.filter(a => isSameDay(a.createdAt)).length },
+  { label: 'New Patients', value: children.value.filter(c => isSameDay(c.createdAt)).length },
+  { label: 'Vaccinations Recorded', value: completedRecords.value.filter(r => isSameDay(r.vaccinationDate)).length },
+  { label: 'Inventory Updates', value: auditLogs.value.filter(l => l.module === 'Inventory' && isSameDay(l.timestamp)).length },
+])
 </script>
 
 <template>
   <div class="min-h-screen bg-slate-50 flex text-slate-900">
-    <AppSidebar v-model:active-nav="activeNav" @logout="handleLogout" />
+    <AppSidebar />
 
     <div class="flex-1 min-w-0 flex flex-col">
-      <AppHeader title="Dashboard" breadcrumb="System Administration / Dashboard" />
+      <AppHeader title="Dashboard" breadcrumb="Admin / Dashboard" />
 
       <main class="p-6 space-y-6">
         <!-- Welcome / system status -->
         <section class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
-            <h1 class="text-xl font-bold text-slate-900">Good morning, Admin</h1>
+            <h1 class="text-xl font-bold text-slate-900">{{ greeting }}, {{ adminName }}</h1>
             <p class="text-sm text-slate-500">Here's an overview of the Aruga system today.</p>
           </div>
           <div class="flex items-center gap-2 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-full px-3 py-1.5 w-fit">

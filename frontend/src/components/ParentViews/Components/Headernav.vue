@@ -47,15 +47,17 @@
     </header>
 
     <!-- 2. MAIN NAVIGATION -->
-    <nav class="flex items-center justify-between bg-white border border-slate-200/60 p-2 rounded-xl shadow-sm mb-10 sticky top-4 z-50 backdrop-blur-md gap-3">
-      <div class="flex gap-1 shrink-0">
+    <!-- On a phone the tabs share the full width and the search box moves to
+         its own line, so nothing runs off the side of the screen -->
+    <nav class="flex flex-wrap sm:flex-nowrap items-center justify-between bg-white border border-slate-200/60 p-2 rounded-xl shadow-sm mb-10 sticky top-4 z-50 backdrop-blur-md gap-3">
+      <div class="flex gap-1 w-full sm:w-auto shrink-0">
         <router-link v-for="tab in navTabs" :key="tab.path" :to="tab.path"
           :class="isActiveTab(tab.path) ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-50'"
-          class="px-5 py-2.5 rounded-lg text-sm font-medium transition-all">
+          class="flex-1 sm:flex-none text-center px-2 sm:px-5 py-2.5 rounded-lg text-[13px] sm:text-sm font-medium transition-all">
           {{ tab.label }}
         </router-link>
       </div>
-      <div class="relative flex-1 max-w-sm">
+      <div class="relative w-full sm:w-auto sm:flex-1 sm:max-w-sm">
         <input v-model="searchQuery" @focus="searchFocused = true" @blur="onSearchBlur"
               type="text" placeholder="Search children..."
               class="w-full bg-slate-100 border-none rounded-lg py-2.5 pl-10 pr-4 text-[11px] focus:ring-2 focus:ring-emerald-600 outline-none transition-all" />
@@ -67,7 +69,7 @@
             <span class="text-lg">{{ child.sex === 'Female' ? '👧' : '👶' }}</span>
             <div>
               <p class="text-xs font-bold text-slate-800">{{ child.firstName }} {{ child.lastName }}</p>
-              <p class="text-[9px] text-slate-400 font-medium">ID: #{{ child.childID.substring(0, 8) }}</p>
+              <p v-if="child.familyNo" class="text-[9px] text-slate-400 font-medium">Family No. {{ child.familyNo }}</p>
             </div>
             <span class="ml-auto text-[9px] text-emerald-500 font-black uppercase">Select →</span>
           </button>
@@ -78,6 +80,11 @@
         </div>
       </div>
     </nav>
+
+    <!-- On every parent page: the Data Privacy consent (asked once) and the
+         "It's your turn" alert when the Nurse presses Call Next -->
+    <PrivacyConsentGate v-if="parentData?.parentID" :parent-id="parentData.parentID" @decline="handleLogoutClick" />
+    <CalledAlert v-if="parentData?.parentID" :parent-id="parentData.parentID" :children="children" />
   </div>
 </template>
 
@@ -85,6 +92,8 @@
 import { ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import logoIcon from '@/assets/logo-icon.svg'
+import CalledAlert from './CalledAlert.vue'
+import PrivacyConsentGate from './PrivacyConsentGate.vue'
 
 // ── Props / Emits ─────────────────────────────────────────────────────────
 // parentData, children, and unreadCount are all owned/fetched by whichever

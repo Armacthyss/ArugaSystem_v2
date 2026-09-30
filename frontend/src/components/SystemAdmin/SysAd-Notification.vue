@@ -1,92 +1,70 @@
 <script setup>
-import { ref, computed, reactive } from 'vue'
+import { ref, computed, reactive, onMounted } from 'vue'
+import { useFloatingMenu } from '@/utils/floatingMenu'
+import axios from 'axios'
 import AppSidebar from './Components/AppSidebar.vue'
 import AppHeader from './Components/AppHeader.vue'
-
-/* ----------------------------- Sidebar state ------------------------------ */
-const isCollapsed = ref(false)
-const toggleSidebar = () => (isCollapsed.value = !isCollapsed.value)
-
-const navItems = [
-  { label: 'Dashboard', icon: '🏠' },
-  { label: 'User Management', icon: '👥' },
-  { label: 'Patient Management', icon: '🧒' },
-  { label: 'Vaccine Management', icon: '💉' },
-  { label: 'Inventory', icon: '📦' },
-  { label: 'Notifications', icon: '🔔' },
-  { label: 'Reports', icon: '📊' },
-  { label: 'Audit Logs', icon: '📋' },
-  { label: 'Settings', icon: '⚙️' },
-]
-const activeNav = ref('Notifications')
+import { API_BASE, formatDate, isSameDay, toISODate, downloadCSV } from '@/utils/format'
+import { askConfirm } from '@/utils/dialog'
 
 /* -------------------------------- Status meta -------------------------------- */
+// In-app notifications are delivered the moment they're created, so the
+// status shown is Read / Delivered (read = the recipient opened it).
 const statusMeta = {
-  Sent: { tint: 'bg-emerald-50', text: 'text-emerald-700', dot: 'bg-emerald-500' },
-  Scheduled: { tint: 'bg-sky-50', text: 'text-sky-700', dot: 'bg-sky-500' },
-  Pending: { tint: 'bg-amber-50', text: 'text-amber-700', dot: 'bg-amber-500' },
-  Failed: { tint: 'bg-rose-50', text: 'text-rose-600', dot: 'bg-rose-500' },
+  Read: { tint: 'bg-emerald-50', text: 'text-emerald-700', dot: 'bg-emerald-500' },
+  Delivered: { tint: 'bg-sky-50', text: 'text-sky-700', dot: 'bg-sky-500' },
 }
 
-const typeOptions = ['Vaccination Reminder', 'Upcoming Schedule', 'Missed Vaccination', 'Queue Notification', 'Announcement', 'Manual Notification']
+const typeOptions = computed(() => [...new Set(notifications.value.map(n => n.type))].sort())
 
-/* -------------------------------- Notification data -------------------------------- */
-const notifications = ref([
-  {
-    id: 1, title: 'Pentavalent Dose 2 Reminder', recipient: 'Marites Santos', child: 'Miguel Bautista',
-    type: 'Vaccination Reminder', scheduledDate: 'Jul 12, 2026', sentDate: 'Jul 09, 2026', status: 'Sent',
-    message: 'This is a reminder that Miguel is due for the 2nd dose of Pentavalent vaccine on Jul 12, 2026. Please visit the clinic during operating hours.',
-    deliveryMethod: 'In-App', opened: true,
-  },
-  {
-    id: 2, title: 'OPV Dose 1 Upcoming Schedule', recipient: 'Liza Domingo', child: 'Sofia Domingo',
-    type: 'Upcoming Schedule', scheduledDate: 'Jul 20, 2026', sentDate: '—', status: 'Scheduled',
-    message: 'Sofia has an upcoming vaccination schedule for OPV Dose 1 on Jul 20, 2026.',
-    deliveryMethod: 'In-App', opened: false,
-  },
-  {
-    id: 3, title: 'Missed BCG Vaccination', recipient: 'Angeli Torres', child: 'Carlos Torres',
-    type: 'Missed Vaccination', scheduledDate: 'Jul 03, 2026', sentDate: 'Jul 10, 2026', status: 'Sent',
-    message: 'Carlos missed his scheduled BCG vaccination on Jul 03, 2026. Please schedule a catch-up visit as soon as possible.',
-    deliveryMethod: 'In-App', opened: true,
-  },
-  {
-    id: 4, title: 'Queue Confirmed – Window 2', recipient: 'Elena Cruz', child: 'Isabela Aquino',
-    type: 'Queue Notification', scheduledDate: '—', sentDate: 'Jul 11, 2026', status: 'Sent',
-    message: 'Your queue number Q-014 has been confirmed at Window 2. Please proceed when called.',
-    deliveryMethod: 'In-App', opened: true,
-  },
-  {
-    id: 5, title: 'Clinic Closed – National Holiday', recipient: 'All Parents', child: '—',
-    type: 'Announcement', scheduledDate: '—', sentDate: 'Jul 08, 2026', status: 'Sent',
-    message: 'Please be informed that the clinic will be closed on Jul 27, 2026 in observance of a national holiday. Regular operations resume the following day.',
-    deliveryMethod: 'In-App', opened: false,
-  },
-  {
-    id: 6, title: 'MMR Booster Reminder', recipient: 'Bea Fernandez', child: 'Diego Ramos',
-    type: 'Vaccination Reminder', scheduledDate: 'Jul 15, 2026', sentDate: '—', status: 'Pending',
-    message: 'Diego is due for MMR Booster on Jul 15, 2026. Reminder delivery is queued and pending dispatch.',
-    deliveryMethod: 'In-App', opened: false,
-  },
-  {
-    id: 7, title: 'DPT Booster Dose Reminder', recipient: 'Renz Villanueva', child: 'Andrea Villanueva',
-    type: 'Vaccination Reminder', scheduledDate: 'Jul 05, 2026', sentDate: 'Jul 05, 2026', status: 'Failed',
-    message: 'Delivery failed — recipient device could not be reached. Retry recommended.',
-    deliveryMethod: 'In-App', opened: false,
-  },
-  {
-    id: 8, title: 'New Immunization Guidelines Released', recipient: 'All Parents', child: '—',
-    type: 'Manual Notification', scheduledDate: '—', sentDate: 'Jul 01, 2026', status: 'Sent',
-    message: 'The Department of Health has released updated immunization guidelines for 2026. Tap to view the full advisory.',
-    deliveryMethod: 'In-App', opened: true,
-  },
-  {
-    id: 9, title: 'Queue Next-in-Line Alert', recipient: 'Jhun Aquino', child: 'Isabela Aquino',
-    type: 'Queue Notification', scheduledDate: '—', sentDate: 'Jul 11, 2026', status: 'Sent',
-    message: 'You are next in line at Window 1. Please proceed to the counter.',
-    deliveryMethod: 'In-App', opened: true,
-  },
-])
+/* -------------------------------- Notification data (GET /api/Notifications) -------------------------------- */
+const notifications = ref([])
+const loading = ref(false)
+const loadError = ref('')
+const actionMessage = ref('')
+
+async function fetchNotifications() {
+  loading.value = true
+  loadError.value = ''
+  try {
+    const res = await axios.get(`${API_BASE}/Notifications`)
+    notifications.value = res.data.map(n => ({
+      id: n.notificationID,
+      title: n.title,
+      recipient: n.recipient,
+      recipientType: n.recipientType,
+      child: n.child,
+      type: n.category,
+      rawType: n.type,
+      scheduledDate: n.scheduledDate ? formatDate(n.scheduledDate) : '—',
+      sentDate: formatDate(n.createdAt),
+      createdAt: n.createdAt,
+      status: n.isRead ? 'Read' : 'Delivered',
+      message: n.message,
+      deliveryMethod: 'In-App',
+      opened: n.isRead,
+    }))
+  } catch (e) {
+    console.error('fetchNotifications:', e)
+    loadError.value = 'Could not load notifications. Check that the API is running.'
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => { fetchNotifications(); loadChannels() })
+
+function flash(msg) {
+  actionMessage.value = msg
+  setTimeout(() => { actionMessage.value = '' }, 3500)
+}
+
+const exportLogs = () => {
+  downloadCSV(`notification-log-${toISODate()}.csv`, [
+    ['Title', 'Recipient', 'Child', 'Type', 'Scheduled Date', 'Sent Date', 'Status', 'Message'],
+    ...filteredNotifications.value.map(n => [n.title, n.recipient, n.child, n.type, n.scheduledDate, n.sentDate, n.status, n.message]),
+  ])
+}
 
 /* ---------------------------- Toolbar / filters ---------------------------- */
 const searchQuery = ref('')
@@ -104,35 +82,53 @@ const filteredNotifications = computed(() =>
   })
 )
 
+// Render in pages of 50 so a long log stays fast.
+const shownCount = ref(50)
+const pagedNotifications = computed(() => filteredNotifications.value.slice(0, shownCount.value))
+
 /* -------------------------------- Summary ---------------------------------- */
 const summary = computed(() => {
-  const sentToday = notifications.value.filter((n) => n.sentDate === 'Jul 11, 2026').length
-  const scheduled = notifications.value.filter((n) => n.status === 'Scheduled').length
-  const pending = notifications.value.filter((n) => n.status === 'Pending').length
-  const failed = notifications.value.filter((n) => n.status === 'Failed').length
-  const manual = notifications.value.filter((n) => n.type === 'Manual Notification' || n.type === 'Announcement').length
-  const sentTotal = notifications.value.filter((n) => n.status === 'Sent' || n.status === 'Failed').length
-  const successRate = sentTotal ? Math.round((notifications.value.filter((n) => n.status === 'Sent').length / sentTotal) * 100) : 0
-  return { sentToday, scheduled, pending, failed, manual, successRate }
+  const all = notifications.value
+  const sentToday = all.filter(n => isSameDay(n.createdAt)).length
+  const reminders = all.filter(n => n.type === 'Vaccination Reminder').length
+  const unread = all.filter(n => !n.opened).length
+  const missed = all.filter(n => n.type === 'Missed Vaccination').length
+  const manual = all.filter(n => n.type === 'Announcement').length
+  const readRate = all.length ? Math.round((all.filter(n => n.opened).length / all.length) * 100) : 0
+  return { sentToday, reminders, unread, missed, manual, readRate }
 })
 
 /* ------------------------------ Row actions menu ---------------------------- */
-const openMenuId = ref(null)
-const toggleMenu = (id) => (openMenuId.value = openMenuId.value === id ? null : id)
-const closeMenu = () => (openMenuId.value = null)
+const { openMenuId, menuStyle, toggleMenu, closeMenu } = useFloatingMenu()
 
-const resend = (n) => {
-  n.status = 'Sent'
-  n.sentDate = 'Jul 11, 2026'
+const resend = async (n) => {
   closeMenu()
+  try {
+    await axios.post(`${API_BASE}/Notifications/${n.id}/resend`)
+    flash(`Resent "${n.title}" to ${n.recipient}.`)
+    await fetchNotifications()
+  } catch (e) {
+    flash(e.response?.data?.message || 'Could not resend this notification.')
+  }
 }
-const cancelScheduled = (n) => {
-  n.status = 'Failed'
+
+const deleteNotification = async (n) => {
   closeMenu()
-}
-const deleteAnnouncement = (n) => {
-  notifications.value = notifications.value.filter((x) => x.id !== n.id)
-  closeMenu()
+  const ok = await askConfirm({
+    title: 'Delete this notification?',
+    message: `"${n.title}" for ${n.recipient}. The recipient will no longer see it.`,
+    confirmText: 'Delete',
+    tone: 'danger',
+  })
+  if (!ok) return
+  try {
+    await axios.delete(`${API_BASE}/Notifications/${n.id}`)
+    notifications.value = notifications.value.filter(x => x.id !== n.id)
+    if (selectedNotification.value?.id === n.id) closeDrawer()
+    flash('Notification deleted.')
+  } catch (e) {
+    flash(e.response?.data?.message || 'Could not delete this notification.')
+  }
 }
 
 /* -------------------------------- Details drawer ---------------------------- */
@@ -146,39 +142,99 @@ const openDrawer = (n) => {
 const closeDrawer = () => (showDrawer.value = false)
 
 /* --------------------------------- Create announcement modal --------------------------------- */
+// POST /api/Notifications/broadcast — one in-app notification per parent,
+// plus email / SMS when ticked (and set up on the server).
 const showAnnounceModal = ref(false)
+const sending = ref(false)
+const announceError = ref('')
+const parents = ref([])
+const parentSearch = ref('')
 const announceForm = reactive({
-  title: '', message: '', recipients: 'All Parents', schedule: 'Immediately',
-  scheduleDate: '', method: 'In-App',
+  title: '', message: '', recipients: 'All Parents', sendEmail: true, sendSms: false, selectedParentIds: [],
 })
-const openAnnounceModal = () => {
-  Object.assign(announceForm, { title: '', message: '', recipients: 'All Parents', schedule: 'Immediately', scheduleDate: '', method: 'In-App' })
-  showAnnounceModal.value = true
-}
-const sendAnnouncement = () => {
-  notifications.value.unshift({
-    id: Date.now(),
-    title: announceForm.title || 'Untitled Announcement',
-    recipient: announceForm.recipients,
-    child: '—',
-    type: 'Announcement',
-    scheduledDate: announceForm.schedule === 'Later' ? (announceForm.scheduleDate || '—') : '—',
-    sentDate: announceForm.schedule === 'Immediately' ? 'Jul 11, 2026' : '—',
-    status: announceForm.schedule === 'Immediately' ? 'Sent' : 'Scheduled',
-    message: announceForm.message,
-    deliveryMethod: announceForm.method,
-    opened: false,
-  })
-  showAnnounceModal.value = false
+
+// Which channels the server can actually send through (appsettings.json)
+const channels = ref({ inApp: true, email: false, sms: false })
+const loadChannels = async () => {
+  try {
+    channels.value = (await axios.get(`${API_BASE}/Notifications/channels`)).data
+  } catch (e) {
+    console.error('load channels:', e)
+  }
 }
 
-/* --------------------------------- Notification settings modal --------------------------------- */
-const showSettingsModal = ref(false)
-const settings = reactive({
-  reminder7: true, reminder3: true, reminder1: true,
-  missed1: false, missed3: true, missed7: true,
-  queueConfirmed: true, queueNextInLine: true,
+const openAnnounceModal = async () => {
+  Object.assign(announceForm, { title: '', message: '', recipients: 'All Parents', sendEmail: true, sendSms: false, selectedParentIds: [] })
+  announceError.value = ''
+  parentSearch.value = ''
+  showAnnounceModal.value = true
+  loadChannels()
+  if (!parents.value.length) {
+    try {
+      const res = await axios.get(`${API_BASE}/Parents/all`)
+      parents.value = res.data.map(p => ({
+        id: p.parentID ?? p.ParentID,
+        name: `${p.firstName ?? p.FirstName ?? ''} ${p.lastName ?? p.LastName ?? ''}`.trim(),
+        email: p.email ?? p.Email,
+      }))
+    } catch (e) {
+      console.error('load parents:', e)
+    }
+  }
+}
+
+const filteredParents = computed(() => {
+  const q = parentSearch.value.trim().toLowerCase()
+  return parents.value.filter(p => !q || p.name.toLowerCase().includes(q) || (p.email || '').toLowerCase().includes(q)).slice(0, 50)
 })
+
+const toggleParent = (id) => {
+  const i = announceForm.selectedParentIds.indexOf(id)
+  if (i === -1) announceForm.selectedParentIds.push(id)
+  else announceForm.selectedParentIds.splice(i, 1)
+}
+
+const sendAnnouncement = async () => {
+  announceError.value = ''
+  if (!announceForm.title.trim() || !announceForm.message.trim()) {
+    announceError.value = 'Please enter a title and a message.'
+    return
+  }
+  if (announceForm.recipients === 'Selected Parents' && announceForm.selectedParentIds.length === 0) {
+    announceError.value = 'Select at least one parent.'
+    return
+  }
+  sending.value = true
+  try {
+    const res = await axios.post(`${API_BASE}/Notifications/broadcast`, {
+      title: announceForm.title,
+      message: announceForm.message,
+      parentIDs: announceForm.recipients === 'Selected Parents' ? announceForm.selectedParentIds : null,
+      sendEmail: announceForm.sendEmail,
+      sendSms: announceForm.sendSms,
+    })
+    showAnnounceModal.value = false
+    const extra = [
+      announceForm.sendEmail ? `${res.data.emails} by email` : null,
+      announceForm.sendSms ? `${res.data.texts} by SMS` : null,
+    ].filter(Boolean).join(', ')
+    flash(`Announcement sent to ${res.data.recipients} parent(s)${extra ? ` (${extra})` : ''}.`)
+    await fetchNotifications()
+  } catch (e) {
+    announceError.value = e.response?.data?.message || 'Could not send the announcement.'
+  } finally {
+    sending.value = false
+  }
+}
+
+/* --------------------------------- Reminder schedule (read-only) --------------------------------- */
+// These are the thresholds the backend's NotificationGeneratorService
+// actually uses when it runs each morning.
+const showSettingsModal = ref(false)
+const reminderSchedule = {
+  before: ['14 days before', '7 days before', '5 days before', '3 days before', '1 day before'],
+  after: ['1 day after (missed)', '5 days after', '14 days after', '30 days after (urgent)'],
+}
 </script>
 
 <template>
@@ -191,12 +247,13 @@ const settings = reactive({
       <!-- Top navbar -->
       <AppHeader
   title="Notification Logs"
-  breadcrumb="System Administration / Notification Logs"
+  breadcrumb="Admin / Notification Logs"
   user-initials="RM"
 />
 
       <!-- Content -->
       <main class="p-6 space-y-6">
+        <div v-if="actionMessage" class="bg-emerald-50 border border-emerald-100 text-emerald-800 text-sm rounded-xl px-4 py-3">{{ actionMessage }}</div>
         <!-- Summary cards -->
         <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
           <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
@@ -208,38 +265,38 @@ const settings = reactive({
           </div>
           <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
             <div class="flex items-start justify-between gap-2">
-              <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Scheduled</p>
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Vaccine Reminders</p>
               <div class="bg-sky-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm">🗓️</div>
             </div>
-            <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.scheduled }}</p>
+            <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.reminders }}</p>
           </div>
           <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
             <div class="flex items-start justify-between gap-2">
-              <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Pending</p>
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Unread</p>
               <div class="bg-amber-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm">⏳</div>
             </div>
-            <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.pending }}</p>
+            <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.unread }}</p>
           </div>
           <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
             <div class="flex items-start justify-between gap-2">
-              <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Failed</p>
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Missed-Dose Follow-ups</p>
               <div class="bg-rose-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm">⚠️</div>
             </div>
-            <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.failed }}</p>
+            <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.missed }}</p>
           </div>
           <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
             <div class="flex items-start justify-between gap-2">
-              <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Manual Announcements</p>
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Announcements</p>
               <div class="bg-teal-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm">📢</div>
             </div>
             <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.manual }}</p>
           </div>
           <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
             <div class="flex items-start justify-between gap-2">
-              <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Reminder Success</p>
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Read Rate</p>
               <div class="bg-violet-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm">📈</div>
             </div>
-            <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.successRate }}%</p>
+            <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.readRate }}%</p>
           </div>
         </section>
 
@@ -269,17 +326,15 @@ const settings = reactive({
               class="text-sm rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-colors"
             >
               <option value="All">All Status</option>
-              <option>Sent</option>
-              <option>Scheduled</option>
-              <option>Pending</option>
-              <option>Failed</option>
+              <option>Delivered</option>
+              <option>Read</option>
             </select>
 
             <div class="flex items-center gap-2 shrink-0 flex-wrap">
               <button @click="showSettingsModal = true" class="text-sm font-semibold px-4 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
-                Notification Settings
+                Reminder Schedule
               </button>
-              <button class="text-sm font-semibold px-4 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
+              <button @click="exportLogs" class="text-sm font-semibold px-4 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
                 Export Logs
               </button>
               <button
@@ -309,7 +364,7 @@ const settings = reactive({
               </thead>
               <tbody>
                 <tr
-                  v-for="n in filteredNotifications"
+                  v-for="n in pagedNotifications"
                   :key="n.id"
                   class="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors"
                 >
@@ -322,35 +377,44 @@ const settings = reactive({
                   <td class="px-3 py-3 text-slate-500 whitespace-nowrap">{{ n.scheduledDate }}</td>
                   <td class="px-3 py-3 text-slate-500 whitespace-nowrap">{{ n.sentDate }}</td>
                   <td class="px-3 py-3">
-                    <span :class="[statusMeta[n.status].tint, statusMeta[n.status].text]" class="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap">
-                      <span :class="statusMeta[n.status].dot" class="w-1.5 h-1.5 rounded-full"></span>
+                    <span :class="[(statusMeta[n.status] || statusMeta.Delivered).tint, (statusMeta[n.status] || statusMeta.Delivered).text]" class="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap">
+                      <span :class="(statusMeta[n.status] || statusMeta.Delivered).dot" class="w-1.5 h-1.5 rounded-full"></span>
                       {{ n.status }}
                     </span>
                   </td>
                   <td class="px-5 py-3 text-right relative">
                     <button
-                      @click.stop="toggleMenu(n.id)"
+                      @click.stop="toggleMenu(n.id, $event)"
                       class="text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg w-8 h-8 inline-flex items-center justify-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                     >
                       ⋮
                     </button>
 
+                    <Teleport to="body">
                     <div
                       v-if="openMenuId === n.id"
                       @click.stop
-                      class="absolute right-5 top-11 z-30 w-52 bg-white border border-slate-200 rounded-lg shadow-md py-1 text-left"
+                      :style="menuStyle" class="fixed z-50 w-52 bg-white border border-slate-200 rounded-lg shadow-md py-1 text-left"
                     >
                       <button @click="openDrawer(n)" class="w-full text-left px-3.5 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors">View Notification</button>
                       <button @click="resend(n)" class="w-full text-left px-3.5 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors">Resend</button>
-                      <button v-if="n.status === 'Scheduled'" @click="cancelScheduled(n)" class="w-full text-left px-3.5 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors">Cancel Scheduled Notification</button>
                       <div class="my-1 border-t border-slate-100"></div>
-                      <button v-if="n.type === 'Announcement' || n.type === 'Manual Notification'" @click="deleteAnnouncement(n)" class="w-full text-left px-3.5 py-2 text-sm text-rose-600 hover:bg-rose-50 transition-colors">Delete Announcement</button>
+                      <button @click="deleteNotification(n)" class="w-full text-left px-3.5 py-2 text-sm text-rose-600 hover:bg-rose-50 transition-colors">Delete</button>
                     </div>
+                    </Teleport>
+                  </td>
+                </tr>
+
+                <tr v-if="filteredNotifications.length > pagedNotifications.length">
+                  <td colspan="7" class="px-5 py-3 text-center">
+                    <button @click="shownCount += 50" class="text-xs font-semibold text-emerald-700 hover:text-emerald-800">
+                      Show more ({{ filteredNotifications.length - pagedNotifications.length }} remaining)
+                    </button>
                   </td>
                 </tr>
 
                 <tr v-if="filteredNotifications.length === 0">
-                  <td colspan="7" class="px-5 py-12 text-center text-sm text-slate-400">No notifications match your search or filters.</td>
+                  <td colspan="7" class="px-5 py-12 text-center text-sm" :class="loadError ? 'text-rose-500' : 'text-slate-400'">{{ loading ? 'Loading notifications...' : (loadError || 'No notifications match your search or filters.') }}</td>
                 </tr>
               </tbody>
             </table>
@@ -361,7 +425,7 @@ const settings = reactive({
         <section class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
           <div class="px-5 py-4 border-b border-slate-200">
             <h2 class="text-sm font-bold text-slate-900">Notification History</h2>
-            <p class="text-xs text-slate-500 mt-0.5">Complete delivery log across all notification types.</p>
+            <p class="text-xs text-slate-500 mt-0.5">The 20 most recent notifications across all types.</p>
           </div>
           <div class="overflow-x-auto">
             <table class="w-full text-sm">
@@ -376,7 +440,7 @@ const settings = reactive({
               </thead>
               <tbody>
                 <tr
-                  v-for="n in notifications"
+                  v-for="n in notifications.slice(0, 20)"
                   :key="'h-' + n.id"
                   class="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors"
                 >
@@ -384,8 +448,8 @@ const settings = reactive({
                   <td class="px-3 py-3 text-slate-500 whitespace-nowrap">{{ n.title }}</td>
                   <td class="px-3 py-3 text-slate-500 whitespace-nowrap">{{ n.sentDate !== '—' ? n.sentDate : n.scheduledDate }}</td>
                   <td class="px-3 py-3">
-                    <span :class="[statusMeta[n.status].tint, statusMeta[n.status].text]" class="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap">
-                      <span :class="statusMeta[n.status].dot" class="w-1.5 h-1.5 rounded-full"></span>
+                    <span :class="[(statusMeta[n.status] || statusMeta.Delivered).tint, (statusMeta[n.status] || statusMeta.Delivered).text]" class="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap">
+                      <span :class="(statusMeta[n.status] || statusMeta.Delivered).dot" class="w-1.5 h-1.5 rounded-full"></span>
                       {{ n.status }}
                     </span>
                   </td>
@@ -413,8 +477,8 @@ const settings = reactive({
 
         <div v-if="selectedNotification" class="flex-1 overflow-y-auto p-6 space-y-6">
           <div>
-            <span :class="[statusMeta[selectedNotification.status].tint, statusMeta[selectedNotification.status].text]" class="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full mb-3">
-              <span :class="statusMeta[selectedNotification.status].dot" class="w-1.5 h-1.5 rounded-full"></span>
+            <span :class="[(statusMeta[selectedNotification.status] || statusMeta.Delivered).tint, (statusMeta[selectedNotification.status] || statusMeta.Delivered).text]" class="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full mb-3">
+              <span :class="(statusMeta[selectedNotification.status] || statusMeta.Delivered).dot" class="w-1.5 h-1.5 rounded-full"></span>
               {{ selectedNotification.status }}
             </span>
             <p class="text-base font-bold text-slate-900">{{ selectedNotification.title }}</p>
@@ -422,7 +486,7 @@ const settings = reactive({
 
           <div>
             <h3 class="text-xs font-bold uppercase tracking-wide text-slate-500 mb-2">Message Content</h3>
-            <p class="text-sm text-slate-700 leading-relaxed bg-slate-50 rounded-lg p-4">{{ selectedNotification.message }}</p>
+            <p class="text-sm text-slate-700 leading-relaxed bg-slate-50 rounded-lg p-4 whitespace-pre-line">{{ selectedNotification.message }}</p>
           </div>
 
           <div class="bg-slate-50 rounded-lg divide-y divide-slate-200">
@@ -492,41 +556,52 @@ const settings = reactive({
                 </select>
               </div>
               <div>
-                <label class="block text-xs font-semibold text-slate-500 mb-1.5">Notification Method</label>
-                <select v-model="announceForm.method" class="w-full text-sm rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-colors">
-                  <option>In-App</option>
-                  <option disabled>SMS (Future)</option>
-                  <option disabled>Email (Future)</option>
-                </select>
+                <label class="block text-xs font-semibold text-slate-500 mb-1.5">Send by</label>
+                <div class="space-y-1.5 text-sm text-slate-700">
+                  <label class="flex items-center gap-2 opacity-70">
+                    <input type="checkbox" checked disabled class="w-4 h-4 rounded border-slate-300 text-emerald-600" /> In-app (always)
+                  </label>
+                  <label class="flex items-center gap-2 cursor-pointer">
+                    <input v-model="announceForm.sendEmail" type="checkbox" class="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" /> Email
+                    <span v-if="!channels.email" class="text-[10px] text-amber-600">(not set up yet)</span>
+                  </label>
+                  <label class="flex items-center gap-2 cursor-pointer">
+                    <input v-model="announceForm.sendSms" type="checkbox" class="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" /> SMS (text)
+                    <span v-if="!channels.sms" class="text-[10px] text-amber-600">(not set up yet)</span>
+                  </label>
+                </div>
               </div>
             </div>
 
-            <div>
-              <label class="block text-xs font-semibold text-slate-500 mb-1.5">Schedule</label>
-              <div class="grid grid-cols-2 gap-2 mb-3">
-                <button
-                  @click="announceForm.schedule = 'Immediately'"
-                  :class="announceForm.schedule === 'Immediately' ? 'bg-emerald-600 text-white' : 'border border-slate-200 text-slate-600 hover:bg-slate-50'"
-                  class="text-sm font-semibold px-3 py-2 rounded-lg transition-colors"
-                >Immediately</button>
-                <button
-                  @click="announceForm.schedule = 'Later'"
-                  :class="announceForm.schedule === 'Later' ? 'bg-emerald-600 text-white' : 'border border-slate-200 text-slate-600 hover:bg-slate-50'"
-                  class="text-sm font-semibold px-3 py-2 rounded-lg transition-colors"
-                >Later</button>
+            <div v-if="announceForm.recipients === 'Selected Parents'">
+              <label class="block text-xs font-semibold text-slate-500 mb-1.5">
+                Select Parents <span class="font-normal text-slate-400">({{ announceForm.selectedParentIds.length }} selected)</span>
+              </label>
+              <input v-model="parentSearch" type="text" placeholder="Search by name or email..."
+                class="w-full text-sm rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 mb-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-colors" />
+              <div class="max-h-48 overflow-y-auto border border-slate-200 rounded-lg divide-y divide-slate-100">
+                <label v-for="p in filteredParents" :key="p.id" class="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-slate-50">
+                  <input type="checkbox" :checked="announceForm.selectedParentIds.includes(p.id)" @change="toggleParent(p.id)"
+                    class="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" />
+                  <span class="text-sm text-slate-700">{{ p.name }}</span>
+                  <span class="text-xs text-slate-400 ml-auto truncate">{{ p.email }}</span>
+                </label>
+                <p v-if="filteredParents.length === 0" class="px-3 py-3 text-xs text-slate-400">No parents found.</p>
               </div>
-              <input
-                v-if="announceForm.schedule === 'Later'"
-                v-model="announceForm.scheduleDate"
-                type="datetime-local"
-                class="w-full text-sm rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-colors"
-              />
             </div>
+
+            <p class="text-xs text-slate-400">
+              Sent right away to each parent's portal, and by email / SMS to parents who have an email address / mobile number on file.
+              <span v-if="(announceForm.sendEmail && !channels.email) || (announceForm.sendSms && !channels.sms)" class="text-amber-600">
+                Email and SMS only go out once they're set up in the backend's appsettings.json (see the setup guide).
+              </span>
+            </p>
+            <p v-if="announceError" class="text-xs text-rose-500">{{ announceError }}</p>
           </div>
 
           <div class="flex items-center justify-end gap-2 px-6 py-4 border-t border-slate-200">
             <button @click="showAnnounceModal = false" class="text-sm font-semibold px-4 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors">Cancel</button>
-            <button @click="sendAnnouncement" class="text-sm font-semibold px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors">Send</button>
+            <button @click="sendAnnouncement" :disabled="sending" class="text-sm font-semibold px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors">{{ sending ? 'Sending...' : 'Send' }}</button>
           </div>
         </div>
       </div>
@@ -537,67 +612,54 @@ const settings = reactive({
       <div v-if="showSettingsModal" class="fixed inset-0 bg-slate-900/40 z-40 flex items-center justify-center p-4" @click.self="showSettingsModal = false">
         <div class="bg-white rounded-xl shadow-lg w-full max-w-lg max-h-[90vh] overflow-y-auto">
           <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200">
-            <h2 class="text-base font-bold text-slate-900">Notification Settings</h2>
+            <h2 class="text-base font-bold text-slate-900">Reminder Schedule</h2>
             <button @click="showSettingsModal = false" class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-50 transition-colors">✕</button>
           </div>
 
           <div class="p-6 space-y-6">
+            <p class="text-sm text-slate-600">
+              Reminders are generated automatically every morning (8:00 AM) for each child's next due dose,
+              and follow-ups are sent when a dose is missed. Each dose gets at most one reminder per step.
+              They go to every linked parent's notification bell and by email, and by SMS as one text per child per step
+              that lists all of that visit's vaccines. Texts stop for the day once the daily limit (TextBee: 50) is reached;
+              the most urgent ones ("due tomorrow", "missed yesterday") are sent first.
+            </p>
+            <div class="flex flex-wrap gap-2 text-xs font-semibold">
+              <span class="px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700">In-app: on</span>
+              <span class="px-3 py-1.5 rounded-lg" :class="channels.email ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'">
+                Email: {{ channels.email ? 'on' : 'not set up' }}
+              </span>
+              <span class="px-3 py-1.5 rounded-lg" :class="channels.sms ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'">
+                SMS: {{ channels.sms ? `on (${channels.smsProvider})` : 'not set up' }}
+              </span>
+            </div>
             <div>
-              <h3 class="text-xs font-bold uppercase tracking-wide text-slate-500 mb-3">Vaccination Reminder</h3>
-              <p class="text-xs text-slate-500 mb-3">Send reminder notifications before a scheduled vaccination.</p>
-              <div class="space-y-2">
-                <label class="flex items-center gap-3 bg-slate-50 rounded-lg px-4 py-2.5 cursor-pointer">
-                  <input v-model="settings.reminder7" type="checkbox" class="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" />
-                  <span class="text-sm text-slate-700">7 days before</span>
-                </label>
-                <label class="flex items-center gap-3 bg-slate-50 rounded-lg px-4 py-2.5 cursor-pointer">
-                  <input v-model="settings.reminder3" type="checkbox" class="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" />
-                  <span class="text-sm text-slate-700">3 days before</span>
-                </label>
-                <label class="flex items-center gap-3 bg-slate-50 rounded-lg px-4 py-2.5 cursor-pointer">
-                  <input v-model="settings.reminder1" type="checkbox" class="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" />
-                  <span class="text-sm text-slate-700">1 day before</span>
-                </label>
+              <h3 class="text-xs font-bold uppercase tracking-wide text-slate-500 mb-3">Before the due date</h3>
+              <div class="flex flex-wrap gap-2">
+                <span v-for="r in reminderSchedule.before" :key="r" class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-sky-50 text-sky-700">{{ r }}</span>
               </div>
             </div>
-
             <div>
-              <h3 class="text-xs font-bold uppercase tracking-wide text-slate-500 mb-3">Missed Vaccination Reminder</h3>
-              <p class="text-xs text-slate-500 mb-3">Send follow-up reminders after a missed schedule.</p>
-              <div class="space-y-2">
-                <label class="flex items-center gap-3 bg-slate-50 rounded-lg px-4 py-2.5 cursor-pointer">
-                  <input v-model="settings.missed1" type="checkbox" class="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" />
-                  <span class="text-sm text-slate-700">Send after 1 day</span>
-                </label>
-                <label class="flex items-center gap-3 bg-slate-50 rounded-lg px-4 py-2.5 cursor-pointer">
-                  <input v-model="settings.missed3" type="checkbox" class="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" />
-                  <span class="text-sm text-slate-700">Send after 3 days</span>
-                </label>
-                <label class="flex items-center gap-3 bg-slate-50 rounded-lg px-4 py-2.5 cursor-pointer">
-                  <input v-model="settings.missed7" type="checkbox" class="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" />
-                  <span class="text-sm text-slate-700">Send after 7 days</span>
-                </label>
+              <h3 class="text-xs font-bold uppercase tracking-wide text-slate-500 mb-3">After a missed dose</h3>
+              <div class="flex flex-wrap gap-2">
+                <span v-for="r in reminderSchedule.after" :key="r" class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-rose-50 text-rose-700">{{ r }}</span>
               </div>
             </div>
-
             <div>
-              <h3 class="text-xs font-bold uppercase tracking-wide text-slate-500 mb-3">Queue Notification</h3>
-              <div class="space-y-2">
-                <label class="flex items-center gap-3 bg-slate-50 rounded-lg px-4 py-2.5 cursor-pointer">
-                  <input v-model="settings.queueConfirmed" type="checkbox" class="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" />
-                  <span class="text-sm text-slate-700">Notify when queue is confirmed</span>
-                </label>
-                <label class="flex items-center gap-3 bg-slate-50 rounded-lg px-4 py-2.5 cursor-pointer">
-                  <input v-model="settings.queueNextInLine" type="checkbox" class="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" />
-                  <span class="text-sm text-slate-700">Notify when next in line</span>
-                </label>
-              </div>
+              <h3 class="text-xs font-bold uppercase tracking-wide text-slate-500 mb-3">Also sent automatically</h3>
+              <ul class="text-sm text-slate-600 space-y-1 list-disc pl-5">
+                <li>"Vaccine administered" to the parent when a dose is recorded, with the next due date; when the visit is finished, one text lists the vaccines given and the next vaccination date</li>
+                <li>"Record updated" to the parent (app, email and SMS) when a child's details are changed, so they can report a mistake</li>
+                <li>"Temporarily unavailable" to parents of children due for a vaccine that ran out, and "available again" once it's restocked</li>
+                <li>"Health center closed" to every parent when a closed day is added under Operating Hours (by email and SMS too for families with a child due that day, with the new date)</li>
+                <li>Low-stock alerts to the Doctor and Nurses when a batch drops below its minimum</li>
+                <li>Weekly stock check every Wednesday to the Doctor and Nurses</li>
+              </ul>
             </div>
           </div>
 
           <div class="flex items-center justify-end gap-2 px-6 py-4 border-t border-slate-200">
-            <button @click="showSettingsModal = false" class="text-sm font-semibold px-4 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors">Cancel</button>
-            <button @click="showSettingsModal = false" class="text-sm font-semibold px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors">Save Settings</button>
+            <button @click="showSettingsModal = false" class="text-sm font-semibold px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors">Close</button>
           </div>
         </div>
       </div>

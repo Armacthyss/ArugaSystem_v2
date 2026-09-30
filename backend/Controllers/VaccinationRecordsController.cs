@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using AndroidWebAPI.Data;
 using AndroidWebAPI.Models;
 using AndroidWebAPI.DTOs;
+using AndroidWebAPI.Services;
 
 namespace AndroidWebAPI.Controllers
 {
@@ -13,17 +14,30 @@ namespace AndroidWebAPI.Controllers
         private readonly IVaccinationRecordRepository _repository;
         private readonly AppDbContext _context;
         private readonly ILogger<VaccinationRecordsController> _logger;
+        private readonly AuditService _audit;
 
         public VaccinationRecordsController(
             IVaccinationRecordRepository repository,
             AppDbContext context,
-            ILogger<VaccinationRecordsController> logger)
+            ILogger<VaccinationRecordsController> logger,
+            AuditService audit)
         {
             _repository = repository;
             _context = context;
             _logger = logger;
+            _audit = audit;
         }
 
+        // "Juan Dela Cruz – BCG Dose 1" label used in audit entries.
+        private async Task<string> DescribeDoseAsync(Guid childId, int vaccineId, int doseNumber)
+        {
+            var child = await _context.Children.FindAsync(childId);
+            var vaccine = await _context.Vaccines.FindAsync(vaccineId);
+            var childName = child != null ? $"{child.FirstName} {child.LastName}" : "Unknown child";
+            return $"{childName} – {vaccine?.VaccineName ?? $"Vaccine {vaccineId}"} Dose {doseNumber}";
+        }
+
+        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.ClinicTeam)]
         [HttpGet]
         public async Task<IActionResult> GetAll()
         {
@@ -34,10 +48,25 @@ namespace AndroidWebAPI.Controllers
         // Doctor Calendar, Doctor Reports) calls GET /api/VaccinationRecords/all.
         // Without this, "all" fell through to GetById(Guid id) below and
         // failed model binding ("The value 'all' is not valid.", 400).
+        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.ClinicTeam)]
         [HttpGet("all")]
         public async Task<IActionResult> GetAllExplicit()
         {
             var records = await _repository.GetAllAsync();
+            return Ok(ShapeRecords(records));
+        }
+
+        // GET /api/VaccinationRecords/mine
+        // "Vaccination Records" page: only the doses the signed-in Doctor or
+        // Nurse gave. Health workers don't see each other's lists
+        // (beneficiary request); a child's own card still shows every dose.
+        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.ClinicTeam)]
+        [HttpGet("mine")]
+        public async Task<IActionResult> GetMine()
+        {
+            var me = AccessGuard.CallerId(User);
+            if (me == null) return Ok(Array.Empty<object>());
+            var records = (await _repository.GetAllAsync()).Where(r => r.AdministeredByUserID == me);
             return Ok(ShapeRecords(records));
         }
 
@@ -67,9 +96,7 @@ namespace AndroidWebAPI.Controllers
                     ? $"{r.AdministeredBy.FirstName} {r.AdministeredBy.LastName}".Trim()
                     : null,
                 nurseObservation = r.NurseObservation,
-                doctorDiagnosis = r.DoctorDiagnosis,
-                doctorDiagnosedByUserID = r.DoctorDiagnosedByUserID,
-                doctorDiagnosedAt = r.DoctorDiagnosedAt,
+                injectionSite = r.InjectionSite,
                 lotNumber = r.Inventory != null ? r.Inventory.LotNumber : null,
             });
         }
@@ -86,6 +113,7 @@ namespace AndroidWebAPI.Controllers
                 : null;
         }
 
+        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.ClinicTeam)]
         [HttpGet("{id}")]
         public async Task<IActionResult> GetById(Guid id)
         {
@@ -97,12 +125,24 @@ namespace AndroidWebAPI.Controllers
         [HttpGet("child/{childId}")]
         public async Task<IActionResult> GetByChild(Guid childId)
         {
+            if (!await AndroidWebAPI.Services.AccessGuard.CanSeeChildAsync(User, _context, childId)) return Forbid();
             return Ok(await _repository.GetByChildAsync(childId));
         }
 
+        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.Staff)]
         [HttpPost]
         public async Task<IActionResult> RecordVaccination([FromBody] RecordVaccinationDto dto)
         {
+            // The signed-in Nurse is the one giving the dose
+            dto.AdministeredByUserID = AccessGuard.CallerId(User) ?? dto.AdministeredByUserID;
+
+            var roomError = await CheckCalledInAsync(dto.ChildID, dto.VaccinationDate);
+            if (roomError != null)
+                return BadRequest(new { message = roomError });
+
+            if (!InjectionSites.TryNormalize(dto.InjectionSite, out var site))
+                return BadRequest(new { message = "Pick the injection site from the list." });
+
             var record = new VaccinationRecord
             {
                 ChildID = dto.ChildID,
@@ -112,15 +152,21 @@ namespace AndroidWebAPI.Controllers
                 InventoryID = dto.InventoryID,
                 AdministeredByUserID = dto.AdministeredByUserID,
                 NurseObservation = dto.NurseObservation,
-                DoctorDiagnosis = dto.DoctorDiagnosis,
-                DoctorDiagnosedByUserID = dto.DoctorDiagnosedByUserID,
-                DoctorDiagnosedAt = dto.DoctorDiagnosedAt
+                InjectionSite = site,
             };
 
             try
             {
                 await _repository.RecordVaccinationAsync(record);
                 await NotifyParentAsync(record);
+
+                await _audit.LogAsync("Vaccination", "Vaccinate Child",
+                    await DescribeDoseAsync(record.ChildID, record.VaccineID, record.DoseNumber),
+                    "Recorded an administered vaccine dose" +
+                        (record.InjectionSite != null ? $" ({record.InjectionSite})" : "") + "." +
+                        (string.IsNullOrWhiteSpace(record.NurseObservation) ? "" : $" Remarks: {record.NurseObservation}"),
+                    userId: record.AdministeredByUserID,
+                    newValue: $"Record {record.RecordCode}");
 
                 return Ok(new
                 {
@@ -136,6 +182,7 @@ namespace AndroidWebAPI.Controllers
             }
         }
 
+        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.Staff)]
         [HttpPatch("{id}/complete")]
         public async Task<IActionResult> CompleteVaccination(Guid id, [FromBody] CompleteVaccinationDto dto)
         {
@@ -143,6 +190,11 @@ namespace AndroidWebAPI.Controllers
             {
                 var record = await _repository.CompleteVaccinationAsync(id, dto);
                 await NotifyParentAsync(record);
+
+                await _audit.LogAsync("Vaccination", "Vaccinate Child",
+                    await DescribeDoseAsync(record.ChildID, record.VaccineID, record.DoseNumber),
+                    "Completed a scheduled vaccination.",
+                    userId: record.AdministeredByUserID);
 
                 return Ok(new
                 {
@@ -157,45 +209,66 @@ namespace AndroidWebAPI.Controllers
             }
         }
 
-        // Updates the doctor's diagnosis/clinical notes on an EXISTING
-        // (already-completed) vaccination record. Separate from
-        // RecordVaccination/CompleteVaccination, which only accept a
-        // diagnosis at the moment a dose is recorded — this lets a doctor
-        // go back and add or correct it afterward from the patient record
-        // view. Does not touch inventory, timeline, or Status, and does
-        // not send a parent notification (diagnosis edits aren't a "dose
-        // administered" event).
-        [HttpPatch("{id}/diagnosis")]
-        public async Task<IActionResult> UpdateDiagnosis(Guid id, [FromBody] UpdateDiagnosisDto dto)
+        // PATCH /api/VaccinationRecords/{id}/remarks
+        // Adds or corrects the remarks on a dose that was already given —
+        // e.g. the parent reports a fever or swelling a day later. Remarks
+        // (Vaccinationrecords.NurseObservation) are what health workers
+        // check for complications/adverse reactions before the next dose.
+        // Every change is kept in the audit log (old -> new).
+        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.StaffOrAdmin)]
+        [HttpPatch("{id}/remarks")]
+        public async Task<IActionResult> UpdateRemarks(Guid id, [FromBody] UpdateRemarksDto dto)
         {
-            try
-            {
-                var record = await _repository.UpdateDiagnosisAsync(id, dto);
+            var record = await _context.VaccinationRecords.FirstOrDefaultAsync(r => r.VaccinationRecordID == id);
+            if (record == null)
+                return NotFound(new { message = "Vaccination record not found." });
 
-                return Ok(new
-                {
-                    message = "Diagnosis updated successfully.",
-                    vaccinationRecordID = record.VaccinationRecordID,
-                    doctorDiagnosis = record.DoctorDiagnosis,
-                    doctorDiagnosedByUserID = record.DoctorDiagnosedByUserID,
-                    doctorDiagnosedAt = record.DoctorDiagnosedAt
-                });
-            }
-            catch (Exception ex)
+            var before = record.NurseObservation;
+            record.NurseObservation = string.IsNullOrWhiteSpace(dto.Remarks) ? null : dto.Remarks.Trim();
+            record.UpdatedAt = DateTime.Now;
+            await _context.SaveChangesAsync();
+
+            await _audit.LogAsync("Vaccination", "Update Remarks",
+                await DescribeDoseAsync(record.ChildID, record.VaccineID, record.DoseNumber),
+                "Updated the remarks / adverse reaction notes on a vaccination record.",
+                userId: AccessGuard.CallerId(User) ?? dto.UpdatedByUserID,
+                oldValue: before ?? "—",
+                newValue: record.NurseObservation ?? "—");
+
+            return Ok(new
             {
-                _logger.LogWarning(ex, "UpdateDiagnosis failed for Record {RecordId}", id);
-                return BadRequest(new { message = ex.Message });
-            }
+                message = "Remarks updated.",
+                vaccinationRecordID = record.VaccinationRecordID,
+                remarks = record.NurseObservation,
+                updatedAt = record.UpdatedAt,
+            });
         }
 
-        // Notifies the child's primary parent that a dose was completed.
-        // Logs (instead of silently returning) when it can't, so this never
-        // fails invisibly again.
+        // Today's doses can only be recorded for a child whose family was
+        // called into the vaccination room (Call Next). Doses dated in the
+        // past are allowed (encoding a dose that wasn't recorded on the
+        // day), so this only applies to today's date.
+        private async Task<string?> CheckCalledInAsync(Guid childId, DateTime vaccinationDate)
+        {
+            var today = DateTime.Today;
+            if (vaccinationDate.Date != today) return null;
+
+            bool inRoom = await _context.Queues
+                .AnyAsync(q => q.QueueDate >= today && q.QueueDate < today.AddDays(1)
+                            && q.Status == "InProgress"
+                            && q.QueueChildren.Any(qc => qc.ChildID == childId));
+
+            return inRoom
+                ? null
+                : "This child hasn't been called into the vaccination room yet. Press Call Next on the Dashboard first.";
+        }
+
+        // Tells the child's parents (in-app + email) that a dose was given, and
+        // when the next one is due. Logs (instead of silently returning) when
+        // it can't, so this never fails invisibly again.
         private async Task NotifyParentAsync(VaccinationRecord record)
         {
-            var child = await _context.Children
-                .Include(c => c.ParentRelationships)
-                .FirstOrDefaultAsync(c => c.ChildID == record.ChildID);
+            var child = await _context.Children.FirstOrDefaultAsync(c => c.ChildID == record.ChildID);
 
             if (child == null)
             {
@@ -204,12 +277,12 @@ namespace AndroidWebAPI.Controllers
                 return;
             }
 
-            var primaryParent = child.ParentRelationships?
-                .FirstOrDefault(r => r.IsPrimaryContact && r.Status == "Active");
+            var notifier = HttpContext.RequestServices.GetRequiredService<ParentNotifier>();
+            var parents = await notifier.ParentsOfChildAsync(child.ChildID);
 
-            if (primaryParent == null)
+            if (parents.Count == 0)
             {
-                _logger.LogWarning("Vaccination {RecordId} completed for Child {ChildId} but no active primary parent link found — no notification sent.",
+                _logger.LogWarning("Vaccination {RecordId} completed for Child {ChildId} but no active parent link found — no notification sent.",
                     record.VaccinationRecordID, record.ChildID);
                 return;
             }
@@ -219,23 +292,43 @@ namespace AndroidWebAPI.Controllers
             string vaccineName = vaccine?.VaccineName ?? $"Vaccine {record.VaccineID}";
             string dateLabel = record.VaccinationDate.ToString("MMMM d, yyyy");
 
-            _context.Notifications.Add(new Notification
+            // Next dose still to come, after the recalculation engine has run
+            var next = await _context.VaccinationTimelines
+                .Include(t => t.Vaccine)
+                .Where(t => t.ChildID == child.ChildID && (t.Status == "Pending" || t.Status == "Missed"))
+                .OrderBy(t => t.ScheduledDate)
+                .FirstOrDefaultAsync();
+            // A dose whose date already passed isn't "next on <past date>": it is still due
+            string nextLine = next == null
+                ? $" {child.FirstName} has no more scheduled doses on file."
+                : next.ScheduledDate.Date < record.VaccinationDate.Date
+                    ? $" Still due: {next.Vaccine?.VaccineName ?? "vaccine"} (Dose {next.DoseNumber}), since {next.ScheduledDate:MMMM d, yyyy}."
+                : next.ScheduledDate.Date == record.VaccinationDate.Date
+                    ? $" Also due today: {next.Vaccine?.VaccineName ?? "vaccine"} (Dose {next.DoseNumber})."
+                    : $" Next: {next.Vaccine?.VaccineName ?? "vaccine"} (Dose {next.DoseNumber}) on {next.ScheduledDate:MMMM d, yyyy}.";
+
+            var tally = new ParentNotifier.Delivery();
+            foreach (var parent in parents)
             {
-                ParentID = primaryParent.ParentID,
-                ChildID = record.ChildID,
-                VaccineID = record.VaccineID,
-                DoseNumber = record.DoseNumber,
-                Type = "Completed",
-                Title = $"Vaccine administered — {childName}",
-                Message = $"{vaccineName} (Dose {record.DoseNumber}) was administered to {childName} on {dateLabel}.",
-                ScheduledDate = record.VaccinationDate,
-                IsRead = false,
-                CreatedAt = DateTime.Now
-            });
+                await notifier.NotifyAsync(parent, new Notification
+                {
+                    ChildID = record.ChildID,
+                    VaccineID = record.VaccineID,
+                    DoseNumber = record.DoseNumber,
+                    Type = "Completed",
+                    Title = $"Vaccine administered — {childName}",
+                    Message = $"{vaccineName} (Dose {record.DoseNumber}) was administered to {childName} on {dateLabel}" +
+                              (record.InjectionSite != null ? $", {InjectionSites.Phrase(record.InjectionSite)}" : "") +
+                              $".{nextLine}",
+                    ScheduledDate = record.VaccinationDate,
+                    IsRead = false,
+                }, tally, sms: false);
+            }
 
             await _context.SaveChangesAsync();
         }
 
+        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.Admin)]
         [HttpPut]
         public async Task<IActionResult> Update(VaccinationRecord record)
         {
@@ -243,6 +336,7 @@ namespace AndroidWebAPI.Controllers
             return NoContent();
         }
 
+        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.Admin)]
         [HttpDelete("{id}")]
         public async Task<IActionResult> Delete(Guid id)
         {
@@ -250,13 +344,28 @@ namespace AndroidWebAPI.Controllers
             return NoContent();
         }
 
+        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.ClinicTeam)]
         [HttpPost("historical")]
         public async Task<IActionResult> RecordHistoricalVaccinations([FromBody] HistoricalVaccinationSubmissionDto submission)
         {
-            await _repository.RecordHistoricalVaccinationsAsync(submission);
+            try
+            {
+                await _repository.RecordHistoricalVaccinationsAsync(submission);
+            }
+            catch (Exception ex)
+            {
+                // e.g. a dose already on file, or a date before birth
+                return BadRequest(new { message = ex.Message });
+            }
+
+            var child = await _context.Children.FindAsync(submission.ChildID);
+            await _audit.LogAsync("Vaccination", "Create",
+                child != null ? $"Child – {child.FirstName} {child.LastName}" : $"Child {submission.ChildID}",
+                $"Encoded {submission.Vaccinations?.Count ?? 0} historical vaccination record(s) from the Yellow Book.");
             return Ok(new { message = "Historical vaccination records saved successfully." });
         }
 
+        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.ClinicTeam)]
         [HttpGet("stats")]
         public async Task<IActionResult> GetStats()
         {
@@ -265,15 +374,25 @@ namespace AndroidWebAPI.Controllers
             var weekStart = today.AddDays(-(int)today.DayOfWeek);
             var allRecords = await _repository.GetAllAsync();
 
+            // "Pending" and "missed" come from VaccinationTimeline — that's
+            // where not-yet-given doses live. VaccinationRecords only ever
+            // holds doses that were actually administered.
+            var pendingToday = await _context.VaccinationTimelines
+                .CountAsync(t => t.Status == "Pending" && t.ScheduledDate >= today && t.ScheduledDate < tomorrow);
+
+            var missedTotal = await _context.VaccinationTimelines
+                .CountAsync(t => (t.Status == "Pending" || t.Status == "Missed") && t.ScheduledDate < today);
+
             return Ok(new
             {
                 vaccinatedToday = allRecords.Count(r => r.Status == "Completed" && r.VaccinationDate >= today && r.VaccinationDate < tomorrow),
-                pendingToday = allRecords.Count(r => r.Status == "Scheduled" && r.VaccinationDate >= today && r.VaccinationDate < tomorrow),
+                pendingToday,
                 weeklyTotal = allRecords.Count(r => r.Status == "Completed" && r.VaccinationDate >= weekStart && r.VaccinationDate < tomorrow),
-                missedTotal = allRecords.Count(r => r.Status == "Deferred" || r.Status == "Cancelled")
+                missedTotal
             });
         }
 
+        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.ClinicTeam)]
         [HttpGet("pending-today")]
         public async Task<IActionResult> GetPendingToday()
         {
@@ -298,6 +417,7 @@ namespace AndroidWebAPI.Controllers
             return Ok(records);
         }
 
+        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.ClinicTeam)]
         [HttpGet("completed-today")]
         public async Task<IActionResult> GetCompletedToday()
         {

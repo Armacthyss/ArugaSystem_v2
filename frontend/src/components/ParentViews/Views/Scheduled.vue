@@ -22,8 +22,10 @@
               <p class="text-2xl mb-2">👶</p>
               <p class="font-bold text-sm">Select a child from Family Profiles to view their schedule.</p>
             </div>
-            <div v-else class="flex gap-5 items-start">
-              <div class="w-[42%] shrink-0 flex flex-col bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden" style="max-height: 680px;">
+            <!-- Side by side on a computer; on a phone the dose list comes first
+                 (scrolling on its own) and the calendar below it -->
+            <div v-else class="flex flex-col lg:flex-row gap-5 lg:items-start">
+              <div class="w-full lg:w-[42%] shrink-0 flex flex-col bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden max-h-[55vh] lg:max-h-[680px]">
                 <div class="px-6 pt-6 pb-4 border-b border-slate-50">
                   <p class="text-[10px] font-bold text-emerald-500 uppercase tracking-[0.2em]">Vaccination Schedule</p>
                   <p class="text-xs text-slate-400 mt-0.5">{{ selectedChild.firstName }} · {{ computedVaccineList.length }} doses</p>
@@ -60,7 +62,7 @@
                   </template>
                 </div>
               </div>
-              <div class="flex-1 flex flex-col gap-4 sticky top-22">
+              <div class="w-full lg:flex-1 flex flex-col gap-4 lg:sticky lg:top-22">
                 <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-7">
                   <div v-if="selectedVax" class="flex items-center gap-3 mb-6 pb-5 border-b border-slate-50">
                     <div class="w-9 h-9 bg-emerald-600 rounded-xl flex items-center justify-center text-white text-sm">💉</div>
@@ -88,15 +90,12 @@
                     <div class="flex items-center gap-1.5"><div class="w-2.5 h-2.5 rounded-full bg-emerald-600"></div><span class="text-[9px] text-slate-400 font-bold uppercase">Scheduled</span></div>
                     <div class="flex items-center gap-1.5"><div class="w-2.5 h-2.5 rounded-full bg-emerald-500"></div><span class="text-[9px] text-slate-400 font-bold uppercase">Given</span></div>
                     <div class="flex items-center gap-1.5"><div class="w-2.5 h-2.5 rounded-full bg-red-400"></div><span class="text-[9px] text-slate-400 font-bold uppercase">Missed Due Date</span></div>
-                    <div class="flex items-center gap-1.5"><div class="w-2.5 h-2.5 rounded-full bg-emerald-500/40 border border-emerald-500/40"></div><span class="text-[9px] text-slate-400 font-bold uppercase">Window (MWF)</span></div>
-                    <div class="flex items-center gap-1.5"><div class="w-2.5 h-2.5 rounded-full bg-slate-100"></div><span class="text-[9px] text-slate-400 font-bold uppercase">Clinic Day</span></div>
+                    <div class="flex items-center gap-1.5"><div class="w-2.5 h-2.5 rounded-full bg-emerald-500/40 border border-emerald-500/40"></div><span class="text-[9px] text-slate-400 font-bold uppercase">Catch-up Window</span></div>
+                    <div class="flex items-center gap-1.5"><div class="w-2.5 h-2.5 rounded-full bg-slate-100"></div><span class="text-[9px] text-slate-400 font-bold uppercase">Vaccination Day</span></div>
                   </div>
                 </div>
                 <div class="space-y-2">
-                  <div class="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-start gap-2">
-                    <span class="text-xs mt-0.5">💡</span>
-                    <p class="text-[10px] text-amber-700"><span class="font-bold">Clinic hours:</span> Mon, Wed, Fri · 8:00 AM – 12:00 PM</p>
-                  </div>
+                  <ClinicHoursNote :clinic="clinic" />
                   <div class="bg-red-50 border-l-4 border-red-500 px-4 py-3 rounded-r-lg flex items-center gap-2">
                     <span class="text-[9px] font-bold text-red-700 uppercase">⚠ Stocks may change without notice</span>
                   </div>
@@ -121,13 +120,15 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { addDays, format, isMonday, isWednesday, isFriday, getDaysInMonth, startOfMonth } from 'date-fns'
+import { addDays, format, getDaysInMonth, startOfMonth } from 'date-fns'
 import HeaderNav from '../Components/Headernav.vue'
 import ChildSidebar from '../Components/Childsidebar.vue'
 import ProfileModal from '../Components/Profilemodal.vue'
 import NotificationPanel from '../Components/Notificationpanel.vue'
+import ClinicHoursNote from '../Components/ClinicHoursNote.vue'
 import { getAccount, logout as authLogout } from '@/utils/auth'
 import api from '../Composables/api.js'
+import { fetchChildSchedule, buildSchedule } from '../Composables/childSchedule.js'
 
 const router = useRouter()
 
@@ -140,83 +141,16 @@ const showNotifications  = ref(false)
 const completedRecords   = ref([])
 const unreadCount        = ref(0)
 
-// ── Vaccine master (DOH schedule) — duplicated per-page, see HARD RULE 1 ───
-const VACCINE_MASTER = [
-  { vaccineId: 5,  name: 'BCG Vaccine',                      doses: [{ n: 1, gap: 0   }] },
-  { vaccineId: 6,  name: 'Hepatitis B Vaccine',              doses: [{ n: 1, gap: 0   }] },
-  { vaccineId: 7,  name: 'Pentavalent (DPT-Hep B-HIB)',      doses: [{ n: 1, gap: 45  }, { n: 2, gap: 28 }, { n: 3, gap: 28 }] },
-  { vaccineId: 8,  name: 'Oral Polio Vaccine (OPV)',         doses: [{ n: 1, gap: 45  }, { n: 2, gap: 28 }, { n: 3, gap: 28 }] },
-  { vaccineId: 9,  name: 'Inactivated Polio Vaccine (IPV)',  doses: [{ n: 1, gap: 105 }, { n: 2, gap: 165}] },
-  { vaccineId: 10, name: 'Pneumococcal Conj. Vaccine (PCV)', doses: [{ n: 1, gap: 45  }, { n: 2, gap: 28 }, { n: 3, gap: 28 }] },
-  { vaccineId: 11, name: 'MMR Vaccine',                      doses: [{ n: 1, gap: 270 }, { n: 2, gap: 90 }] },
-]
+// ── Vaccination schedule — from the backend timeline, shared with the
+//    other parent pages (Composables/childSchedule.js) ─────────────────────
+const scheduleTimeline = ref([])
 
-function snapToClinicDay(date) {
-  let d = new Date(date)
-  while (!(isMonday(d) || isWednesday(d) || isFriday(d))) d = addDays(d, 1)
-  return d
-}
 function formatDisplayDate(date) {
   if (!date) return '—'
   try { return format(new Date(date), 'MMM d, yyyy') } catch { return '—' }
 }
 
-const computedVaccineList = computed(() => {
-  if (!selectedChild.value?.birthDate) return []
-  const birth = new Date(selectedChild.value.birthDate)
-  const result = []
-
-  for (const vaccine of VACCINE_MASTER) {
-    let prevActualDate   = null
-    let prevOriginalDate = null
-
-    for (const dose of vaccine.doses) {
-      const record = completedRecords.value.find(r =>
-        Number(r.vaccineID ?? r.vaccineId) === vaccine.vaccineId &&
-        Number(r.doseNumber ?? r.DoseNumber) === dose.n &&
-        r.status === 'Completed' &&
-        r.dateAdministered
-      )
-
-      const originalDueDate = dose.n === 1
-        ? snapToClinicDay(addDays(birth, dose.gap))
-        : snapToClinicDay(addDays(prevOriginalDate ?? birth, dose.gap))
-
-      let scheduledDate
-      if (record) {
-        scheduledDate = new Date(record.dateAdministered)
-      } else if (dose.n === 1) {
-        scheduledDate = snapToClinicDay(addDays(birth, dose.gap))
-      } else {
-        const base = prevActualDate ?? prevOriginalDate ?? birth
-        scheduledDate = snapToClinicDay(addDays(base, dose.gap))
-      }
-
-      const administeredDate = record ? new Date(record.dateAdministered) : null
-      const wasLate = record ? administeredDate > originalDueDate : false
-      const daysLate = wasLate
-        ? Math.max(0, Math.round((administeredDate - originalDueDate) / 86400000))
-        : 0
-
-      prevOriginalDate = originalDueDate
-      prevActualDate   = administeredDate ?? null
-
-      result.push({
-        doseId:          `${vaccine.vaccineId}-${dose.n}`,
-        vaccineId:       vaccine.vaccineId,
-        name:            vaccine.name,
-        doseNumber:      dose.n,
-        scheduledDate,
-        originalDueDate,
-        isCompleted:     !!record,
-        administeredDate,
-        wasLate,
-        daysLate,
-      })
-    }
-  }
-  return result
-})
+const computedVaccineList = computed(() => buildSchedule(scheduleTimeline.value, completedRecords.value))
 
 const groupedVaccineList = computed(() => {
   const map = new Map()
@@ -237,6 +171,27 @@ const calendarDaysInMonth = computed(() => getDaysInMonth(new Date(calYear.value
 const calendarOffset      = computed(() => startOfMonth(new Date(calYear.value, calMonth.value, 1)).getDay())
 const windowEndDate       = computed(() => selectedVax.value ? addDays(selectedVax.value.scheduledDate, 14) : null)
 
+// Clinic (vaccination) days come from the admin's Operating Hours: the open
+// weekdays, with holidays / special openings taking priority.
+const clinic = ref(null)   // GET /ClinicOperatingSchedule/today
+
+function isClinicDay(date) {
+  const c = clinic.value
+  if (!c) return false
+  const key = format(date, 'yyyy-MM-dd')
+  const exception = (c.exceptions || []).find(e => e.date === key)
+  if (exception) return exception.isOpen
+  return (c.openDays || []).includes(date.getDay())
+}
+
+async function fetchClinicHours() {
+  try {
+    clinic.value = (await api.get('/ClinicOperatingSchedule/today')).data
+  } catch (err) {
+    console.error('Failed to load clinic hours:', err)
+  }
+}
+
 function prevMonth() { calMonth.value === 0 ? (calMonth.value = 11, calYear.value--) : calMonth.value-- }
 function nextMonth() { calMonth.value === 11 ? (calMonth.value = 0, calYear.value++) : calMonth.value++ }
 
@@ -245,7 +200,7 @@ function getDayClass(day) {
   const date      = new Date(calYear.value, calMonth.value, day)
   const scheduled = selectedVax.value.scheduledDate
   const winEnd    = windowEndDate.value
-  const clinic    = isMonday(date) || isWednesday(date) || isFriday(date)
+  const clinicDay = isClinicDay(date)
   const sameDay   = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
 
   if (selectedVax.value.wasLate && selectedVax.value.originalDueDate && sameDay(date, selectedVax.value.originalDueDate))
@@ -254,9 +209,9 @@ function getDayClass(day) {
     return 'bg-emerald-500 text-white shadow-lg scale-110 font-bold z-10 cursor-default'
   if (!selectedVax.value.isCompleted && sameDay(date, scheduled))
     return 'bg-emerald-600 text-white shadow-lg scale-110 font-bold z-10 cursor-default'
-  if (!selectedVax.value.isCompleted && clinic && winEnd && date > scheduled && date <= winEnd)
+  if (!selectedVax.value.isCompleted && clinicDay && winEnd && date > scheduled && date <= winEnd)
     return 'bg-emerald-500/30 text-slate-700 border-b-2 border-emerald-500 cursor-pointer'
-  if (clinic) return 'bg-slate-100 text-slate-400 cursor-pointer'
+  if (clinicDay) return 'bg-slate-100 text-slate-400 cursor-pointer'
   return 'text-slate-300 pointer-events-none'
 }
 
@@ -288,14 +243,9 @@ function handleSelectChild(child) {
 async function fetchRecords(childId) {
   if (!childId) return
   try {
-    const res = await api.get(`/VaccinationRecords/child/${childId}`)
-    // Backend returns vaccinationDate/vaccinationRecordID — normalize to the
-    // dateAdministered/recordId names computedVaccineList expects below.
-    completedRecords.value = res.data.map(r => ({
-      ...r,
-      recordId:         r.recordId ?? r.vaccinationRecordID ?? null,
-      dateAdministered: r.dateAdministered ?? r.vaccinationDate ?? null,
-    }))
+    const { timeline, records } = await fetchChildSchedule(childId)
+    scheduleTimeline.value = timeline
+    completedRecords.value = records
   } catch (err) {
     console.error('fetchRecords error:', err)
     completedRecords.value = []
@@ -316,6 +266,7 @@ async function fetchUnreadCount() {
 onMounted(async () => {
   const savedAccount = getAccount()
   if (!savedAccount) { router.push('/'); return }
+  fetchClinicHours()
 
   const rawUser = savedAccount.user ?? savedAccount
 
@@ -328,6 +279,9 @@ onMounted(async () => {
     middleName: rawUser.middleName ?? rawUser.MiddleName,
     lastName: rawUser.lastName ?? rawUser.LastName,
     email: rawUser.email ?? rawUser.Email,
+    contactNo: rawUser.contactNo ?? rawUser.ContactNo,
+    barangayNo: rawUser.barangayNo ?? rawUser.BarangayNo,
+    address: rawUser.address ?? rawUser.Address,
   }
 
   if (!parentData.value?.parentID) {
@@ -351,11 +305,14 @@ onMounted(async () => {
         placeOfBirth: child.PlaceOfBirth ?? child.placeOfBirth,
         sex: child.Sex ?? child.sex,
         barangay: child.Barangay ?? child.barangay,
+        familyNo: child.FamilyNo ?? child.familyNo,
         address: child.Address ?? child.address,
         healthCenter: child.HealthCenter ?? child.healthCenter,
         relationshipType,
         isPrimaryContact: child.IsPrimaryContact ?? child.isPrimaryContact,
         canReceiveNotifications: child.CanReceiveNotifications ?? child.canReceiveNotifications,
+        // Everyone linked to the child: "Maria Santos (Mother); Rosario Santos (Grandmother)"
+        guardians: child.Guardians ?? child.guardians,
 
         // The dashboard endpoint doesn't return MotherName/FatherName/GuardianName
         // fields directly — it only returns relationshipType + parentFullName for

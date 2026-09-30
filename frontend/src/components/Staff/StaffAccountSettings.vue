@@ -1,18 +1,11 @@
 <!--
-  StaffAccountSettings.vue
-  =========================
-  New page, linked from the gear icon in StaffTopbar.vue.
-  - Profile info: read-only, pulled straight from the session's stored
-    account/user object (whatever field names Login.vue put there) —
-    nothing to fetch, nothing to save on this half.
-  - Change password: real call to PATCH /api/Users/{userId}/change-password
-    (added to AuthController.cs during the auth-migration work), reusing the
-    same complexity rule as everywhere else in the app (8+ chars, upper,
-    lower, digit, special char).
-
-  NOTE: this page is not yet wired into router/index.js — add a route for
-  path "/staff/settings" pointing at this component, or the gear icon's
-  router.push will 404.
+  StaffAccountSettings.vue  —  /staff/settings (gear icon in StaffTopbar)
+  - Profile: name, username and role are read-only (only the System
+    Administrator can change those, in User Management). Contact details
+    (email, mobile number, address) can be edited here: PUT /api/Users/{id}.
+  - Change password: PATCH /api/Users/{userId}/change-password, with the
+    same rule as everywhere else in the app (8+ chars, upper, lower, digit,
+    special char).
 -->
 <template>
   <div class="flex min-h-screen w-full bg-stone-50 text-stone-900" style="font-family: 'Inter','Segoe UI',sans-serif;">
@@ -22,7 +15,7 @@
       <StaffTopbar title="Account Settings" breadcrumb="Aruga / Account Settings" />
 
       <div class="px-8 py-6 max-w-2xl space-y-6">
-        <!-- Profile info (read-only) -->
+        <!-- Profile -->
         <div class="rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">
           <p class="text-[14px] font-semibold mb-4">Profile</p>
           <div class="flex items-center gap-4 mb-5">
@@ -37,17 +30,41 @@
           <div class="grid grid-cols-2 gap-4">
             <div>
               <p class="text-[11px] font-semibold uppercase tracking-wide text-stone-400 mb-1">Username</p>
-              <p class="text-[13px] text-stone-700">{{ staffUsername }}</p>
+              <p class="text-[13px] text-stone-700">{{ profile.username || '—' }}</p>
             </div>
             <div>
               <p class="text-[11px] font-semibold uppercase tracking-wide text-stone-400 mb-1">Role</p>
               <p class="text-[13px] text-stone-700">{{ staffRole }}</p>
             </div>
           </div>
-          <p class="mt-4 text-[11.5px] text-stone-400">
-            Profile fields aren't editable here yet — there's no update-own-profile
-            endpoint wired up for Staff accounts. This section is display-only for now.
-          </p>
+
+          <form @submit.prevent="saveContact" class="mt-6 space-y-4 border-t border-stone-100 pt-5">
+            <p class="text-[12.5px] font-semibold text-stone-700">Contact Information</p>
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-[12px] font-medium text-stone-600 mb-1">Email</label>
+                <input v-model="contact.email" type="email" class="w-full rounded-xl border border-stone-200 px-3 py-2.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-emerald-600/30 focus:border-emerald-600" />
+              </div>
+              <div>
+                <label class="block text-[12px] font-medium text-stone-600 mb-1">Mobile Number</label>
+                <input v-model="contact.contactNo" v-digits type="tel" placeholder="09XXXXXXXXX" class="w-full rounded-xl border border-stone-200 px-3 py-2.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-emerald-600/30 focus:border-emerald-600" />
+              </div>
+              <div class="col-span-2">
+                <label class="block text-[12px] font-medium text-stone-600 mb-1">Address</label>
+                <input v-model="contact.address" type="text" class="w-full rounded-xl border border-stone-200 px-3 py-2.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-emerald-600/30 focus:border-emerald-600" />
+              </div>
+            </div>
+            <p class="text-[11.5px] text-stone-400">Your name and role can only be changed by the System Administrator.</p>
+            <p v-if="contactError" class="text-[12.5px] text-rose-700">{{ contactError }}</p>
+            <p v-if="contactSaved" class="text-[12.5px] text-emerald-700">{{ contactSaved }}</p>
+            <button
+              type="submit"
+              :disabled="savingContact"
+              class="rounded-xl bg-emerald-700 px-4 py-2.5 text-[13px] font-medium text-white hover:bg-emerald-800 disabled:opacity-40"
+            >
+              {{ savingContact ? 'Saving…' : 'Save Contact Info' }}
+            </button>
+          </form>
         </div>
 
         <!-- Change password -->
@@ -61,6 +78,7 @@
                 v-model="form.currentPassword"
                 type="password"
                 required
+                autocomplete="current-password"
                 class="w-full rounded-xl border border-stone-200 px-3 py-2.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-emerald-600/30 focus:border-emerald-600"
               />
             </div>
@@ -70,6 +88,7 @@
                 v-model="form.newPassword"
                 type="password"
                 required
+                autocomplete="new-password"
                 class="w-full rounded-xl border border-stone-200 px-3 py-2.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-emerald-600/30 focus:border-emerald-600"
               />
             </div>
@@ -79,11 +98,11 @@
                 v-model="form.confirmPassword"
                 type="password"
                 required
+                autocomplete="new-password"
                 class="w-full rounded-xl border border-stone-200 px-3 py-2.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-emerald-600/30 focus:border-emerald-600"
               />
             </div>
 
-            <!-- Live complexity checklist, same rule as ForceChangePassword.vue -->
             <ul class="grid grid-cols-2 gap-x-4 gap-y-1 text-[12px]">
               <li :class="checklist.length ? 'text-emerald-700' : 'text-stone-400'">✓ 8+ characters</li>
               <li :class="checklist.upper ? 'text-emerald-700' : 'text-stone-400'">✓ Uppercase letter</li>
@@ -111,35 +130,73 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed } from "vue";
+import { ref, reactive, computed, onMounted } from "vue";
+import axios from "axios";
 import StaffSidebar from "./StaffSidebar.vue";
 import StaffTopbar from "./StaffTopbar.vue";
 import { getAccount } from "@/utils/auth";
-
-const API_BASE = "http://localhost:57147/api";
+import { API_BASE } from "@/utils/format";
 
 const account = getAccount() || {};
 const user = account.user || {};
+const staffUserId = user.UserID || user.userId || user.id || user.Id;
 
-const staffName = computed(() =>
-  user.name || user.Name || user.fullName || user.FullName ||
-  [user.firstName || user.FirstName, user.lastName || user.LastName].filter(Boolean).join(" ") ||
-  user.username || user.Username || "Staff"
-);
-const staffRole = computed(() => user.position || user.Position || user.jobTitle || account.role || "Staff");
-const staffUsername = computed(() => user.username || user.Username || "—");
+// Filled from GET /api/Users/{id}; the session copy is only a fallback
+const profile = ref({});
+
+const staffName = computed(() => {
+  const p = profile.value;
+  return [p.firstName || user.FirstName, p.lastName || user.LastName].filter(Boolean).join(" ") || "Staff";
+});
+const staffRole = computed(() => {
+  const position = profile.value.position || user.UserType;
+  return position === "Nurse" || position === "Staff" ? "Staff / Nurse" : position || "Staff / Nurse";
+});
 const staffInitials = computed(() =>
-  staffName.value
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map(w => w[0]?.toUpperCase())
-    .join("") || "S"
+  staffName.value.split(" ").filter(Boolean).slice(0, 2).map(w => w[0]?.toUpperCase()).join("") || "S"
 );
-// Guessing the same way the rest of the codebase does, since the exact
-// field name on `user` for the numeric/GUID ID hasn't been confirmed yet.
-const staffUserId = user.userId || user.UserID || user.id || user.Id;
 
+// ── Contact info ─────────────────────────────────────────────
+const contact = reactive({ email: "", contactNo: "", address: "" });
+const savingContact = ref(false);
+const contactError = ref("");
+const contactSaved = ref("");
+
+async function loadProfile() {
+  if (!staffUserId) return;
+  try {
+    const res = await axios.get(`${API_BASE}/Users/${staffUserId}`);
+    profile.value = res.data;
+    Object.assign(contact, {
+      email: res.data.email || "",
+      contactNo: res.data.contactNo || "",
+      address: res.data.address || "",
+    });
+  } catch (error) {
+    console.error("Load profile error:", error);
+  }
+}
+
+async function saveContact() {
+  contactError.value = "";
+  contactSaved.value = "";
+  if (contact.contactNo && !/^(09|\+639)\d{9}$/.test(contact.contactNo.replace(/[\s-]/g, ""))) {
+    contactError.value = "Enter a mobile number like 09171234567.";
+    return;
+  }
+  savingContact.value = true;
+  try {
+    const res = await axios.put(`${API_BASE}/Users/${staffUserId}`, { ...contact });
+    profile.value = { ...profile.value, ...res.data };
+    contactSaved.value = "Contact information saved.";
+  } catch (error) {
+    contactError.value = error.response?.data?.message || "Could not save your contact information.";
+  } finally {
+    savingContact.value = false;
+  }
+}
+
+// ── Password ─────────────────────────────────────────────────
 const form = reactive({
   currentPassword: "",
   newPassword: "",
@@ -176,19 +233,10 @@ const submitPasswordChange = async () => {
 
   submitting.value = true;
   try {
-    const response = await fetch(`${API_BASE}/Users/${staffUserId}/change-password`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        currentPassword: form.currentPassword,
-        newPassword: form.newPassword,
-      }),
+    await axios.patch(`${API_BASE}/Users/${staffUserId}/change-password`, {
+      currentPassword: form.currentPassword,
+      newPassword: form.newPassword,
     });
-
-    if (!response.ok) {
-      const text = await response.text().catch(() => "");
-      throw new Error(text || `Failed to update password. Status: ${response.status}`);
-    }
 
     successMessage.value = "Password updated successfully.";
     form.currentPassword = "";
@@ -196,9 +244,11 @@ const submitPasswordChange = async () => {
     form.confirmPassword = "";
   } catch (error) {
     console.error("Change password error:", error);
-    errorMessage.value = error.message || "Something went wrong. Please try again.";
+    errorMessage.value = error.response?.data?.message || "Something went wrong. Please try again.";
   } finally {
     submitting.value = false;
   }
 };
+
+onMounted(loadProfile);
 </script>

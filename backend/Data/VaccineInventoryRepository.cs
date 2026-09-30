@@ -80,6 +80,7 @@ namespace AndroidWebAPI.Data
                     InitialQuantity,
                     CurrentQuantity,
                     MinimumStock,
+                    ManufacturingDate,
                     ExpirationDate,
                     ReceivedDate,
                     Supplier,
@@ -93,6 +94,7 @@ namespace AndroidWebAPI.Data
                     @InitialQuantity,
                     @CurrentQuantity,
                     @MinimumStock,
+                    @ManufacturingDate,
                     @ExpirationDate,
                     @ReceivedDate,
                     @Supplier,
@@ -123,6 +125,7 @@ namespace AndroidWebAPI.Data
                     InitialQuantity = @InitialQuantity,
                     CurrentQuantity = @CurrentQuantity,
                     MinimumStock = @MinimumStock,
+                    ManufacturingDate = COALESCE(@ManufacturingDate, ManufacturingDate),  -- screens that don't show it keep the saved one
                     ExpirationDate = @ExpirationDate,
                     ReceivedDate = @ReceivedDate,
                     Supplier = @Supplier,

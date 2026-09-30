@@ -1,13 +1,17 @@
 <script setup>
+import { API_ORIGIN } from '@/utils/apiBase'
 import axios from "axios"
 import { ref, computed, onMounted } from "vue"
+import { useFloatingMenu } from "@/utils/floatingMenu"
 import AppSidebar from "./Components/AppSidebar.vue"
 import AppHeader from "./Components/AppHeader.vue"
+import { downloadCSV, toISODate } from "@/utils/format"
+import { askConfirm, showAlert } from "@/utils/dialog"
 
 /* ------------------------------- API config ------------------------------- */
-const api = "http://localhost:57147/api/Vaccines"
-const doseApi = "http://localhost:57147/api/VaccineDoses"
-const ruleApi = "http://localhost:57147/api/VaccinationScheduleRules"
+const api = `${API_ORIGIN}/api/Vaccines`
+const doseApi = `${API_ORIGIN}/api/VaccineDoses`
+const ruleApi = `${API_ORIGIN}/api/VaccinationScheduleRules`
 
 /* ------------------------- Age preset conversion (UI only) -------------------------
    The database/API still only ever sees recommendedAgeDays / minimumAgeDays /
@@ -225,6 +229,17 @@ const filteredVaccines = computed(() => {
   })
 })
 
+/* Export — the currently filtered list, one row per vaccine */
+const exportVaccines = () => {
+  downloadCSV(`vaccines-${toISODate()}.csv`, [
+    ["Vaccine", "Abbreviation", "Target Disease", "Recommended Age", "Age Category", "Doses", "Route", "Status"],
+    ...filteredVaccines.value.map(v => [
+      v.vaccineName, v.abbreviation, v.targetDisease, v.recommendedAge, v.ageCategory,
+      getDoses(v.vaccineID).length || v.numberOfRequiredDoses, v.administrationRoute, v.status ? "Active" : "Inactive",
+    ]),
+  ])
+}
+
 /* -------------------------------- Summary ---------------------------------- */
 const summary = computed(() => ({
   total: vaccines.value.length,
@@ -236,15 +251,33 @@ const summary = computed(() => ({
 }))
 
 /* ------------------------------ Row actions menu ---------------------------- */
-const openMenuId = ref(null)
-const toggleMenu = (id) => (openMenuId.value = openMenuId.value === id ? null : id)
-const closeMenu = () => (openMenuId.value = null)
+const { openMenuId, menuStyle, toggleMenu, closeMenu } = useFloatingMenu()
 
 async function setStatus(vaccine, activate) {
   const updated = { ...vaccine, status: activate }
   await axios.put(`${api}/${vaccine.vaccineID}`, updated)
   closeMenu()
   load()
+}
+
+// Only unused vaccines can be deleted; the backend explains when one is
+// already in children's records (deactivate those instead).
+async function remove(vaccineID) {
+  closeMenu()
+  const vaccine = vaccines.value.find(v => v.vaccineID === vaccineID)
+  const ok = await askConfirm({
+    title: `Delete ${vaccine?.vaccineName || 'this vaccine'}?`,
+    message: "This can't be undone. A vaccine already in children's records can't be deleted; deactivate it instead.",
+    confirmText: 'Delete',
+    tone: 'danger',
+  })
+  if (!ok) return
+  try {
+    await axios.delete(`${api}/${vaccineID}`)
+    await Promise.all([load(), loadAllDoses()])
+  } catch (err) {
+    showAlert({ title: 'Could not delete this vaccine', message: err.response?.data?.message || 'Please try again.', tone: 'error' })
+  }
 }
 
 /* -------------------------------- Details drawer ---------------------------- */
@@ -541,7 +574,7 @@ async function save() {
       <!-- Top navbar -->
         <AppHeader
   title="Vaccine Management"
-  breadcrumb="System Administration / Vaccine Management"
+  breadcrumb="Admin / Vaccine Management"
   user-initials="RM"
 />
 
@@ -624,7 +657,7 @@ async function save() {
             </select>
 
             <div class="flex items-center gap-2 shrink-0">
-              <button class="text-sm font-semibold px-4 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
+              <button @click="exportVaccines" class="text-sm font-semibold px-4 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
                 Export
               </button>
               <button
@@ -690,16 +723,17 @@ async function save() {
                   </td>
                   <td class="px-5 py-3 text-right relative">
                     <button
-                      @click.stop="toggleMenu(vaccine.vaccineID)"
+                      @click.stop="toggleMenu(vaccine.vaccineID, $event)"
                       class="text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg w-8 h-8 inline-flex items-center justify-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                     >
                       ⋮
                     </button>
 
+                    <Teleport to="body">
                     <div
                       v-if="openMenuId === vaccine.vaccineID"
                       @click.stop
-                      class="absolute right-5 top-11 z-30 w-48 bg-white border border-slate-200 rounded-lg shadow-md py-1 text-left"
+                      :style="menuStyle" class="fixed z-50 w-48 bg-white border border-slate-200 rounded-lg shadow-md py-1 text-left"
                     >
                       <button @click="openDrawer(vaccine)" class="w-full text-left px-3.5 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors">View Details</button>
                       <button @click="edit(vaccine)" class="w-full text-left px-3.5 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors">Edit Vaccine</button>
@@ -708,6 +742,7 @@ async function save() {
                       <button v-if="vaccine.status" @click="setStatus(vaccine, false)" class="w-full text-left px-3.5 py-2 text-sm text-slate-600 hover:bg-slate-50 transition-colors">Deactivate</button>
                       <button @click="remove(vaccine.vaccineID)" class="w-full text-left px-3.5 py-2 text-sm text-rose-600 hover:bg-rose-50 transition-colors">Delete</button>
                     </div>
+                    </Teleport>
                   </td>
                 </tr>
 
@@ -790,7 +825,7 @@ async function save() {
         </div>
 
         <div class="border-t border-slate-200 p-4 flex items-center gap-2 shrink-0">
-          <button @click="edit(selectedVaccine)" class="flex-1 text-sm font-semibold px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors">Edit Vaccine</button>
+          <button @click="closeDrawer(); edit(selectedVaccine)" class="flex-1 text-sm font-semibold px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors">Edit Vaccine</button>
           <button @click="closeDrawer" class="text-sm font-semibold px-4 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors">Close</button>
         </div>
       </aside>
@@ -912,7 +947,7 @@ async function save() {
 
                     <div v-if="dose.recommendedAgePreset === CUSTOM_OPTION" class="flex gap-2 mt-2">
                       <input
-                        v-model.number="dose.recommendedAgeCustomValue"
+                        v-model.number="dose.recommendedAgeCustomValue" v-digits
                         @input="onAgeCustomChange(dose, index)"
                         type="number"
                         min="0"

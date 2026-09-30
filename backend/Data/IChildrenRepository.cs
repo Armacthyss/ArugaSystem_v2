@@ -44,6 +44,7 @@ namespace AndroidWebAPI.Data
         public string? PlaceOfBirth { get; set; }
         public string? Sex { get; set; }
         public int? Barangay { get; set; }
+        public string? FamilyNo { get; set; }
         public string? Address { get; set; }
         public string? HealthCenter { get; set; }
         public string? Allergies { get; set; }
@@ -63,6 +64,7 @@ namespace AndroidWebAPI.Data
         public string? PlaceOfBirth { get; set; }
         public string? Sex { get; set; }
         public int? Barangay { get; set; }
+        public string? FamilyNo { get; set; }
         public string? Address { get; set; }
         public string? HealthCenter { get; set; }
         public string? Allergies { get; set; }

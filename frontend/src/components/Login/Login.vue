@@ -1,12 +1,24 @@
 <script setup>
+import { API_ORIGIN } from '@/utils/apiBase'
 import logoIcon from "@/assets/logo-icon.svg"
 import { ref, computed } from "vue"
-import { useRouter } from "vue-router"
+import { useRouter, useRoute } from "vue-router"
 import axios from "axios"
+import CaptchaBox from "@/components/Shared/CaptchaBox.vue"
 
-const API_BASE_URL = `${import.meta.env.VITE_API_URL || 'http://localhost:57147'}/api/auth`
+const API_BASE_URL = `${API_ORIGIN}/api/auth`
 
 const router = useRouter()
+const route = useRoute()
+
+// Set when the router sent the person here from a page that needs a login
+// (e.g. the clinic check-in QR), so we can take them back afterwards.
+function redirectTarget() {
+  const target = route.query.redirect
+  return typeof target === "string" && target.startsWith("/") && !target.startsWith("//") ? target : null
+}
+
+const sessionNote = route.query.expired ? "Your session expired. Please sign in again." : ""
 
 // =====================================================
 // FORM STATE
@@ -20,9 +32,14 @@ const rememberMe = ref(false)
 const errorMessage = ref("")
 const isLoading = ref(false)
 
+// Picture CAPTCHA (see CaptchaBox.vue)
+const captcha = ref(null)
+const captchaAnswer = ref("")
+
 const canSubmit = computed(() =>
   identifier.value.trim().length > 0 &&
   password.value.length > 0 &&
+  (captcha.value?.enabled === false || captchaAnswer.value.trim().length > 0) &&
   !isLoading.value
 )
 
@@ -31,24 +48,30 @@ const canSubmit = computed(() =>
 // ROLE REDIRECTION
 // =====================================================
 
-function redirectForRole(role, userType) {
+function redirectForRole(role) {
+  const target = redirectTarget()
+  if (target) {
+    router.push(target)   // the router guard still checks the role
+    return
+  }
+
   switch (role) {
     case "Parent":
       router.push("/ParentOverview")
       break
 
-    case "Healthcare":
-      // Doctor and Nurse/Midwife share the 'Healthcare' role — UserType
-      // is what actually tells them apart.
-      router.push(userType === "Doctor" ? "/doctor/home" : "/healthcare/home")
-      break
-
+    // Staff / Nurse (a Doctor signs in to the SystemAdmin portal)
     case "Staff":
       router.push("/staff/dashboard")
       break
 
     case "SystemAdmin":
       router.push("/system-admin/home")
+      break
+
+    // Super Admin: the development team (audit logs, Admin accounts)
+    case "SuperAdmin":
+      router.push("/super-admin/home")
       break
 
     default:
@@ -71,6 +94,8 @@ const handleLogin = async () => {
     const response = await axios.post(`${API_BASE_URL}/login`, {
       identifier: identifier.value,
       password: password.value,
+      captchaId: captcha.value?.captchaId,
+      captchaAnswer: captchaAnswer.value,
     })
 
     const data = response.data
@@ -102,15 +127,18 @@ const handleLogin = async () => {
       // previously storing the literal string "undefined".
       localStorage.setItem("parentUser", JSON.stringify(p))
 
-      router.push(data.mustChangePassword ? "/ChangePassword" : "/ParentOverview")
+      if (data.mustChangePassword) router.push("/ChangePassword")
+      else redirectForRole("Parent")
       return
     }
 
     if (data.accountType === "Personnel") {
       const u = data.user
-      const userType = u.userType // 'Admission' | 'Admin' | 'Staff' | 'Doctor' | 'Nurse' | 'Midwife'
+      // Position is the real job title (Doctor / Nurse / Staff /
+      // Administrator); UserType is a legacy column, used only as a fallback.
+      const userType = u.position || u.userType
 
-      // The backend already computes the coarse role (Staff vs Healthcare)
+      // The backend already computes the coarse role (Staff vs SystemAdmin)
       // from the user's Position — trust that instead of re-deriving it
       // here, so the two can never disagree.
       const role = data.role
@@ -166,10 +194,14 @@ const handleLogin = async () => {
   } catch (error) {
     errorMessage.value = error?.response?.data?.message || "Invalid email/username or password."
     console.error("Login Error:", error)
+    // Each picture works once: show a new one for the next try
+    captcha.value?.refresh()
   } finally {
     isLoading.value = false
   }
 }
+
+const currentYear = new Date().getFullYear()
 </script>
 
 <template>
@@ -215,13 +247,14 @@ const handleLogin = async () => {
         <!-- USERNAME / EMAIL -->
         <div class="mb-5">
           <label for="identifier" class="block mb-2 text-sm font-semibold text-gray-700">
-            Username or Email
+            Email or Username
           </label>
           <input
             id="identifier"
             v-model="identifier"
             type="text"
             autocomplete="username"
+            autocapitalize="none"
             placeholder="Enter your email or username"
             class="w-full border-2 border-[#dcccac] rounded-xl px-4 py-3 focus:outline-none focus:border-[#546b41]"
           />
@@ -252,6 +285,11 @@ const handleLogin = async () => {
           </div>
         </div>
 
+        <!-- CAPTCHA (keeps bots from guessing passwords) -->
+        <div class="mt-5">
+          <CaptchaBox ref="captcha" v-model="captchaAnswer" />
+        </div>
+
         <!-- REMEMBER ME / FORGOT PASSWORD -->
         <div class="flex items-center justify-between text-sm mb-6">
           <label class="flex items-center gap-2 text-gray-600 cursor-pointer select-none">
@@ -272,6 +310,10 @@ const handleLogin = async () => {
           </button>
         </div>
 
+        <div v-if="sessionNote && !errorMessage" class="mb-4 rounded-xl bg-amber-50 border border-amber-200 px-4 py-3">
+          <p class="text-amber-700 text-sm">{{ sessionNote }}</p>
+        </div>
+
         <!-- ERROR -->
         <div v-if="errorMessage" class="mb-4 rounded-xl bg-red-50 border border-red-200 px-4 py-3">
           <p class="text-red-600 text-sm">{{ errorMessage }}</p>
@@ -288,8 +330,8 @@ const handleLogin = async () => {
         </button>
 
         <p class="text-center text-xs text-gray-400 mt-8 leading-relaxed">
-          This login is used by parents, healthworkers,
-          staff, and system administrators.
+          © {{ currentYear }} Aruga · Leveriza Health Center<br />
+          All rights reserved.
         </p>
       </form>
     </div>

@@ -22,6 +22,8 @@ namespace AndroidWebAPI.Models
 
         public DateTime ReceivedDate { get; set; }
 
+        public DateTime? ManufacturingDate { get; set; }
+
         public string? Supplier { get; set; }
 
         public bool Status { get; set; }
