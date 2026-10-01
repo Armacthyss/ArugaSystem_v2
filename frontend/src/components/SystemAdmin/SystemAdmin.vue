@@ -130,11 +130,11 @@ const recentActivity = computed(() =>
 )
 
 const quickActions = [
-  { label: 'Add User', icon: UserPlus, route: '/system-admin/user-management' },
-  { label: 'Add Patient', icon: Baby, route: '/system-admin/patients' },
-  { label: 'Add Vaccine', icon: Syringe, route: '/system-admin/vaccines' },
-  { label: 'Manage Inventory', icon: Package, route: '/system-admin/inventory' },
-  { label: 'View Reports', icon: ClipboardList, route: '/system-admin/reports' },
+  { label: 'Add User', icon: UserPlus, route: '/admin/user-management' },
+  { label: 'Add Patient', icon: Baby, route: '/admin/patients' },
+  { label: 'Add Vaccine', icon: Syringe, route: '/admin/vaccines' },
+  { label: 'Manage Inventory', icon: Package, route: '/admin/inventory' },
+  { label: 'View Reports', icon: ClipboardList, route: '/admin/reports' },
 ]
 
 // Things that need the administrator's attention, computed live.
@@ -237,7 +237,7 @@ const todaysActivity = computed(() => [
           <div class="lg:col-span-2 bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
             <div class="flex items-center justify-between px-5 py-4 border-b border-slate-200">
               <h2 class="text-sm font-bold text-slate-900">Vaccine Inventory</h2>
-              <button @click="goTo('/system-admin/inventory')" class="text-xs font-semibold text-emerald-700 hover:text-emerald-800 flex items-center gap-1">
+              <button @click="goTo('/admin/inventory')" class="text-xs font-semibold text-emerald-700 hover:text-emerald-800 flex items-center gap-1">
                 View Inventory
                 <ChevronRight class="w-3.5 h-3.5" />
               </button>
@@ -265,7 +265,7 @@ const todaysActivity = computed(() => [
                 <p class="text-sm text-slate-700">{{ note.text }}</p>
               </div>
             </div>
-            <button @click="goTo('/system-admin/notifications')" class="mt-4 w-full text-xs font-semibold text-center px-3 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors">
+            <button @click="goTo('/admin/notifications')" class="mt-4 w-full text-xs font-semibold text-center px-3 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors">
               View All Notifications
             </button>
           </div>
