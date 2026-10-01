@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import axios from 'axios'
 import { Bell, Settings, KeyRound, Clock, LogOut, ArrowRight } from 'lucide-vue-next'
 import { getUser, getRole, logout } from '@/utils/auth'
+import ChangePasswordModal from './ChangePasswordModal.vue'
 
 // The Super Admin gets no clinic alerts or clinic settings
 const isSuperAdmin = getRole() === 'SuperAdmin'
@@ -56,6 +57,13 @@ async function loadNotifications() {
 async function markAllRead() {
   notifications.value.forEach(n => { n.isRead = true })
   try { await axios.patch(`${API_BASE}/Notifications/mark-all-read/user/${user.value.UserID}`) } catch { /* shown as read anyway */ }
+}
+
+// "Change my password" opens a window here instead of the first-sign-in page
+const showChangePassword = ref(false)
+function openChangePassword() {
+  open.value = null
+  showChangePassword.value = true
 }
 
 function go(path) {
@@ -154,7 +162,7 @@ onUnmounted(() => {
         </button>
 
         <div v-if="open === 'settings'" class="header-panel absolute right-0 top-11 z-50 w-56 rounded-xl border border-slate-200 bg-white shadow-lg overflow-hidden py-1">
-          <button @click="go('/ChangePassword')" class="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50">
+          <button @click="openChangePassword" class="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50">
             <KeyRound class="w-4 h-4 text-slate-400" /> Change my password
           </button>
           <button v-if="!isSuperAdmin" @click="go('/admin/operating-hours')" class="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50">
@@ -175,5 +183,7 @@ onUnmounted(() => {
       </div>
 
     </div>
+
+    <ChangePasswordModal v-if="showChangePassword" @close="showChangePassword = false" />
   </header>
 </template>
