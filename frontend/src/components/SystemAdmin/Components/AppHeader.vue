@@ -123,7 +123,7 @@ onUnmounted(() => {
             <div
               v-for="n in notifications"
               :key="n.notificationID"
-              @click="['StockCheck', 'LowStock'].includes(n.type) && go('/system-admin/inventory')"
+              @click="['StockCheck', 'LowStock'].includes(n.type) && go('/admin/inventory')"
               class="px-4 py-3 border-b border-slate-50 last:border-0"
               :role="['StockCheck', 'LowStock'].includes(n.type) ? 'button' : undefined"
               :style="['StockCheck', 'LowStock'].includes(n.type) ? 'cursor:pointer' : ''"
@@ -137,7 +137,7 @@ onUnmounted(() => {
               No alerts. The weekly stock check and low-stock warnings show up here.
             </p>
           </div>
-          <button @click="go('/system-admin/notifications')" class="w-full flex items-center justify-center gap-1.5 px-4 py-2.5 text-xs font-semibold text-emerald-700 border-t border-slate-100 hover:bg-slate-50">
+          <button @click="go('/admin/notifications')" class="w-full flex items-center justify-center gap-1.5 px-4 py-2.5 text-xs font-semibold text-emerald-700 border-t border-slate-100 hover:bg-slate-50">
             Parent notifications & announcements <ArrowRight class="w-3.5 h-3.5" />
           </button>
         </div>
@@ -157,7 +157,7 @@ onUnmounted(() => {
           <button @click="go('/ChangePassword')" class="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50">
             <KeyRound class="w-4 h-4 text-slate-400" /> Change my password
           </button>
-          <button v-if="!isSuperAdmin" @click="go('/system-admin/operating-hours')" class="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50">
+          <button v-if="!isSuperAdmin" @click="go('/admin/operating-hours')" class="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50">
             <Clock class="w-4 h-4 text-slate-400" /> Clinic operating hours
           </button>
           <button @click="signOut" class="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-rose-700 hover:bg-rose-50 border-t border-slate-100">

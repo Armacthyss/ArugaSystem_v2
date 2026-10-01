@@ -66,7 +66,7 @@ function redirectForRole(role) {
       break
 
     case "SystemAdmin":
-      router.push("/system-admin/home")
+      router.push("/admin/home")
       break
 
     // Super Admin: the development team (audit logs, Admin accounts)

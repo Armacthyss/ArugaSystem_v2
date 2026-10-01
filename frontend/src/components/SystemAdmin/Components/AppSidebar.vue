@@ -27,14 +27,14 @@ const router = useRouter()
 // Admin / Doctor: the clinic. Super Admin (the development team): the
 // system only, with the audit logs (technical adviser, Oct 2026).
 const ADMIN_ITEMS = [
-  { label: 'Dashboard',          icon: House,          to: '/system-admin/home' },
-  { label: 'User Management',    icon: Users,         to: '/system-admin/user-management' },
-  { label: 'Patient Management', icon: Baby,          to: '/system-admin/patients' },
-  { label: 'Vaccine Management', icon: Syringe,       to: '/system-admin/vaccines' },
-  { label: 'Inventory',          icon: Package,       to: '/system-admin/inventory' },
-  { label: 'Notifications',      icon: Bell,          to: '/system-admin/notifications' },
-  { label: 'Operating Hours',    icon: Clock,         to: '/system-admin/operating-hours' },
-  { label: 'Reports',            icon: BarChart3,     to: '/system-admin/reports' },
+  { label: 'Dashboard',          icon: House,          to: '/admin/home' },
+  { label: 'User Management',    icon: Users,         to: '/admin/user-management' },
+  { label: 'Patient Management', icon: Baby,          to: '/admin/patients' },
+  { label: 'Vaccine Management', icon: Syringe,       to: '/admin/vaccines' },
+  { label: 'Inventory',          icon: Package,       to: '/admin/inventory' },
+  { label: 'Notifications',      icon: Bell,          to: '/admin/notifications' },
+  { label: 'Operating Hours',    icon: Clock,         to: '/admin/operating-hours' },
+  { label: 'Reports',            icon: BarChart3,     to: '/admin/reports' },
 ]
 const SUPER_ADMIN_ITEMS = [
   { label: 'System Status',      icon: Activity,      to: '/super-admin/home' },

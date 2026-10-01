@@ -108,7 +108,7 @@ function redirectForRole(role) {
     case "SystemAdmin":
     case "Doctor":
     case "Administrator":
-      router.push("/system-admin/home")
+      router.push("/admin/home")
       break
 
     case "SuperAdmin":
