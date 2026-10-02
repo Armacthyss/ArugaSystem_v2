@@ -63,9 +63,9 @@ namespace AndroidWebAPI.Data
     await connection.ExecuteAsync(
         @"
         UPDATE dbo.Parents
-        SET LastLogin = GETDATE()
+        SET LastLogin = @Now
         WHERE ParentID = @ParentID",
-        new { parent.ParentID }
+        new { parent.ParentID, Now = DateTime.Now }   // API clock (Manila), not the database's
     );
 
     parent.LastLogin = DateTime.Now;
@@ -142,13 +142,14 @@ namespace AndroidWebAPI.Data
             PasswordHash = @PasswordHash,
             MustChangePassword = 0,
             TemporaryPasswordExpiresAt = NULL,
-            UpdatedAt = GETDATE()
+            UpdatedAt = @Now
         WHERE ParentID = @ParentID
         ",
         new
         {
             PasswordHash = newPasswordHash,
-            ParentID = parentId
+            ParentID = parentId,
+            Now = DateTime.Now
         }
     );
 
@@ -251,11 +252,13 @@ public async Task<Parent> CreateAsync(Parent parent)
             @MustChangePassword,
             @TemporaryPasswordExpiresAt,
             @ConsentRecordedAt,
-            GETDATE(),
-            GETDATE()
+            @Now,
+            @Now
         )";
 
-    await connection.ExecuteAsync(sql, parent);
+    var parameters = new DynamicParameters(parent);
+    parameters.Add("Now", DateTime.Now);
+    await connection.ExecuteAsync(sql, parameters);
 
     return parent;
 }
@@ -299,10 +302,12 @@ public async Task<Parent> UpdateAsync(Parent parent)
         ContactNo = @ContactNo,
         BarangayNo = @BarangayNo,
         Address = @Address,
-        UpdatedAt = GETDATE()
+        UpdatedAt = @Now
     WHERE ParentID = @ParentID";
 
-    await connection.ExecuteAsync(sql, parent);
+    var parameters = new DynamicParameters(parent);
+    parameters.Add("Now", DateTime.Now);
+    await connection.ExecuteAsync(sql, parameters);
 
     return parent;
 }

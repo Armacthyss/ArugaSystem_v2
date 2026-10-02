@@ -99,13 +99,16 @@ namespace AndroidWebAPI.Data
                     @ReceivedDate,
                     @Supplier,
                     @Status,
-                    GETDATE()
+                    @Now
                 );
 
                 SELECT CAST(SCOPE_IDENTITY() AS INT);";
 
+            // @Now: the API's clock (Manila time), not the database server's
+            var parameters = new DynamicParameters(inventory);
+            parameters.Add("Now", DateTime.Now);
             inventory.InventoryID =
-                await connection.QuerySingleAsync<int>(sql, inventory);
+                await connection.QuerySingleAsync<int>(sql, parameters);
 
             return inventory;
         }
@@ -130,10 +133,12 @@ namespace AndroidWebAPI.Data
                     ReceivedDate = @ReceivedDate,
                     Supplier = @Supplier,
                     Status = @Status,
-                    UpdatedAt = GETDATE()
+                    UpdatedAt = @Now
                 WHERE InventoryID = @InventoryID";
 
-            await connection.ExecuteAsync(sql, inventory);
+            var parameters = new DynamicParameters(inventory);
+            parameters.Add("Now", DateTime.Now);
+            await connection.ExecuteAsync(sql, parameters);
 
             return inventory;
         }

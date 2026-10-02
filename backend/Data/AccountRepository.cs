@@ -228,10 +228,10 @@ namespace AndroidWebAPI.Data
                     FailedLoginAttempts = @FailedLoginAttempts,
                     LockedUntil = @LockedUntil,
                     LastLogin = @LastLogin,
-                    UpdatedAt = GETDATE()
+                    UpdatedAt = @Now
                 WHERE AccountID = @AccountID
                 ",
-                account
+                WithNow(account)
             );
 
             return account;
@@ -252,13 +252,14 @@ public async Task<bool> ChangePasswordAsync(
         SET
             PasswordHash = @PasswordHash,
             MustChangePassword = 0,
-            UpdatedAt = GETDATE()
+            UpdatedAt = @Now
         WHERE AccountID = @AccountID
         ",
         new
         {
             AccountID = accountId,
-            PasswordHash = passwordHash
+            PasswordHash = passwordHash,
+            Now = DateTime.Now
         }
     );
 
@@ -275,13 +276,22 @@ public async Task<bool> ChangePasswordAsync(
             int rows = await connection.ExecuteAsync(
                 @"
                 UPDATE dbo.Accounts
-                SET LastLogin = GETDATE()
+                SET LastLogin = @Now
                 WHERE AccountID = @AccountID
                 ",
-                new { AccountID = accountId }
+                new { AccountID = accountId, Now = DateTime.Now }
             );
 
             return rows > 0;
+        }
+
+        // Times come from the API's clock (Manila), not the database server's,
+        // which may run on UTC (e.g. SQL Server in Docker)
+        private static DynamicParameters WithNow(object template)
+        {
+            var parameters = new DynamicParameters(template);
+            parameters.Add("Now", DateTime.Now);
+            return parameters;
         }
 
         public async Task<bool> DeleteAsync(Guid accountId)
