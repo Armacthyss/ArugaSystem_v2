@@ -415,6 +415,83 @@ public async Task<IActionResult> CreateParent(
             }
         }
 
+        // ── POST /api/Parents/{id}/create-login ──────────────────
+        // Gives a guardian who was registered without a portal login (contact
+        // only) a login, keeping their record and their links to children.
+        // Same as registering with a login: the username is their email and a
+        // temporary password goes to them by email and SMS.
+        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.StaffOrAdmin)]
+        [HttpPost("{id:guid}/create-login")]
+        public async Task<IActionResult> CreateLogin(
+            Guid id,
+            [FromServices] AndroidWebAPI.Data.AppDbContext context,
+            [FromServices] AndroidWebAPI.Services.MessageSender sender,
+            [FromServices] AndroidWebAPI.Services.AuditService audit)
+        {
+            var parent = await context.Parents.FirstOrDefaultAsync(p => p.ParentID == id);
+            if (parent == null) return NotFound(new { message = "Parent not found." });
+
+            if (await context.Accounts.AnyAsync(a => a.AccountType == "Parent" && a.ReferenceID == id))
+                return Conflict(new { message = "This parent already has a portal login." });
+            if (string.IsNullOrWhiteSpace(parent.Email))
+                return BadRequest(new { message = "Add an email address to this parent first (Edit), since it becomes their username." });
+
+            var email = parent.Email.Trim();
+            if (await context.Accounts.AnyAsync(a => a.Username == email))
+                return Conflict(new { message = AndroidWebAPI.Services.ContactCheck.EmailTaken });
+
+            var temporaryPassword = GenerateTemporaryPassword();
+            var passwordHash = BCrypt.Net.BCrypt.HashPassword(temporaryPassword);
+
+            parent.PasswordHash = passwordHash;
+            parent.MustChangePassword = true;
+            parent.TemporaryPasswordExpiresAt = DateTime.Now.AddHours(24);
+            parent.UpdatedAt = DateTime.Now;
+
+            var account = new Account
+            {
+                AccountID = Guid.NewGuid(),
+                Username = email,
+                PasswordHash = passwordHash,
+                AccountType = "Parent",
+                ReferenceID = parent.ParentID,
+                Status = true,
+                MustChangePassword = true,
+                FailedLoginAttempts = 0,
+                CreatedAt = DateTime.Now,
+            };
+            context.Accounts.Add(account);
+            await context.SaveChangesAsync();
+
+            bool emailed = await sender.SendEmailAsync(email, "Your Aruga parent account is ready",
+                $"Hi {parent.FirstName},\n\n" +
+                "Leveriza Health Center created your Aruga parent account. With it you can see your child's " +
+                "vaccination schedule and records, get reminders before each vaccine, and check in at the clinic.\n\n" +
+                $"Sign in with: {email}\nTemporary password: {temporaryPassword}\n\n" +
+                "You'll be asked to choose your own password the first time you sign in.",
+                preview: "Open this email to see your sign-in details.");
+
+            bool testAccount = AndroidWebAPI.Services.MessageSender.IsTestAddress(email);
+            bool texted = await sender.SendSmsAsync(parent.ContactNo,
+                $"Aruga - Leveriza Health Center: your parent account is ready. Sign in with {email} " +
+                $"Temporary password: {temporaryPassword} You will choose your own password the first time you sign in.",
+                demoRecipient: testAccount) && sender.SmsEnabled && !testAccount;
+
+            await audit.LogAsync("Patient Management", "Create",
+                $"Parent – {parent.FirstName} {parent.LastName}",
+                "Created a portal login for a parent/guardian registered without one.");
+
+            return Ok(new
+            {
+                accountID = account.AccountID,
+                username = email,
+                temporaryPassword,
+                emailed,
+                texted,
+                message = "Portal login created.",
+            });
+        }
+
         // ── LOGIN: POST /api/Parents/login ────────────────────────
         // NOTE: This is a legacy, parallel login path that checks
         // Parents.PasswordHash directly and is NOT used by Login.vue
