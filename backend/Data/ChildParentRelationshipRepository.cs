@@ -42,6 +42,22 @@ namespace AndroidWebAPI.Data
                 throw new Exception(
                     "This parent is already linked to this child.");
 
+            // A child has one Primary Contact, and when its reminders go to the
+            // primary contact only, a newly linked guardian follows that setting
+            var links = await _context.ChildParentRelationships
+                .Where(r => r.ChildID == dto.ChildID && r.Status == "Active")
+                .ToListAsync();
+            bool primaryOnly = links.Any(r => !r.CanReceiveNotifications);
+            if (dto.IsPrimaryContact)
+            {
+                foreach (var r in links.Where(r => r.IsPrimaryContact))
+                {
+                    r.IsPrimaryContact = false;
+                    if (primaryOnly) r.CanReceiveNotifications = false;
+                    r.UpdatedAt = DateTime.Now;
+                }
+            }
+
             var relationship = new ChildParentRelationship
             {
                 RelationshipID = Guid.NewGuid(),
@@ -49,7 +65,7 @@ namespace AndroidWebAPI.Data
                 ParentID = dto.ParentID,
                 RelationshipType = dto.RelationshipType,
                 IsPrimaryContact = dto.IsPrimaryContact,
-                CanReceiveNotifications = dto.CanReceiveNotifications,
+                CanReceiveNotifications = primaryOnly ? dto.IsPrimaryContact : dto.CanReceiveNotifications,
                 Status = "Active",
                 CreatedAt = DateTime.Now
             };

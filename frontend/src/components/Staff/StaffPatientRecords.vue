@@ -830,7 +830,7 @@ async function submitEdit() {
     }
     await loadAll();
     editModal.value.open = false; error.value = null;
-  } catch (e) { console.error("Error updating record:", e); error.value = `Update failed: ${e.response?.data?.message || e.message}`; }
+  } catch (e) { console.error("Error updating record:", e); error.value = e.response?.status === 409 ? e.response.data.message : `Update failed: ${e.response?.data?.message || e.message}`; }
 }
 // Groups fields into a shared row when consecutive fields share the same `group` tag
 // (e.g. First/Middle/Last Name together, Height/Weight together).
@@ -986,7 +986,8 @@ async function submitParentRegister() {
     if (errorMsg?.includes("String or binary data would be truncated") || errorMsg?.includes("ContactNo")) {
       errorMsg = "Contact number is too long. Please enter a valid Philippines mobile number (e.g., 09171234567).";
     }
-    error.value = `Registration failed: ${errorMsg}`;
+    // 409 = already registered (email / phone): show the plain message
+    error.value = e.response?.status === 409 ? errorMsg : `Registration failed: ${errorMsg}`;
   } finally { registerSubmitting.value = false; }
 }
 
@@ -1153,7 +1154,7 @@ async function submitChildRegister() {
     }
   } catch (e) {
     console.error("Error registering child:", e);
-    error.value = `Registration failed: ${e.response?.data?.message || e.message}`;
+    error.value = e.response?.status === 409 ? e.response.data.message : `Registration failed: ${e.response?.data?.message || e.message}`;
   } finally { registerSubmitting.value = false; }
 }
 </script>

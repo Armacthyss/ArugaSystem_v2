@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, reactive, onMounted } from 'vue'
+import { ref, computed, reactive, onMounted, watch } from 'vue'
 import { useFloatingMenu } from '@/utils/floatingMenu'
 import axios from 'axios'
 import AppHeader from './Components/AppHeader.vue'
@@ -9,6 +9,7 @@ import { barangayChoices, BARANGAY_HINT } from '@/utils/barangays'
 import PrivacyConsentCheckbox from '@/components/Shared/PrivacyConsentCheckbox.vue'
 import { askConfirm } from '@/utils/dialog'
 import { phMobileError } from '@/utils/phone'
+import TablePager from '@/components/Shared/TablePager.vue'
 
 /* -------------------------------- Status meta -------------------------------- */
 const vaccMeta = {
@@ -60,6 +61,13 @@ onMounted(fetchPatients)
 const searchQuery = ref('')
 const vaccFilter = ref('All')
 const sexFilter = ref('All')
+
+// Pages of the patient table (Show 10 / 20 / 30 / 50 entries)
+const page = ref(1)
+const pageSize = ref(10)
+const pagedPatients = computed(() =>
+  filteredPatients.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value))
+watch([searchQuery, vaccFilter, sexFilter], () => { page.value = 1 })
 
 const filteredPatients = computed(() =>
   patients.value.filter((p) => {
@@ -448,7 +456,7 @@ const saveLink = async () => {
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="patient in filteredPatients" :key="patient.id" class="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors">
+                <tr v-for="patient in pagedPatients" :key="patient.id" class="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors">
                   <td class="px-5 py-3 whitespace-nowrap"><p class="text-sm font-medium text-slate-800">{{ patient.familyNo || '—' }}</p><p class="text-[11px] text-slate-400">Brgy {{ patient.barangay ?? '—' }}</p></td>
                   <td class="px-3 py-3 whitespace-nowrap">
                     <button @click.stop="openDrawer(patient)" class="flex items-center gap-3 text-left">
@@ -497,6 +505,7 @@ const saveLink = async () => {
               </tbody>
             </table>
           </div>
+          <TablePager :total="filteredPatients.length" v-model:page="page" v-model:page-size="pageSize" />
         </section>
       </main>
     </div>
@@ -745,8 +754,9 @@ const saveLink = async () => {
             </div>
             <label class="flex items-center gap-2 text-sm text-slate-700">
               <input v-model="linkForm.primary" type="checkbox" class="w-4 h-4 rounded border-slate-300 text-emerald-600" />
-              Primary contact (receives reminders)
+              Make this the primary contact
             </label>
+            <p class="-mt-2 text-xs text-slate-500">Every linked parent or guardian sees this child's record and gets its reminders, unless the clinic sets the child's reminders to the primary contact only. A child has one primary contact.</p>
             <p v-if="formError" class="text-xs text-rose-500">{{ formError }}</p>
           </div>
           <div class="flex items-center justify-end gap-2 px-6 py-4 border-t border-slate-200">

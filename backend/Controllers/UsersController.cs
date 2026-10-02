@@ -110,7 +110,7 @@ namespace AndroidWebAPI.Controllers
             var user = await _context.Users.FirstOrDefaultAsync(u => u.UserID == id);
             if (user == null) return NotFound(new { message = "User not found." });
 
-            var emailError = await CheckEmailAsync(id, dto.Email);
+            var emailError = await CheckContactAsync(user, dto.Email, dto.ContactNo);
             if (emailError != null) return BadRequest(new { message = emailError });
 
             user.Email = Clean(dto.Email);
@@ -148,7 +148,7 @@ namespace AndroidWebAPI.Controllers
             if (string.IsNullOrWhiteSpace(dto.FirstName) || string.IsNullOrWhiteSpace(dto.LastName))
                 return BadRequest(new { message = "First and last name are required." });
 
-            var emailError = await CheckEmailAsync(id, dto.Email);
+            var emailError = await CheckContactAsync(user, dto.Email, dto.ContactNo);
             if (emailError != null) return BadRequest(new { message = emailError });
 
             var before = $"{user.FirstName} {user.LastName}, PRC {user.PRCNo ?? "—"}";
@@ -175,12 +175,15 @@ namespace AndroidWebAPI.Controllers
         private static string? Clean(string? value) =>
             string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
-        private async Task<string?> CheckEmailAsync(Guid userId, string? email)
+        // One email and one mobile number per person (parents and staff).
+        // Only a changed value is checked, so older records still save.
+        private Task<string?> CheckContactAsync(AndroidWebAPI.Models.User user, string? email, string? phone)
         {
-            if (string.IsNullOrWhiteSpace(email)) return null;
-            var e = email.Trim();
-            bool taken = await _context.Users.AnyAsync(u => u.UserID != userId && u.Email == e);
-            return taken ? "That email address is already used by another account." : null;
+            bool emailChanged = !string.Equals(Clean(email), user.Email?.Trim(), StringComparison.OrdinalIgnoreCase);
+            bool phoneChanged = AndroidWebAPI.Services.MessageSender.NormalizePhNumber(phone)
+                                != AndroidWebAPI.Services.MessageSender.NormalizePhNumber(user.ContactNo);
+            return AndroidWebAPI.Services.ContactCheck.DuplicateAsync(_context,
+                emailChanged ? email : null, phoneChanged ? phone : null, exceptUser: user.UserID);
         }
 
         private static object ToProfile(AndroidWebAPI.Models.User user) => new

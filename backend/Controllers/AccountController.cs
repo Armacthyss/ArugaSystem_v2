@@ -167,6 +167,11 @@ public async Task<IActionResult> CreatePersonnelAccount(
     }
     bool newSuperAdmin = AndroidWebAPI.Services.Roles.IsSuperAdminPosition(dto.Role);
 
+    // One email and one mobile number per person (parents and staff)
+    var duplicate = await AndroidWebAPI.Services.ContactCheck.DuplicateAsync(_context, dto.Email, dto.ContactNo);
+    if (duplicate != null)
+        return Conflict(new { message = duplicate });
+
     // =========================================================
     // GENERATE USERNAME AUTOMATICALLY
     // =========================================================
