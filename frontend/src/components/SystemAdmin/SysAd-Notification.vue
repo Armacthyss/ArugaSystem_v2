@@ -1,11 +1,12 @@
 <script setup>
-import { ref, computed, reactive, onMounted } from 'vue'
+import { ref, computed, reactive, onMounted, watch } from 'vue'
 import { useFloatingMenu } from '@/utils/floatingMenu'
 import axios from 'axios'
 import AppSidebar from './Components/AppSidebar.vue'
 import AppHeader from './Components/AppHeader.vue'
 import { API_BASE, formatDate, isSameDay, toISODate, downloadCSV } from '@/utils/format'
 import { askConfirm } from '@/utils/dialog'
+import TablePager from '@/components/Shared/TablePager.vue'
 
 /* -------------------------------- Status meta -------------------------------- */
 // In-app notifications are delivered the moment they're created, so the
@@ -82,9 +83,12 @@ const filteredNotifications = computed(() =>
   })
 )
 
-// Render in pages of 50 so a long log stays fast.
-const shownCount = ref(50)
-const pagedNotifications = computed(() => filteredNotifications.value.slice(0, shownCount.value))
+// Pages of the log (Show 10 / 20 / 30 / 50 entries)
+const page = ref(1)
+const pageSize = ref(10)
+const pagedNotifications = computed(() =>
+  filteredNotifications.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value))
+watch([searchQuery, typeFilter, statusFilter], () => { page.value = 1 })
 
 /* -------------------------------- Summary ---------------------------------- */
 const summary = computed(() => {
@@ -405,20 +409,13 @@ const reminderSchedule = {
                   </td>
                 </tr>
 
-                <tr v-if="filteredNotifications.length > pagedNotifications.length">
-                  <td colspan="7" class="px-5 py-3 text-center">
-                    <button @click="shownCount += 50" class="text-xs font-semibold text-emerald-700 hover:text-emerald-800">
-                      Show more ({{ filteredNotifications.length - pagedNotifications.length }} remaining)
-                    </button>
-                  </td>
-                </tr>
-
                 <tr v-if="filteredNotifications.length === 0">
                   <td colspan="7" class="px-5 py-12 text-center text-sm" :class="loadError ? 'text-rose-500' : 'text-slate-400'">{{ loading ? 'Loading notifications...' : (loadError || 'No notifications match your search or filters.') }}</td>
                 </tr>
               </tbody>
             </table>
           </div>
+          <TablePager :total="filteredNotifications.length" v-model:page="page" v-model:page-size="pageSize" />
         </section>
 
         <!-- Notification History -->

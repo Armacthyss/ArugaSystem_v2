@@ -1,6 +1,6 @@
 <script setup>
 import { API_ORIGIN } from '@/utils/apiBase'
-import { ref, computed, reactive, onMounted } from 'vue'
+import { ref, computed, reactive, onMounted, watch } from 'vue'
 import { useFloatingMenu } from '@/utils/floatingMenu'
 import axios from 'axios'
 import AppSidebar from './Components/AppSidebar.vue'
@@ -10,6 +10,7 @@ import { userLevel } from '@/utils/format'
 import { barangayChoices, BARANGAY_HINT } from '@/utils/barangays'
 import { askConfirm } from '@/utils/dialog'
 import { phMobileError } from '@/utils/phone'
+import TablePager from '@/components/Shared/TablePager.vue'
 
 const API_BASE_URL = `${API_ORIGIN}/api`
 
@@ -92,6 +93,13 @@ onMounted(fetchUsers)
 const searchQuery = ref('')
 const roleFilter = ref('All Users')
 const statusFilter = ref('All')
+
+// Pages of the user table (Show 10 / 20 / 30 / 50 entries)
+const page = ref(1)
+const pageSize = ref(10)
+const pagedUsers = computed(() =>
+  filteredUsers.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value))
+watch([searchQuery, roleFilter, statusFilter], () => { page.value = 1 })
 
 const filteredUsers = computed(() =>
   users.value.filter((u) => {
@@ -517,7 +525,7 @@ texted = !!response.data.texted
                 </tr>
 
                 <tr
-                  v-for="user in filteredUsers"
+                  v-for="user in pagedUsers"
                   v-else
                   :key="user.id"
                   class="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors"
@@ -577,6 +585,7 @@ texted = !!response.data.texted
               </tbody>
             </table>
           </div>
+          <TablePager v-if="!isLoadingUsers" :total="filteredUsers.length" v-model:page="page" v-model:page-size="pageSize" />
         </section>
       </main>
     </div>
