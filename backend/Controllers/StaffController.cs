@@ -6,45 +6,38 @@ namespace AndroidWebAPI.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.ClinicTeam)]
     public class StaffController : ControllerBase
     {
         private readonly AppDbContext _context;
         public StaffController(AppDbContext context) { _context = context; }
 
         // GET /api/Staff/status
-        // "active"/"occupied"/"inactive" for the Queue page's staff strip.
+        // "active"/"occupied"/"inactive" for each Doctor and Nurse.
         // No real login-session tracking exists yet, so:
-        //   - inactive = Account.Status is disabled
-        //   - occupied = assigned to an InProgress queue visit today
-        //   - active   = enabled account, not currently occupied
+        //   - inactive = the account is not Active
+        //   - occupied = the vaccinator in the vaccination room right now
+        //   - active   = everyone else
         [HttpGet("status")]
         public async Task<IActionResult> GetStatus()
         {
-            var today = DateTime.Today;
-            var tomorrow = today.AddDays(1);
-
-            var personnelAccounts = await (
-                from p in _context.Personnel
-                join a in _context.Accounts on p.PersonnelID equals a.ReferenceID
-                where a.AccountType == "Personnel"
-                select new { p, a }
-            ).ToListAsync();
-
-            var occupiedStaffIds = await _context.Queues
-                .Where(q => q.QueueDate >= today && q.QueueDate < tomorrow
-                            && q.Status == "InProgress"
-                            && q.AssignedStaffID != null)
-                .Select(q => q.AssignedStaffID!.Value)
+            var staff = await _context.Users
+                .Where(u => u.Position != AndroidWebAPI.Services.Roles.SuperAdminPosition)
                 .ToListAsync();
 
-            var result = personnelAccounts.Select(x => new
+            var inRoom = await _context.ClinicRooms
+                .Where(r => r.IsOccupied && r.AssignedDoctorID != null)
+                .Select(r => r.AssignedDoctorID!.Value)
+                .ToListAsync();
+
+            var result = staff.Select(u => new
             {
-                staffID = x.p.PersonnelID,
-                name = $"{x.p.FirstName} {x.p.LastName}".Trim(),
-                role = x.p.Role,
-                status = !x.a.Status
+                staffID = u.UserID,
+                name = $"{u.FirstName} {u.LastName}".Trim(),
+                role = u.Position,
+                status = u.AccountStatus != "Active"
                     ? "inactive"
-                    : occupiedStaffIds.Contains(x.p.PersonnelID) ? "occupied" : "active"
+                    : inRoom.Contains(u.UserID) ? "occupied" : "active"
             });
 
             return Ok(result);
