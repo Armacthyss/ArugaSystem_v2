@@ -77,5 +77,43 @@ namespace AndroidWebAPI.Controllers
                 captcha = captcha.Enabled,
             });
         }
+
+        // POST /api/SystemStatus/test-message   { email?, phone? }
+        // Sends one test email and/or text right now, to check that Gmail and
+        // TextBee are set up on this server. Returns "sent" or the reason.
+        public class TestMessageRequest
+        {
+            public string? Email { get; set; }
+            public string? Phone { get; set; }
+        }
+
+        [HttpPost("test-message")]
+        public async Task<IActionResult> TestMessage(
+            [FromBody] TestMessageRequest request,
+            [FromServices] MessageSender sender,
+            [FromServices] AuditService audit)
+        {
+            var email = request?.Email?.Trim();
+            var phone = request?.Phone?.Trim();
+            if (string.IsNullOrEmpty(email) && string.IsNullOrEmpty(phone))
+                return BadRequest(new { message = "Enter an email address, a mobile number, or both." });
+            if (!string.IsNullOrEmpty(email) && !email.Contains('@'))
+                return BadRequest(new { message = "Please enter a valid email address." });
+
+            string? emailError = null, smsError = null;
+            if (!string.IsNullOrEmpty(email)) emailError = await sender.TestEmailAsync(email);
+            if (!string.IsNullOrEmpty(phone)) smsError = await sender.TestSmsAsync(phone);
+
+            await audit.LogAsync("System", "Test Message",
+                string.Join(", ", new[] { email, phone }.Where(s => !string.IsNullOrEmpty(s))),
+                $"Email: {(email == null ? "skipped" : emailError ?? "sent")}; SMS: {(phone == null ? "skipped" : smsError ?? "sent")}",
+                userId: AccessGuard.CallerId(User));
+
+            return Ok(new
+            {
+                email = string.IsNullOrEmpty(email) ? null : new { sent = emailError == null, error = emailError },
+                sms = string.IsNullOrEmpty(phone) ? null : new { sent = smsError == null, error = smsError },
+            });
+        }
     }
 }

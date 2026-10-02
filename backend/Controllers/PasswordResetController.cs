@@ -150,7 +150,9 @@ namespace AndroidWebAPI.Controllers
                     demoRecipient: demoAccount)
                 : await _sender.SendEmailAsync(destination, "Your password reset code",
                     $"Hi {name},\n\nUse this code to reset your Aruga password:\n\n{code}\n\n" +
-                    $"It expires in {CodeMinutes} minutes. If you didn't ask to reset your password, you can ignore this message; your password stays the same.");
+                    $"It expires in {CodeMinutes} minutes. If you didn't ask to reset your password, you can ignore this message; your password stays the same.",
+                    highlight: code,
+                    preview: "Open this email to see your password reset code.");
 
             if (!sent)
             {

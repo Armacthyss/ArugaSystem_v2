@@ -185,7 +185,8 @@ public async Task<IActionResult> CreateParent(
                 (temporaryPassword != null
                     ? $"Temporary password: {temporaryPassword}\n"
                     : "Password: the temporary password the health center staff gave you\n") +
-                "\nYou'll be asked to choose your own password the first time you sign in.");
+                "\nYou'll be asked to choose your own password the first time you sign in.",
+                preview: "Open this email to see your sign-in details.");
 
             // Same details by text, so the parent doesn't have to read them
             // off the staff screen. Test accounts are never texted.
