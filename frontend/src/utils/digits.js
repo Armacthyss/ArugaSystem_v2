@@ -1,8 +1,9 @@
 // v-digits — only the numbers 0-9 can be typed or pasted into this box
-// (contact numbers, barangay no., quantities, ...). Letters, spaces and
-// symbols never appear. v-digits.decimal also allows one "." (weights).
+// (license no., quantities, ...). Letters, spaces and symbols never appear.
+// v-digits.decimal also allows one "." (weights). Mobile numbers use
+// v-ph-mobile instead (utils/phone.js).
 //
-//   <input v-model="form.contactNo" v-digits />
+//   <input v-model="form.licenseNumber" v-digits />
 //   <input v-model="form.birthWeight" type="number" v-digits.decimal />
 export const digits = {
   mounted(el, binding) {

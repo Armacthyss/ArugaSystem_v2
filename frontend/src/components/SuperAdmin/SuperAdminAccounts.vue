@@ -92,7 +92,7 @@
           <div><label class="lbl">Last Name *</label><input v-model="form.lastName" class="fld" /></div>
           <div v-if="form.role === 'Doctor'"><label class="lbl">PRC License No.</label><input v-model="form.prcNo" class="fld" /></div>
           <div><label class="lbl">Email</label><input v-model="form.email" type="email" class="fld" /></div>
-          <div><label class="lbl">Contact No.</label><input v-model="form.contactNo" v-digits maxlength="11" inputmode="numeric" class="fld" placeholder="09XXXXXXXXX" /></div>
+          <div><label class="lbl">Contact No.</label><input v-model="form.contactNo" v-ph-mobile type="tel" maxlength="17" class="fld" placeholder="+63 9XX XXX XXXX" /></div>
           <p v-if="!form.editing" class="sm:col-span-2 text-xs text-slate-500">The username and a temporary password are made automatically. They choose their own password at the first sign-in.</p>
           <p v-if="form.error" class="sm:col-span-2 text-sm text-rose-600">{{ form.error }}</p>
         </div>
@@ -130,6 +130,7 @@ import AppHeader from '@/components/SystemAdmin/Components/AppHeader.vue'
 import { API_BASE, userLevel } from '@/utils/format'
 import { getUser } from '@/utils/auth'
 import { askConfirm } from '@/utils/dialog'
+import { phMobileError } from '@/utils/phone'
 
 const accounts = ref([])
 const loading = ref(false)
@@ -182,6 +183,8 @@ function openEdit(a) {
 async function save() {
   form.error = ''
   if (!form.firstName.trim() || !form.lastName.trim()) { form.error = 'First and last name are required.'; return }
+  const phoneError = phMobileError(form.contactNo)
+  if (phoneError) { form.error = phoneError; return }
   form.saving = true
   try {
     if (form.editing) {

@@ -16,6 +16,7 @@ import PrivacyConsentCheckbox from "@/components/Shared/PrivacyConsentCheckbox.v
 import { barangayChoices, isServedBarangay, BARANGAY_HINT } from "@/utils/barangays";
 import { toISODate } from "@/utils/format";
 import { showAlert } from "@/utils/dialog";
+import { phMobileError } from "@/utils/phone";
 
 const route = useRoute();
 // Birth dates and Yellow Book doses can't be in the future
@@ -753,7 +754,7 @@ async function confirmPicker() {
 const EDIT_FIELDS = {
   parent: [
     { key:"firstName", label:"First Name", group:"name" }, { key:"middleName", label:"Middle Name", group:"name" }, { key:"lastName", label:"Last Name", group:"name" },
-    { key:"contact", label:"Contact Number", group:"contact" }, { key:"barangay", label:"Barangay No.", type:"barangay", group:"contact" },
+    { key:"contact", label:"Contact Number", type:"phone", group:"contact" }, { key:"barangay", label:"Barangay No.", type:"barangay", group:"contact" },
     { key:"email", label:"Email" }, { key:"address", label:"Address" },
   ],
   child: [
@@ -803,6 +804,8 @@ async function submitEdit() {
   try {
     if (kind==="parent") {
       if (!item.firstName?.trim() || !item.lastName?.trim()) { error.value = "First and last name are required."; return; }
+      const phoneError = phMobileError(item.contact, { required: true });
+      if (phoneError) { error.value = phoneError; return; }
       await api.updateParent(item.id, {
         firstName:item.firstName.trim(), middleName:item.middleName?.trim() || "", lastName:item.lastName.trim(),
         email:item.email?.trim() || null, contactNo:item.contact, address:item.address || "", barangayNo:item.barangay || "",
@@ -911,6 +914,8 @@ async function submitParentRegister() {
   if (!regParentForm.GivenName || !regParentForm.LastName || !regParentForm.ContactNo) {
     error.value = "Please fill all required parent fields."; return;
   }
+  const phoneError = phMobileError(regParentForm.ContactNo);
+  if (phoneError) { error.value = phoneError; return; }
   if (regParentForm.CreateLogin) {
     if (!regParentForm.Email) {
       error.value = "Email is required to give this guardian a login."; return;
@@ -976,7 +981,12 @@ async function submitParentRegister() {
     }
   } catch (e) {
     console.error("Error registering parent:", e);
-    error.value = `Registration failed: ${e.response?.data?.message || e.message}`;
+    let errorMsg = e.response?.data?.message || e.message;
+    // Convert database truncation errors to user-friendly message
+    if (errorMsg?.includes("String or binary data would be truncated") || errorMsg?.includes("ContactNo")) {
+      errorMsg = "Contact number is too long. Please enter a valid Philippines mobile number (e.g., 09171234567).";
+    }
+    error.value = `Registration failed: ${errorMsg}`;
   } finally { registerSubmitting.value = false; }
 }
 
@@ -1577,7 +1587,7 @@ async function submitChildRegister() {
             </div>
             <div class="space-y-1">
               <label class="text-[10px] font-bold text-stone-400 uppercase ml-1">Contact No</label>
-              <input v-model="regParentForm.ContactNo" v-digits type="text" class="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:border-emerald-500 outline-none" />
+              <input v-model="regParentForm.ContactNo" v-ph-mobile type="tel" placeholder="09xx xxx xxxx" maxlength="17" class="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:border-emerald-500 outline-none" />
             </div>
           </div>
 
@@ -1820,6 +1830,7 @@ async function submitChildRegister() {
                 <option value="">Select barangay</option>
                 <option v-for="b in barangayChoices(editModal.item[f.key])" :key="b.value" :value="b.value">{{ b.label }}</option>
               </select>
+              <input v-else-if="f.type === 'phone'" v-model="editModal.item[f.key]" v-ph-mobile type="tel" placeholder="+63 9XX XXX XXXX" maxlength="17" class="mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-[13px] outline-none focus:border-emerald-500" />
               <input v-else v-model="editModal.item[f.key]" :type="f.type || 'text'" :step="f.type === 'number' ? '0.01' : undefined" class="mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-[13px] outline-none focus:border-emerald-500" />
             </div>
           </div>

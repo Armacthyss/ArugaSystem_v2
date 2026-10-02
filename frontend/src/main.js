@@ -7,6 +7,7 @@ import router from '@/router'
 import { getToken, logout } from '@/utils/auth'
 import { API_ORIGIN } from '@/utils/apiBase'
 import { digits } from '@/utils/digits'
+import { phMobile } from '@/utils/phone'
 
 // Is this URL a call to our API? (API_ORIGIN is empty when the API is reached
 // through this site's own /api path — see utils/apiBase.js.)
@@ -79,4 +80,5 @@ const app = createApp(App)
 
 app.use(router)
 app.directive('digits', digits) // numbers-only inputs, see utils/digits.js
+app.directive('ph-mobile', phMobile) // +63 9XX XXX XXXX inputs, see utils/phone.js
 app.mount('#app')

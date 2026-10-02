@@ -8,6 +8,7 @@ import { API_BASE, ageLabel, formatDate, isSameDay, toISODate, downloadCSV } fro
 import { barangayChoices, BARANGAY_HINT } from '@/utils/barangays'
 import PrivacyConsentCheckbox from '@/components/Shared/PrivacyConsentCheckbox.vue'
 import { askConfirm } from '@/utils/dialog'
+import { phMobileError } from '@/utils/phone'
 
 /* -------------------------------- Status meta -------------------------------- */
 const vaccMeta = {
@@ -227,6 +228,12 @@ const registerPatient = async () => {
     if (parentMode.value === 'new') {
       if (!registerForm.newParentFirstName.trim() || !registerForm.newParentLastName.trim() || !registerForm.newParentContact.trim()) {
         formError.value = "Enter the parent's first name, last name and contact number."
+        saving.value = false
+        return
+      }
+      const phoneError = phMobileError(registerForm.newParentContact)
+      if (phoneError) {
+        formError.value = phoneError
         saving.value = false
         return
       }
@@ -656,7 +663,7 @@ const saveLink = async () => {
               <div v-else class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div><label class="block text-xs font-semibold text-slate-500 mb-1.5">First Name *</label><input v-model="registerForm.newParentFirstName" type="text" class="field" /></div>
                 <div><label class="block text-xs font-semibold text-slate-500 mb-1.5">Last Name *</label><input v-model="registerForm.newParentLastName" type="text" class="field" /></div>
-                <div><label class="block text-xs font-semibold text-slate-500 mb-1.5">Contact Number *</label><input v-model="registerForm.newParentContact" v-digits type="text" class="field" /></div>
+                <div><label class="block text-xs font-semibold text-slate-500 mb-1.5">Contact Number *</label><input v-model="registerForm.newParentContact" v-ph-mobile type="tel" placeholder="+63 9XX XXX XXXX" maxlength="17" class="field" /></div>
                 <div><label class="block text-xs font-semibold text-slate-500 mb-1.5">Email (for portal login)</label><input v-model="registerForm.newParentEmail" type="email" class="field" /></div>
                 <div class="sm:col-span-2"><PrivacyConsentCheckbox v-model="registerForm.privacyConsent" /></div>
               </div>
