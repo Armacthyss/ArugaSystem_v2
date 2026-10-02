@@ -21,6 +21,29 @@ Lifecycle System, for Leveriza Health Center.
 
 Then start the frontend (`frontend` folder): `npm install` once, then `npm run dev`, and open http://localhost:5173.
 
+## Updating the live server
+
+The live site has two parts that update separately:
+
+- **Website** (Vercel, arugahealthcare.online): updates by itself when `main` changes on GitHub.
+- **Backend** (Contabo server 185.194.217.224, Ubuntu, service `aruga-api` in `/opt/aruga-api`):
+  run from the `ArugaSystem` folder in PowerShell:
+  ```
+  .\deploy-backend.ps1
+  ```
+  It builds, uploads, keeps the current version as a backup, installs, restarts and checks.
+  If something breaks: `.\deploy-backend.ps1 -Rollback`.
+  The server's own `appsettings.json` (Gmail, TextBee, database) is never replaced.
+
+Only backend changes (`backend/` folder) need the script; frontend-only changes just need `main` updated.
+
+**No password every time (once per computer):** create a key and give it to the server.
+```
+ssh-keygen -t ed25519
+type $env:USERPROFILE\.ssh\id_ed25519.pub | ssh root@185.194.217.224 "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys"
+```
+Press Enter at each `ssh-keygen` question; the second line asks for the server password one last time.
+
 ## Using Aruga on phones (QR check-in)
 
 `npm run dev` also makes the website reachable from phones on the same

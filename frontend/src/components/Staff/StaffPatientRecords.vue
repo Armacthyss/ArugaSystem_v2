@@ -137,8 +137,8 @@ function toDateInputValue(iso) {
 
 const mapParent = (p) => ({
   id:p.parentID, initials:`${p.firstName?.[0] || ""}${p.lastName?.[0] || ""}`.toUpperCase(), name:`${p.firstName} ${p.lastName}`,
-  // A contact-only guardian (no portal login) has no email
-  relationship:"Parent", contact:p.contactNo, email:p.email || "", username:p.username || (p.email || "").split("@")[0] || "—",
+  // A contact-only guardian (no portal login) has no username, even with an email
+  relationship:"Parent", contact:p.contactNo, email:p.email || "", username:p.username || "—",
   // Portal login: Active / Inactive (deactivated), or "No Login" for a contact-only guardian
   accountId:p.accountID || null, status:p.accountStatus || "Active", address:p.address, barangay:p.barangayNo,
   raw:p, // original API record, kept so edits that don't touch every field don't lose data
@@ -506,7 +506,8 @@ async function runAccountDialog() {
 /* ============================= View drawers ============================= */
 const showParentDrawer = ref(false);
 const selectedParent = ref(null);
-function viewParent(p) { selectedParent.value=p; showParentDrawer.value=true; actionsMenuOpenFor.value=null; }
+// The parent and child panels open in the same place: one replaces the other
+function viewParent(p) { showChildDrawer.value=false; selectedParent.value=p; showParentDrawer.value=true; actionsMenuOpenFor.value=null; }
 
 const showChildDrawer = ref(false);
 const selectedChild = ref(null);
@@ -599,7 +600,7 @@ async function submitHistoricalVaccinations() {
     m.submitting = false;
   }
 }
-function viewChild(c) { selectedChild.value=c; showChildDrawer.value=true; actionsMenuOpenFor.value=null; removeConfirmId.value=null; loadChildVaccinations(c.id); }
+function viewChild(c) { showParentDrawer.value=false; selectedChild.value=c; showChildDrawer.value=true; actionsMenuOpenFor.value=null; removeConfirmId.value=null; loadChildVaccinations(c.id); }
 const askRemoveAccount = (rel) => (removeConfirmId.value = rel.id);
 const cancelRemoveAccount = () => (removeConfirmId.value = null);
 
@@ -1350,7 +1351,7 @@ async function submitChildRegister() {
           <div class="rounded-xl bg-stone-50 p-3.5 space-y-2">
             <div class="flex items-center justify-between"><span class="text-[12px] text-stone-500">Contact Number</span><span class="text-[13px] font-medium flex items-center gap-1.5"><Phone :size="13" class="text-stone-400" /> {{ selectedParent.contact }}</span></div>
             <div class="flex items-center justify-between"><span class="text-[12px] text-stone-500">Email</span><span class="text-[13px] font-medium flex items-center gap-1.5"><Mail :size="13" class="text-stone-400" /> {{ selectedParent.email }}</span></div>
-            <div class="flex items-center justify-between"><span class="text-[12px] text-stone-500">Username</span><span class="text-[13px] font-medium">{{ selectedParent.username }}</span></div>
+            <div class="flex items-center justify-between"><span class="text-[12px] text-stone-500">Username</span><span class="text-[13px] font-medium" :class="selectedParent.accountId ? '' : 'text-stone-400'">{{ selectedParent.accountId ? selectedParent.username : 'No portal login' }}</span></div>
             <div class="flex items-start justify-between"><span class="text-[12px] text-stone-500">Address</span><span class="text-[13px] font-medium flex items-center gap-1.5 text-right max-w-[220px]"><MapPin :size="13" class="text-stone-400 shrink-0" /> {{ selectedParent.address }}</span></div>
           </div>
           <div class="border-t border-stone-200 pt-5">
