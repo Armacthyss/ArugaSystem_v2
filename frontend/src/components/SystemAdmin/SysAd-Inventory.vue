@@ -355,6 +355,49 @@ async function submitReceiveStock() {
   }
 }
 
+/* --------------------------------- Alert Staff modal --------------------------------- */
+// The Doctor gets the low-stock alerts and tells the Staff / Nurses what to
+// request or order. Pre-filled from the stock check; the Doctor can edit it.
+const showAlertModal = ref(false)
+const alertMessage = ref('')
+const alertError = ref(null)
+const alertSent = ref('')
+const isSendingAlert = ref(false)
+
+async function openAlertModal() {
+  alertError.value = null
+  alertSent.value = ''
+  alertMessage.value = ''
+  showAlertModal.value = true
+  closeMenu()
+  try {
+    const { data } = await axios.get(`${API_BASE}/VaccineInventory/stock-check`)
+    const restock = (data.lines || []).filter(l => l.restock)
+    if (restock.length) {
+      alertMessage.value = 'Please request more stock from the pharmacy: ' +
+        restock.map(l => `${l.short} (${l.onHand} left, order about ${l.suggestedOrder})`).join('; ') + '.'
+    }
+  } catch { /* the Doctor can still type the message */ }
+}
+
+async function sendAlert() {
+  if (!alertMessage.value.trim()) {
+    alertError.value = 'Please write what the staff should request or order.'
+    return
+  }
+  isSendingAlert.value = true
+  alertError.value = null
+  try {
+    const { data } = await axios.post(`${API_BASE}/VaccineInventory/alert-staff`, { message: alertMessage.value.trim() })
+    alertSent.value = data.message
+    setTimeout(() => { showAlertModal.value = false }, 1800)
+  } catch (e) {
+    alertError.value = e.response?.data?.message || 'Could not send the alert. Please try again.'
+  } finally {
+    isSendingAlert.value = false
+  }
+}
+
 /* --------------------------------- Edit modal (restricted field set) --------------------------------- */
 const showEditModal = ref(false)
 const editForm = reactive({
@@ -548,6 +591,12 @@ async function setActiveState(item, nextActive) {
             </select>
 
             <div class="flex items-center gap-2 shrink-0">
+              <button
+                @click="openAlertModal"
+                class="text-sm font-semibold px-4 py-2 rounded-lg border border-amber-300 text-amber-800 bg-amber-50 hover:bg-amber-100 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+              >
+                Alert Staff
+              </button>
               <button
                 @click="openReceiveModal"
                 class="text-sm font-semibold px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
@@ -756,6 +805,47 @@ async function setActiveState(item, nextActive) {
         </section>
       </main>
     </div>
+
+    <!-- ============================ ALERT STAFF MODAL ============================ -->
+    <transition name="fade">
+      <div v-if="showAlertModal" class="fixed inset-0 bg-slate-900/40 z-40 flex items-center justify-center p-4" @click.self="showAlertModal = false">
+        <div class="bg-white rounded-xl shadow-lg w-full max-w-lg">
+          <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+            <div>
+              <h2 class="text-base font-bold text-slate-900">Alert Staff</h2>
+              <p class="text-xs text-slate-500">Every Staff / Nurse gets this in their notification bell.</p>
+            </div>
+            <button @click="showAlertModal = false" class="text-slate-400 hover:text-slate-600 text-lg leading-none" aria-label="Close">✕</button>
+          </div>
+          <div v-if="alertSent" class="px-6 py-8 text-center">
+            <p class="text-sm font-semibold text-emerald-700">{{ alertSent }}</p>
+          </div>
+          <div v-else class="px-6 py-5 space-y-3">
+            <label for="alert-message" class="block text-xs font-medium text-slate-600">What should the staff request or order?</label>
+            <textarea
+              id="alert-message"
+              v-model="alertMessage"
+              rows="5"
+              maxlength="500"
+              placeholder="e.g. Please request 30 doses of BCG from the pharmacy before Friday."
+              class="w-full text-sm rounded-lg border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            ></textarea>
+            <p class="text-[11px] text-slate-400 text-right">{{ alertMessage.length }}/500</p>
+            <p v-if="alertError" class="text-xs text-rose-600 bg-rose-50 border border-rose-100 rounded-lg px-3 py-2">{{ alertError }}</p>
+          </div>
+          <div v-if="!alertSent" class="flex justify-end gap-2 px-6 py-4 border-t border-slate-200 bg-slate-50 rounded-b-xl">
+            <button @click="showAlertModal = false" class="px-4 py-2 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100">Cancel</button>
+            <button
+              @click="sendAlert"
+              :disabled="isSendingAlert || !alertMessage.trim()"
+              class="px-4 py-2 text-sm font-semibold text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {{ isSendingAlert ? 'Sending…' : 'Send to Staff' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </transition>
 
     <!-- ============================ RECEIVE NEW BATCH MODAL ============================ -->
     <transition name="fade">

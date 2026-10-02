@@ -531,9 +531,10 @@ public async Task RecordHistoricalVaccinationsAsync(
         }
 
         // Takes one dose out of a batch. When that pushes the batch below its
-        // minimum stock level, the Admission Staff (who order from the pharmacy),
-        // the Administrator and the health workers get a bell notification.
-        // The full weekly picture comes from StockCheck (every Wednesday).
+        // minimum stock level, the Admin / Doctor gets a bell notification and
+        // decides what to order; "Alert Staff" on the Admin Inventory page then
+        // tells the Staff / Nurses. The full weekly picture goes to everyone
+        // through StockCheck (every Wednesday).
         private void DeductStock(VaccineInventory inventory)
         {
             int before = inventory.CurrentQuantity;
@@ -550,7 +551,7 @@ public async Task RecordHistoricalVaccinationsAsync(
 
             var recipients = _context.Users
                 .Where(u => u.AccountStatus == "Active" &&
-                            (u.Position == "Doctor" || u.Position == "Nurse" || u.Position == "Staff" || u.Position == "Administrator"))
+                            (u.Position == "Doctor" || u.Position == "Administrator"))
                 .Select(u => u.UserID)
                 .ToList();
 
@@ -564,7 +565,7 @@ public async Task RecordHistoricalVaccinationsAsync(
                     Type = "LowStock",
                     Title = $"Low stock — {vaccineName}",
                     Message = $"Batch {inventory.LotNumber} of {vaccineName} is down to {inventory.CurrentQuantity} dose(s), " +
-                              $"below the minimum of {inventory.MinimumStock}. Admission Staff: please ask the pharmacy for more.",
+                              $"below the minimum of {inventory.MinimumStock}. Use \"Alert Staff\" on the Inventory page to have the staff request more.",
                     IsRead = false,
                     CreatedAt = DateTime.Now,
                 });

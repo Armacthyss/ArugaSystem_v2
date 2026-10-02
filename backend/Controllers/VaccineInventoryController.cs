@@ -1,6 +1,7 @@
 using AndroidWebAPI.Data;
 using AndroidWebAPI.Models;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace AndroidWebAPI.Controllers
 {
@@ -177,6 +178,62 @@ namespace AndroidWebAPI.Controllers
                     ? "Today's stock check was already sent."
                     : $"Stock check sent to {sent} staff/admin account(s).",
             });
+        }
+
+        // POST: api/VaccineInventory/alert-staff   { message }
+        // The Admin / Doctor tells the Staff / Nurses to request or order
+        // stock. Goes to every active Nurse's bell (low-stock alerts reach
+        // the Doctor first; the Doctor decides what the staff should order).
+        public class AlertStaffRequest
+        {
+            public string Message { get; set; } = string.Empty;
+        }
+
+        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.Admin)]
+        [HttpPost("alert-staff")]
+        public async Task<IActionResult> AlertStaff(
+            [FromServices] AppDbContext context,
+            [FromBody] AlertStaffRequest request)
+        {
+            var text = (request?.Message ?? "").Trim();
+            if (text.Length == 0)
+                return BadRequest(new { message = "Please write what the staff should request or order." });
+            if (text.Length > 500)
+                return BadRequest(new { message = "Please keep the message under 500 characters." });
+
+            var callerId = AndroidWebAPI.Services.AccessGuard.CallerId(User);
+            var doctor = await context.Users.Where(u => u.UserID == callerId)
+                .Select(u => (u.FirstName + " " + u.LastName).Trim())
+                .FirstOrDefaultAsync();
+
+            var nurses = await context.Users
+                .Where(u => u.AccountStatus == "Active" && (u.Position == "Nurse" || u.Position == "Staff"))
+                .Select(u => u.UserID)
+                .ToListAsync();
+            if (nurses.Count == 0)
+                return BadRequest(new { message = "There are no active Staff / Nurse accounts to alert." });
+
+            foreach (var userId in nurses)
+            {
+                var n = new Notification
+                {
+                    NotificationID = Guid.NewGuid(),
+                    UserID = userId,
+                    Type = "StockRequest",
+                    Title = $"Stock request from {(string.IsNullOrWhiteSpace(doctor) ? "the Doctor" : "Dr. " + doctor)}",
+                    Message = text,
+                    IsRead = false,
+                    CreatedAt = DateTime.Now,
+                };
+                AndroidWebAPI.Services.ParentNotifier.FitToColumns(n);
+                context.Notifications.Add(n);
+            }
+            await context.SaveChangesAsync();
+
+            await _audit.LogAsync("Inventory", "Notify", "Staff / Nurses",
+                $"Sent a stock request to {nurses.Count} staff: {text}", userId: callerId);
+
+            return Ok(new { sent = nurses.Count, message = $"Alert sent to {nurses.Count} staff / nurse account(s)." });
         }
 
         // ========================================
