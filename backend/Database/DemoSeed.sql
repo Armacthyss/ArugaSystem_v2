@@ -33,8 +33,9 @@ USE ArugaSystemDB;   -- if the database doesn't exist, nothing below runs
 SET NOCOUNT ON;
 SET XACT_ABORT ON;
 
-DECLARE @Today date = CAST(GETDATE() AS date);
-DECLARE @Now datetime2 = SYSDATETIME();
+-- Manila time, whatever time zone the database server uses (the live one runs on UTC)
+DECLARE @Now datetime2 = CAST(SWITCHOFFSET(SYSDATETIMEOFFSET(), '+08:00') AS datetime2);
+DECLARE @Today date = CAST(@Now AS date);
 
 -- BCrypt hash of  Aruga@2026
 DECLARE @Pwd nvarchar(100) = N'$2a$11$eHcMC19WEWltSXIhNaYxz.TP9lkgL2aKbbRPTdhLpUjZgwrT2SE0C';
@@ -282,11 +283,11 @@ USING @Inv AS s ON t.LotNumber = s.LotNumber
 WHEN MATCHED THEN UPDATE SET
     VaccineID = s.VaccineID, MinimumStock = s.MinimumStock, ExpirationDate = DATEADD(day, s.ExpiresIn, @Today),
     ManufacturingDate = DATEADD(day, s.ExpiresIn - 730, @Today),
-    ReceivedDate = DATEADD(day, -s.ReceivedAgo, @Today), Supplier = s.Supplier, Status = 1, UpdatedAt = GETDATE()
+    ReceivedDate = DATEADD(day, -s.ReceivedAgo, @Today), Supplier = s.Supplier, Status = 1, UpdatedAt = @Now
 WHEN NOT MATCHED THEN INSERT
     (VaccineID, LotNumber, InitialQuantity, CurrentQuantity, MinimumStock, ExpirationDate, ManufacturingDate, ReceivedDate, Supplier, Status, CreatedAt)
     VALUES (s.VaccineID, s.LotNumber, s.TargetLeft, s.TargetLeft, s.MinimumStock, DATEADD(day, s.ExpiresIn, @Today), DATEADD(day, s.ExpiresIn - 730, @Today),
-            DATEADD(day, -s.ReceivedAgo, @Today), s.Supplier, 1, DATEADD(day, -s.ReceivedAgo, GETDATE()));
+            DATEADD(day, -s.ReceivedAgo, @Today), s.Supplier, 1, DATEADD(day, -s.ReceivedAgo, @Now));
 
 /* =====================================================================
    6. VACCINATION TIMELINE — same rule the backend uses:
@@ -390,7 +391,7 @@ WHERE vt.ChildID IN (SELECT ChildID FROM @Kid);
 UPDATE v SET
     InitialQuantity = i.TargetLeft + ISNULL(u.Used, 0),
     CurrentQuantity = i.TargetLeft,
-    UpdatedAt = GETDATE()
+    UpdatedAt = @Now
 FROM VaccineInventory v
 JOIN @Inv i ON i.LotNumber = v.LotNumber
 OUTER APPLY (SELECT COUNT(*) AS Used FROM VaccinationRecords r WHERE r.InventoryID = v.InventoryID) u;
@@ -427,14 +428,14 @@ INSERT @Q VALUES
 INSERT Queues (QueueID, ParentID, QueueNumber, QueueDate, Status, AssignedRoomID, CreatedAt, UpdatedAt)
 SELECT q.QueueID, p.ParentID, @QBase + q.N, @Today, q.Status,
        NULL,
-       DATEADD(minute, -q.MinutesAgo, GETDATE()),
-       CASE WHEN q.Status <> 'Waiting' THEN DATEADD(minute, -q.MinutesAgo + 25, GETDATE()) END
+       DATEADD(minute, -q.MinutesAgo, @Now),
+       CASE WHEN q.Status <> 'Waiting' THEN DATEADD(minute, -q.MinutesAgo + 25, @Now) END
 FROM @Q q JOIN @Par p ON p.N = q.ParentN;
 
 -- Queue #5 is a catch-up visit for Chloe only (Hannah stays home)
 INSERT QueueChildren (QueueChildID, QueueID, ChildID, CreatedAt)
 SELECT CAST('A2A70000-0000-0000-0000-' + RIGHT('000000000000' + CAST(k.N AS varchar(12)), 12) AS uniqueidentifier),
-       q.QueueID, k.ChildID, DATEADD(minute, -q.MinutesAgo, GETDATE())
+       q.QueueID, k.ChildID, DATEADD(minute, -q.MinutesAgo, @Now)
 FROM @Q q JOIN @Kid k ON k.ParentN = q.ParentN
 WHERE NOT (q.N = 5 AND k.N = 18);
 
@@ -502,14 +503,14 @@ INSERT @A VALUES
 
 -- One "Vaccinate Child" entry per dose given in the last 7 days
 INSERT @A
-SELECT DATEDIFF(minute, vr.VaccinationDate, GETDATE()), vr.AdministeredByUserID, NULL, CASE WHEN vr.AdministeredByUserID = @Doctor THEN 'SystemAdmin' ELSE 'Staff' END, 'Vaccination', 'Vaccinate Child',
+SELECT DATEDIFF(minute, vr.VaccinationDate, @Now), vr.AdministeredByUserID, NULL, CASE WHEN vr.AdministeredByUserID = @Doctor THEN 'SystemAdmin' ELSE 'Staff' END, 'Vaccination', 'Vaccinate Child',
        k.FirstName + N' ' + k.LastName + N' – ' + v.VaccineName + N' Dose ' + CAST(vr.DoseNumber AS nvarchar(5)),
        ISNULL(N'Recorded an administered vaccine dose. Remarks: ' + vr.NurseObservation, N'Recorded an administered vaccine dose.'),
        'Success', '192.168.1.3' + CAST(vr.DoseNumber AS nvarchar(2)), 'Chrome on Windows', NULL, N'Record ' + vr.RecordCode
 FROM VaccinationRecords vr
 JOIN @Kid k ON k.ChildID = vr.ChildID
 JOIN Vaccines v ON v.VaccineID = vr.VaccineID
-WHERE vr.VaccinationDate >= DATEADD(day, -7, @Today) AND vr.VaccinationDate <= GETDATE();
+WHERE vr.VaccinationDate >= DATEADD(day, -7, @Today) AND vr.VaccinationDate <= @Now;
 
 INSERT AuditLogs (UserID, ActionPerformed, ActionDate)
 SELECT a.UserID,
@@ -517,7 +518,7 @@ SELECT a.UserID,
                a.Status AS Status, a.UserName AS UserName, a.Role AS Role, a.Ip AS IpAddress, a.Device AS Device,
                a.OldValue AS OldValue, a.NewValue AS NewValue, CAST(1 AS bit) AS Demo
         FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
-       DATEADD(minute, -a.MinutesAgo, GETDATE())
+       DATEADD(minute, -a.MinutesAgo, @Now)
 FROM @A a
 ORDER BY a.MinutesAgo DESC;
 

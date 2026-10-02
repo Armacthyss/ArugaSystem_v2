@@ -65,6 +65,7 @@ const api = {
   // A parent's portal login (AccountController; staff may change parent logins only)
   setAccountStatus:             (accountId, status) => axios.patch(`${API_BASE}/accounts/${accountId}/status`, { status }).then(r => r.data),
   resetAccountPassword:         (accountId)   => axios.post(`${API_BASE}/accounts/${accountId}/reset-password`).then(r => r.data),
+  createParentLogin:            (parentId)    => axios.post(`${API_BASE}/Parents/${parentId}/create-login`).then(r => r.data),
 };
 
 /* ---------- tiny render-fn components (badge / avatar markup, used everywhere) ---------- */
@@ -426,7 +427,11 @@ const parentMenuItems = (p) => [
     p.status === "Inactive"
       ? { icon:ShieldCheck, label:"Reactivate Login", class:"text-emerald-700 hover:bg-emerald-50", action:(p)=>askSetLoginActive(p, true) }
       : { icon:Ban, label:"Deactivate Login", class:"text-amber-700 hover:bg-amber-50", action:(p)=>askSetLoginActive(p, false) },
-  ] : []),
+  ] : [
+    // Registered without a portal login (contact only): give them one
+    { divider:true },
+    { icon:UserPlus, label:"Create Portal Login", class:"text-emerald-700 hover:bg-emerald-50", action:(p)=>askCreateLogin(p) },
+  ]),
 ];
 const childMenuItems = [
   { icon:Link2, label:"Link Parent / Guardian", action:(c)=>openPicker("linkParent",{child:c}) },
@@ -476,6 +481,26 @@ function sentNote(emailed, texted, email) {
   if (emailed) return `It was also emailed to ${email}.`;
   if (texted) return "It was also sent to them by text.";
   return "";
+}
+
+function askCreateLogin(p) {
+  accountDialog.value = {
+    title: `Create a portal login for ${p.name}?`,
+    message: p.email
+      ? `They'll sign in with ${p.email} and a temporary password shown here, and choose their own password the first time. Their record and linked children stay as they are.`
+      : "This parent has no email address yet. Add one with Edit first; it becomes their username.",
+    confirmLabel: "Create Login",
+    danger: false,
+    run: async () => {
+      const r = await api.createParentLogin(p.id);
+      await loadAll();
+      const realEmail = p.email && !/@example\.com$|@demo\./i.test(p.email);
+      return {
+        text: `Username: ${r.username}. ` + (sentNote(realEmail && r.emailed, r.texted, p.email) || "Give the password to the parent; it wasn't emailed or texted."),
+        password: r.temporaryPassword,
+      };
+    },
+  };
 }
 
 function askResetPassword(p) {

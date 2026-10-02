@@ -105,6 +105,21 @@ const summary = computed(() => {
 /* ------------------------------ Row actions menu ---------------------------- */
 const { openMenuId, menuStyle, toggleMenu, closeMenu } = useFloatingMenu()
 
+// "Send due reminders now": the 8:00 AM reminder check, right away
+const runningReminders = ref(false)
+const runRemindersNow = async () => {
+  runningReminders.value = true
+  try {
+    const { data } = await axios.post(`${API_BASE}/Notifications/run-reminders`)
+    flash(data.message)
+    await fetchNotifications()
+  } catch (e) {
+    flash(e.response?.data?.message || 'Could not send the reminders.')
+  } finally {
+    runningReminders.value = false
+  }
+}
+
 const resend = async (n) => {
   closeMenu()
   try {
@@ -337,6 +352,9 @@ const reminderSchedule = {
             <div class="flex items-center gap-2 shrink-0 flex-wrap">
               <button @click="showSettingsModal = true" class="text-sm font-semibold px-4 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
                 Reminder Schedule
+              </button>
+              <button @click="runRemindersNow" :disabled="runningReminders" title="Runs the 8:00 AM reminder check now (app, email and SMS). Reminders already sent are not sent again." class="text-sm font-semibold px-4 py-2 rounded-lg border border-emerald-200 text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
+                {{ runningReminders ? 'Sending…' : 'Send due reminders now' }}
               </button>
               <button @click="exportLogs" class="text-sm font-semibold px-4 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
                 Export Logs
