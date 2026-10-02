@@ -1,7 +1,8 @@
 <script setup>
 
-import { ref, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import { mobileNavOpen } from '@/utils/mobileNav'
 import logoIcon from '@/assets/logo-icon.svg'
 
 import {
@@ -23,6 +24,9 @@ import {
 import { logout, getRole } from '@/utils/auth'
 
 const router = useRouter()
+// The phone menu closes once a page is chosen
+const route = useRoute()
+watch(() => route.fullPath, () => { mobileNavOpen.value = false })
 
 // Admin / Doctor: the clinic. Super Admin (the development team): the
 // system only, with the audit logs (technical adviser, Oct 2026).
@@ -107,9 +111,11 @@ const toggleSidebar = () => {
 </script>
 
 <template>
+  <!-- Phones / small tablets: slide-in menu opened from the header's ☰ -->
+  <div v-if="mobileNavOpen" class="fixed inset-0 z-40 bg-slate-900/40 md:hidden" @click="mobileNavOpen = false"></div>
   <aside
-    :class="[isCollapsed ? 'w-20' : 'w-65']"
-    class="hidden md:flex flex-col shrink-0 sticky top-0 h-screen bg-white border-r border-slate-200 transition-all duration-300 ease-in-out"
+    :class="[isCollapsed ? 'md:w-20' : 'md:w-65', mobileNavOpen ? 'flex fixed left-0 z-50 w-65 shadow-xl' : 'hidden']"
+    class="md:flex md:sticky flex-col shrink-0 top-0 h-screen bg-white border-r border-slate-200 transition-all duration-300 ease-in-out"
   >
     <div class="h-17.5 flex items-center gap-3 px-5 border-b border-slate-200 shrink-0">
       <div class="w-9 h-9 rounded-lg overflow-hidden shrink-0">
@@ -160,7 +166,7 @@ const toggleSidebar = () => {
 />
         <span v-if="!isCollapsed">Log out</span>
       </button>
-      <button @click="toggleSidebar" class="w-full flex items-center justify-center rounded-lg px-3 py-2 text-xs font-medium text-slate-400 hover:bg-slate-50 hover:text-slate-600 transition-colors">
+      <button @click="toggleSidebar" class="w-full hidden md:flex items-center justify-center rounded-lg px-3 py-2 text-xs font-medium text-slate-400 hover:bg-slate-50 hover:text-slate-600 transition-colors">
        <ChevronLeft
   :class="isCollapsed ? 'rotate-180' : ''"
   class="w-4 h-4 transition-transform"

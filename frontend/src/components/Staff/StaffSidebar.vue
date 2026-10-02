@@ -12,9 +12,11 @@
   it will update on every page at once.
 -->
 <template>
+  <!-- Phones / small tablets: slide-in menu opened from the top bar's ☰ -->
+  <div v-if="mobileNavOpen" class="fixed inset-0 z-40 bg-stone-900/40 md:hidden" @click="mobileNavOpen = false"></div>
   <aside
-    class="flex flex-col shrink-0 border-r border-stone-200 bg-white transition-all duration-200 h-screen sticky top-0"
-    :class="collapsed ? 'w-19' : 'w-66'"
+    class="flex-col shrink-0 border-r border-stone-200 bg-white transition-all duration-200 h-screen top-0 md:flex md:sticky"
+    :class="[collapsed ? 'md:w-19' : 'md:w-66', mobileNavOpen ? 'flex fixed left-0 z-50 w-66 shadow-xl' : 'hidden']"
   >
     <div class="flex items-center gap-3 px-5 py-5 border-b border-stone-200">
       <div class="flex h-9 w-9 items-center justify-center rounded-xl overflow-hidden shrink-0">
@@ -62,7 +64,7 @@
 
     <button
       @click="collapsed = !collapsed"
-      class="mx-auto mb-3 flex h-7 w-7 items-center justify-center rounded-full border border-stone-200 text-stone-500"
+      class="mx-auto mb-3 hidden md:flex h-7 w-7 items-center justify-center rounded-full border border-stone-200 text-stone-500"
     >
       <component :is="collapsed ? ChevronRight : ChevronLeft" :size="14" />
     </button>
@@ -70,8 +72,9 @@
 </template>
 
 <script setup>
-import { ref, computed } from "vue";
+import { ref, computed, watch } from "vue";
 import { useRouter, useRoute } from "vue-router";
+import { mobileNavOpen } from "@/utils/mobileNav";
 import { getAccount, logout } from "@/utils/auth";
 import { userLevel } from "@/utils/format";
 import logoIcon from "@/assets/logo-icon.svg";
@@ -84,6 +87,8 @@ const router = useRouter();
 const route = useRoute();
 
 const collapsed = ref(false);
+// The phone menu closes once a page is chosen
+watch(() => route.fullPath, () => { mobileNavOpen.value = false });
 
 // Canonical nav list — the ONE place item labels, order, icons, and routes
 // are defined. "Notifications" and "Settings" were intentionally dropped:

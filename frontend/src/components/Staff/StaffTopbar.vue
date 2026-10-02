@@ -8,7 +8,7 @@
              table). The red dot shows when someone has waited 15+ minutes.
              Self-contained, so it works on every Staff*.vue page.
   Gear    -> routes to /staff/settings (StaffAccountSettings.vue).
-  Avatar  -> identity-card dropdown only (name, role, on-duty status). No
+  Avatar  -> identity-card dropdown only (name, role, signed-in status). No
              actions in here on purpose: logout already lives in
              StaffSidebar.vue, so a second logout in this dropdown would just
              be a duplicate (per earlier decision).
@@ -22,12 +22,18 @@
   avatar cluster, so each page can still have its own action button(s).
 -->
 <template>
-  <header class="relative flex items-center justify-between px-8 py-5 border-b border-stone-200 bg-white">
-    <div>
-      <h1 class="text-[22px] font-bold">{{ title }}</h1>
-      <p v-if="breadcrumb" class="text-[12.5px] mt-0.5 text-stone-500">{{ breadcrumb }}</p>
+  <header class="relative flex items-center justify-between gap-3 px-4 py-4 md:px-8 md:py-5 border-b border-stone-200 bg-white">
+    <div class="flex items-center gap-3 min-w-0">
+      <!-- Phones / small tablets: opens the sidebar menu -->
+      <button @click="mobileNavOpen = true" class="md:hidden flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-stone-600 hover:bg-stone-100" aria-label="Open menu">
+        <Menu :size="20" />
+      </button>
+      <div class="min-w-0">
+        <h1 class="text-[18px] md:text-[22px] font-bold truncate">{{ title }}</h1>
+        <p v-if="breadcrumb" class="text-[12.5px] mt-0.5 text-stone-500 truncate">{{ breadcrumb }}</p>
+      </div>
     </div>
-    <div class="flex items-center gap-3">
+    <div class="flex items-center gap-2 md:gap-3 shrink-0">
       <slot />
 
       <!-- Bell: stock alerts + families still waiting to be called in -->
@@ -125,14 +131,13 @@
               <p class="text-[11.5px] text-stone-500 truncate">{{ staffRole }}</p>
             </div>
           </div>
-          <!-- No shift-schedule endpoint exists yet, so this is a static
-               "logged in = on duty" placeholder, not a real per-staff shift
-               status. Swap in real data once that endpoint exists. -->
+          <!-- The system keeps no shift schedule, so this only says the
+               account is signed in (not a real on-duty status). -->
           <div class="mt-3 pt-3 border-t border-stone-100 flex items-center justify-between">
             <span class="text-[11.5px] text-stone-500">Status</span>
             <span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700">
               <span class="h-1.5 w-1.5 rounded-full bg-emerald-600" />
-              On Duty
+              Signed in
             </span>
           </div>
         </div>
@@ -145,7 +150,8 @@
 import { API_ORIGIN } from '@/utils/apiBase'
 import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
-import { Bell, Settings } from "lucide-vue-next";
+import { Bell, Settings, Menu } from "lucide-vue-next";
+import { mobileNavOpen } from "@/utils/mobileNav";
 import { getAccount } from "@/utils/auth";
 import { withRelationship } from "@/utils/format";
 

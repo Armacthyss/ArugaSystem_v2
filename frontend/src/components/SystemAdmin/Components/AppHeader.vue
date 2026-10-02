@@ -2,7 +2,8 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
-import { Bell, Settings, KeyRound, Clock, LogOut, ArrowRight } from 'lucide-vue-next'
+import { Bell, Settings, KeyRound, Clock, LogOut, ArrowRight, Menu } from 'lucide-vue-next'
+import { mobileNavOpen } from '@/utils/mobileNav'
 import { getUser, getRole, logout } from '@/utils/auth'
 import ChangePasswordModal from './ChangePasswordModal.vue'
 
@@ -89,10 +90,14 @@ onUnmounted(() => {
 
 <template>
   <header
-    class="h-17.5 sticky top-0 z-20 bg-white border-b border-slate-200 flex items-center justify-between px-6 gap-4"
+    class="h-17.5 sticky top-0 z-20 bg-white border-b border-slate-200 flex items-center justify-between px-4 md:px-6 gap-4"
   >
+    <!-- Phones / small tablets: opens the sidebar menu -->
+    <button @click="mobileNavOpen = true" class="md:hidden w-9 h-9 -mr-2 shrink-0 rounded-lg flex items-center justify-center text-slate-600 hover:bg-slate-100" aria-label="Open menu">
+      <Menu class="w-5 h-5" />
+    </button>
     <!-- Page title -->
-    <div class="min-w-0">
+    <div class="min-w-0 flex-1">
       <h1 class="text-lg font-bold text-slate-900 truncate">
         {{ title }}
       </h1>

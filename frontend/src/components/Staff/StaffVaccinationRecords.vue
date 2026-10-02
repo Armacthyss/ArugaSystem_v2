@@ -23,7 +23,7 @@
         </div>
 
         <!-- STAT CARDS -->
-        <div class="grid grid-cols-4 gap-4 mb-6">
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <div class="bg-white rounded-xl border border-slate-200 p-5">
             <div class="flex items-center justify-between mb-3">
               <Syringe class="w-5 h-5 text-emerald-600" />

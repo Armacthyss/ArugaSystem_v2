@@ -1,9 +1,10 @@
 <script setup>
-import { ref, computed, reactive, onMounted } from 'vue'
+import { ref, computed, reactive, watch, onMounted } from 'vue'
 import axios from 'axios'
 import AppSidebar from './Components/AppSidebar.vue'
 import AppHeader from './Components/AppHeader.vue'
-import { API_BASE, formatDateTime, isSameDay, toISODate, downloadCSV } from '@/utils/format'
+import TablePager from '@/components/Shared/TablePager.vue'
+import { API_BASE, formatDateTime, toISODate, downloadCSV } from '@/utils/format'
 
 /* -------------------------------- Status meta -------------------------------- */
 const statusMeta = {
@@ -90,9 +91,16 @@ const filteredLogs = computed(() =>
   })
 )
 
+const page = ref(1)
+const pageSize = ref(10)
+const pagedLogs = computed(() =>
+  filteredLogs.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value))
+watch(() => [searchQuery.value, appliedFilters.role, appliedFilters.module, appliedFilters.action, logs.value], () => { page.value = 1 })
+
 /* -------------------------------- Summary ---------------------------------- */
+// Every card counts the selected period (Today / This Week / ...), like the table
 const summary = computed(() => ({
-  totalToday: logs.value.filter((l) => isSameDay(l.rawTimestamp)).length,
+  total: logs.value.length,
   successfulLogins: logs.value.filter((l) => l.action === 'Login' && l.status === 'Success').length,
   failedLogins: logs.value.filter((l) => l.action === 'Login' && l.status === 'Failed').length,
   userChanges: logs.value.filter((l) => l.module === 'User Management').length,
@@ -135,10 +143,10 @@ const timeline = computed(() => logs.value.slice(0, 6))
         <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
           <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
             <div class="flex items-start justify-between gap-2">
-              <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Total Logs Today</p>
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Total Logs · {{ appliedFilters.dateRange }}</p>
               <div class="bg-teal-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm">📋</div>
             </div>
-            <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.totalToday }}</p>
+            <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.total }}</p>
           </div>
           <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
             <div class="flex items-start justify-between gap-2">
@@ -253,14 +261,14 @@ const timeline = computed(() => logs.value.slice(0, 6))
                   <th class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Module</th>
                   <th class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Action</th>
                   <th class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Affected Record</th>
-                  <th class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">IP Address</th>
+                  <th class="hidden 2xl:table-cell text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">IP Address</th>
                   <th class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Status</th>
                   <th class="text-right font-semibold text-slate-500 text-xs uppercase tracking-wide px-5 py-3">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 <tr
-                  v-for="log in filteredLogs"
+                  v-for="log in pagedLogs"
                   :key="log.id"
                   class="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors"
                 >
@@ -269,8 +277,8 @@ const timeline = computed(() => logs.value.slice(0, 6))
                   <td class="px-3 py-3 text-slate-500 whitespace-nowrap">{{ log.role }}</td>
                   <td class="px-3 py-3 text-slate-500 whitespace-nowrap">{{ log.module }}</td>
                   <td class="px-3 py-3 text-slate-500 whitespace-nowrap">{{ log.action }}</td>
-                  <td class="px-3 py-3 text-slate-500 whitespace-nowrap max-w-[220px] truncate" :title="log.affectedRecord">{{ log.affectedRecord }}</td>
-                  <td class="px-3 py-3 text-slate-400 font-mono text-xs whitespace-nowrap">{{ log.ipAddress }}</td>
+                  <td class="px-3 py-3 text-slate-500 whitespace-nowrap max-w-[180px] truncate" :title="log.affectedRecord">{{ log.affectedRecord }}</td>
+                  <td class="hidden 2xl:table-cell px-3 py-3 text-slate-400 font-mono text-xs whitespace-nowrap">{{ log.ipAddress }}</td>
                   <td class="px-3 py-3">
                     <span :class="[metaFor(log.status).tint, metaFor(log.status).text]" class="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap">
                       <span :class="metaFor(log.status).dot" class="w-1.5 h-1.5 rounded-full"></span>
@@ -293,6 +301,7 @@ const timeline = computed(() => logs.value.slice(0, 6))
               </tbody>
             </table>
           </div>
+          <TablePager :total="filteredLogs.length" v-model:page="page" v-model:page-size="pageSize" />
         </section>
 
         <!-- Log Timeline -->

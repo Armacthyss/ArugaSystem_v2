@@ -49,6 +49,22 @@ export function isSameDay(a, b = new Date()) {
 }
 
 // "3 days", "5 mos", "1 yr 4 mos"
+// Whole months (and leftover days) since birth: a month only counts once its
+// day is reached (born Sep 26 -> on Oct 2 that's 0 months 6 days, not 1 month)
+export function ageParts(birthDate, on = new Date()) {
+  if (!birthDate) return null
+  // "2026-09-26" is a calendar day; new Date() alone would read it as UTC midnight
+  const ymd = typeof birthDate === 'string' && birthDate.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  const b = ymd ? new Date(+ymd[1], ymd[2] - 1, +ymd[3]) : new Date(birthDate)
+  if (Number.isNaN(b.getTime())) return null
+  let months = (on.getFullYear() - b.getFullYear()) * 12 + (on.getMonth() - b.getMonth())
+  if (on.getDate() < b.getDate()) months--
+  months = Math.max(months, 0)
+  const day = d => Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())
+  const days = Math.max(Math.round((day(on) - day(b)) / 86400000), 0)
+  return { years: Math.floor(months / 12), months: months % 12, totalMonths: months, days }
+}
+
 export function ageLabel(birthDate) {
   if (!birthDate) return '—'
   const b = new Date(birthDate), now = new Date()

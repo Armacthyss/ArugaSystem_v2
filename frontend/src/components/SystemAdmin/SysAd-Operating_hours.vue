@@ -615,17 +615,17 @@ onMounted(() => {
                 <thead>
                   <tr class="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide border-b border-slate-200">
                     <th class="px-5 py-3">Day</th>
-                    <th class="px-3 py-3">Status</th>
-                    <th class="px-3 py-3">Opening</th>
-                    <th class="px-3 py-3">Closing</th>
-                    <th class="px-3 py-3">Cutoff</th>
-                    <th v-if="isAdmin" class="px-3 py-3 text-right pr-5">Actions</th>
+                    <th class="px-2 py-3">Status</th>
+                    <th class="px-2 py-3">Opening</th>
+                    <th class="px-2 py-3">Closing</th>
+                    <th class="px-2 py-3">Cutoff</th>
+                    <th v-if="isAdmin" class="px-2 py-3 text-right pr-5">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr v-for="day in weeklySchedule" :key="day.scheduleID" class="border-b border-slate-100 last:border-0">
                     <td class="px-5 py-3.5 font-medium text-slate-900 whitespace-nowrap">{{ dayNames[day.dayOfWeek] }}</td>
-                    <td class="px-3 py-3.5">
+                    <td class="px-2 py-3.5">
                       <span
                         v-if="day.isOpen"
                         class="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold px-2.5 py-1"
@@ -639,10 +639,10 @@ onMounted(() => {
                         <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span> Closed
                       </span>
                     </td>
-                    <td class="px-3 py-3.5 text-slate-700 whitespace-nowrap">{{ day.isOpen ? formatTime(day.openingTime) : "—" }}</td>
-                    <td class="px-3 py-3.5 text-slate-700 whitespace-nowrap">{{ day.isOpen ? formatTime(day.closingTime) : "—" }}</td>
-                    <td class="px-3 py-3.5 text-slate-700 whitespace-nowrap">{{ day.isOpen ? formatTime(day.queueCutoffTime) : "—" }}</td>
-                    <td v-if="isAdmin" class="px-3 py-3.5 text-right pr-5">
+                    <td class="px-2 py-3.5 text-slate-700 whitespace-nowrap">{{ day.isOpen ? formatTime(day.openingTime) : "—" }}</td>
+                    <td class="px-2 py-3.5 text-slate-700 whitespace-nowrap">{{ day.isOpen ? formatTime(day.closingTime) : "—" }}</td>
+                    <td class="px-2 py-3.5 text-slate-700 whitespace-nowrap">{{ day.isOpen ? formatTime(day.queueCutoffTime) : "—" }}</td>
+                    <td v-if="isAdmin" class="px-2 py-3.5 text-right pr-5">
                       <button
                         class="text-xs font-semibold text-emerald-700 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded"
                         @click="openEditDay(day)"
