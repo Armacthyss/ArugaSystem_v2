@@ -9,7 +9,7 @@ import {
 } from "lucide-vue-next";
 import StaffSidebar from "./StaffSidebar.vue";
 import StaffTopbar from "./StaffTopbar.vue";
-import { API_BASE, ageLabel, formatDate, toISODate, downloadCSV } from "@/utils/format";
+import { API_BASE, ageLabel, ageParts, formatDate, toISODate, downloadCSV } from "@/utils/format";
 import { useFloatingMenu } from "@/utils/floatingMenu";
 
 /* ---------------------------------------------------------
@@ -170,8 +170,7 @@ const statusDot = {
 };
 
 function ageMonths(birth) {
-  const b = new Date(birth);
-  return (today.getFullYear() - b.getFullYear()) * 12 + (today.getMonth() - b.getMonth());
+  return ageParts(birth, today)?.totalMonths ?? 0;
 }
 function inAgeGroup(appt) {
   const m = ageMonths(appt.birthDate);
@@ -415,12 +414,12 @@ const selectedDaySchedule = computed(() => {
     <main class="flex-1 min-w-0">
       <StaffTopbar title="Vaccine Schedule" breadcrumb="Aruga / Vaccine Schedule" />
 
-      <div class="px-8 py-6 space-y-6">
+      <div class="px-4 md:px-8 py-6 space-y-6">
         <div v-if="toast" class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-[13px] text-emerald-800">{{ toast }}</div>
         <div v-if="loadError" class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-[13px] text-rose-700">{{ loadError }}</div>
 
         <!-- Summary cards -->
-        <div class="grid grid-cols-6 gap-4">
+        <div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-4">
           <div v-for="c in summaryCards" :key="c.label" class="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
             <div class="flex items-center justify-between">
               <p class="text-[10.5px] font-semibold uppercase tracking-wide text-stone-500 leading-tight">{{ c.label }}</p>
@@ -499,8 +498,8 @@ const selectedDaySchedule = computed(() => {
         </div>
 
         <!-- Content grid: main + right sidebar -->
-        <div class="grid grid-cols-12 gap-6">
-          <div class="col-span-8 space-y-6">
+        <div class="grid grid-cols-1 2xl:grid-cols-12 gap-6">
+          <div class="2xl:col-span-8 space-y-6 min-w-0">
             <!-- LIST VIEW -->
             <div v-if="view === 'list'" class="rounded-2xl border border-stone-200 bg-white shadow-sm overflow-hidden">
               <div class="flex items-center justify-between px-5 py-4 border-b border-stone-200">
@@ -511,7 +510,7 @@ const selectedDaySchedule = computed(() => {
                 <table class="w-full text-[13px] table-fixed">
                   <colgroup>
                     <col class="w-9" /><col class="w-[64px]" /><col class="w-[160px]" /><col class="w-[170px]" />
-                    <col class="w-[70px]" /><col class="w-[100px]" /><col class="w-[110px]" /><col class="w-[150px]" />
+                    <col class="w-[70px]" /><col class="w-[100px]" /><col class="w-[110px]" /><col class="w-[190px]" />
                   </colgroup>
                   <thead>
                     <tr class="bg-stone-50">
@@ -688,7 +687,7 @@ const selectedDaySchedule = computed(() => {
           </div>
 
           <!-- Right sidebar -->
-          <div class="col-span-4 space-y-6">
+          <div class="2xl:col-span-4 grid grid-cols-1 md:grid-cols-3 2xl:grid-cols-1 gap-6 content-start">
             <div class="rounded-2xl border border-stone-200 bg-white shadow-sm p-5">
               <div class="flex items-center justify-between mb-3">
                 <p class="text-[14px] font-semibold">Today's Summary</p>

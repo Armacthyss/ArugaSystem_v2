@@ -531,17 +531,17 @@ async function setActiveState(item, nextActive) {
             <div class="w-px h-5 bg-slate-200 hidden sm:block" />
             <div class="flex items-center gap-2">
               <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
-              <span class="text-xs font-medium text-slate-500">Low Stock</span>
+              <span class="text-xs font-medium text-slate-500">Low-Stock Batches</span>
               <span class="text-base font-bold text-amber-700">{{ summary.lowStock }}</span>
             </div>
             <div class="flex items-center gap-2">
               <span class="w-1.5 h-1.5 rounded-full bg-orange-500"></span>
-              <span class="text-xs font-medium text-slate-500">Expiring ≤30d</span>
+              <span class="text-xs font-medium text-slate-500">Batches Expiring ≤30d</span>
               <span class="text-base font-bold text-orange-700">{{ summary.expiringSoon }}</span>
             </div>
             <div class="flex items-center gap-2">
               <span class="w-1.5 h-1.5 rounded-full bg-red-600"></span>
-              <span class="text-xs font-medium text-slate-500">Expired</span>
+              <span class="text-xs font-medium text-slate-500">Expired Batches</span>
               <span class="text-base font-bold text-red-700">{{ summary.expired }}</span>
             </div>
           </div>

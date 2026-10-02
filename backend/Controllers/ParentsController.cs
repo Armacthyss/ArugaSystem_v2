@@ -380,13 +380,29 @@ public async Task<IActionResult> CreateParent(
                 if (duplicate != null)
                     return Conflict(new { message = duplicate });
 
+                // Email: null = not sent (keep), "" = removed. A parent with a
+                // portal login signs in with it, so theirs can't be removed,
+                // and a changed one becomes their new username.
+                string? newEmail = dto.Email == null ? existing.Email
+                    : string.IsNullOrWhiteSpace(dto.Email) ? null : dto.Email.Trim();
+                var login = await context.Accounts
+                    .FirstOrDefaultAsync(a => a.AccountType == "Parent" && a.ReferenceID == id);
+                if (login != null && newEmail == null)
+                    return BadRequest(new { message = "This parent signs in with their email, so it can't be removed. Change it to a new one instead." });
+                if (login != null && !string.Equals(login.Username, newEmail, StringComparison.OrdinalIgnoreCase))
+                {
+                    login.Username = newEmail!;
+                    login.UpdatedAt = DateTime.Now;
+                    await context.SaveChangesAsync();
+                }
+
                 var parent = new Parent
                 {
                     ParentID = id,
                     FirstName = dto.FirstName,
                     MiddleName = dto.MiddleName ?? existing.MiddleName,
                     LastName = dto.LastName,
-                    Email = dto.Email ?? existing.Email,
+                    Email = newEmail,
                     ContactNo = dto.ContactNo ?? existing.ContactNo,
                     BarangayNo = dto.BarangayNo ?? existing.BarangayNo,
                     Address = dto.Address ?? existing.Address,

@@ -127,6 +127,7 @@
   </div>
 </template>
 <script setup>
+import { ageParts } from '@/utils/format'
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { addDays, isMonday, isWednesday, isFriday } from 'date-fns'
@@ -282,49 +283,15 @@ function formatDisplayDate(date) {
 
 
 function calculateAge(birthDate) {
-  if (!birthDate) return '—'
-
-  const birth = new Date(birthDate)
-  const today = new Date()
-
-  if (Number.isNaN(birth.getTime())) {
-    return '—'
-  }
-
-  let years =
-    today.getFullYear() -
-    birth.getFullYear()
-
-  let months =
-    today.getMonth() -
-    birth.getMonth()
-
-  if (
-    months < 0 ||
-    (
-      months === 0 &&
-      today.getDate() < birth.getDate()
-    )
-  ) {
-    years--
-  }
-
-  months =
-    (
-      today.getMonth() -
-      birth.getMonth() +
-      12
-    ) % 12
-
-  if (years === 0) {
-    return `${months} month${months !== 1 ? 's' : ''}`
-  }
-
-  if (months === 0) {
-    return `${years} year${years !== 1 ? 's' : ''}`
-  }
-
-  return `${years} year${years !== 1 ? 's' : ''} ${months} month${months !== 1 ? 's' : ''}`
+  // A month only counts once its day is reached (see ageParts in utils/format)
+  const a = ageParts(birthDate)
+  if (!a) return '—'
+  const { years, months, days } = a
+  const s = (n, w) => `${n} ${w}${n !== 1 ? 's' : ''}`
+  if (years === 0 && months === 0) return s(days, 'day')
+  if (years === 0) return s(months, 'month')
+  if (months === 0) return s(years, 'year')
+  return `${s(years, 'year')} ${s(months, 'month')}`
 }
 
 

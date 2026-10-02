@@ -22,6 +22,16 @@ IF COL_LENGTH('dbo.Parents', 'PrivacyConsentAt') IS NULL
             await context.Database.ExecuteSqlRawAsync(@"
 IF COL_LENGTH('dbo.VaccinationRecords', 'InjectionSite') IS NULL
     ALTER TABLE dbo.VaccinationRecords ADD InjectionSite NVARCHAR(30) NULL;");
+
+            // Oct 2026: a parent's email is optional (guardians without a
+            // portal login), so any number may have none. The old UNIQUE
+            // constraint allowed only one blank; real emails stay unique.
+            await context.Database.ExecuteSqlRawAsync(@"
+UPDATE dbo.Parents SET Email = NULL WHERE LTRIM(RTRIM(Email)) = '';
+IF OBJECT_ID(N'dbo.UQ_Parents_Email', N'UQ') IS NOT NULL
+    ALTER TABLE dbo.Parents DROP CONSTRAINT UQ_Parents_Email;
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_Parents_Email' AND object_id = OBJECT_ID(N'dbo.Parents'))
+    CREATE UNIQUE INDEX UX_Parents_Email ON dbo.Parents (Email) WHERE Email IS NOT NULL;");
         }
     }
 }

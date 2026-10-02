@@ -14,7 +14,7 @@ import StaffSidebar from "./StaffSidebar.vue";
 import StaffTopbar from "./StaffTopbar.vue";
 import PrivacyConsentCheckbox from "@/components/Shared/PrivacyConsentCheckbox.vue";
 import { barangayChoices, isServedBarangay, BARANGAY_HINT } from "@/utils/barangays";
-import { toISODate } from "@/utils/format";
+import { toISODate, ageParts } from "@/utils/format";
 import { showAlert } from "@/utils/dialog";
 import { phMobileError } from "@/utils/phone";
 
@@ -121,11 +121,8 @@ const parents = ref([]);
 const children = ref([]);
 
 function calculateAge(birth) {
-  const today = new Date();
-  let age = today.getFullYear() - birth.getFullYear();
-  const m = (today.getMonth() - birth.getMonth() + 12) % 12;
-  if (today.getMonth() - birth.getMonth() < 0 || (today.getMonth()===birth.getMonth() && today.getDate()<birth.getDate())) age--;
-  return `${age}y ${m}m`;
+  const a = ageParts(birth);
+  return a ? `${a.years}y ${a.months}m` : "—";
 }
 function toDateInputValue(iso) {
   if (!iso) return "";
@@ -834,7 +831,8 @@ async function submitEdit() {
       if (phoneError) { error.value = phoneError; return; }
       await api.updateParent(item.id, {
         firstName:item.firstName.trim(), middleName:item.middleName?.trim() || "", lastName:item.lastName.trim(),
-        email:item.email?.trim() || null, contactNo:item.contact, address:item.address || "", barangayNo:item.barangay || "",
+        // "" = email removed (allowed for a guardian without a portal login)
+        email:item.email?.trim() ?? "", contactNo:item.contact, address:item.address || "", barangayNo:item.barangay || "",
       });
     } else {
       const raw = item.raw || {};
@@ -1194,9 +1192,9 @@ async function submitChildRegister() {
     <main class="flex-1 min-w-0 pb-10">
       <StaffTopbar title="Patient Management" breadcrumb="Aruga / Patient Management" :unread-count="1" />
 
-      <div class="px-8 py-6 space-y-6">
+      <div class="px-4 md:px-8 py-6 space-y-6">
         <!-- Summary cards -->
-        <div class="grid grid-cols-4 gap-4">
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <div v-for="c in (activeTab === 'parents' ? parentSummary : childSummary)" :key="c.label" class="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
             <div class="flex items-center justify-between">
               <p class="text-[10.5px] font-semibold uppercase tracking-wide text-stone-500 leading-tight">{{ c.label }}</p>
@@ -1229,17 +1227,17 @@ async function submitChildRegister() {
           <div class="overflow-x-auto">
             <table class="w-full text-[13px]">
               <thead><tr class="bg-stone-50">
-                <th v-for="col in parentColumns" :key="col.key" class="text-left font-semibold px-4 py-3 whitespace-nowrap text-[11px] uppercase tracking-wide text-stone-500">{{ col.label }}</th>
+                <th v-for="col in parentColumns" :key="col.key" class="text-left font-semibold px-3 py-3 whitespace-nowrap text-[11px] uppercase tracking-wide text-stone-500">{{ col.label }}</th>
                 <th></th>
               </tr></thead>
               <tbody>
                 <tr v-for="p in paginatedParents" :key="p.id" class="border-t border-stone-200">
-                  <td v-for="col in parentColumns" :key="col.key" class="whitespace-nowrap" :class="[col.muted && 'text-stone-500', col.badge==='avatar' ? 'pl-5 pr-2 py-3' : 'px-4 py-3']">
+                  <td v-for="col in parentColumns" :key="col.key" class="whitespace-nowrap" :class="[col.muted && 'text-stone-500', col.badge==='avatar' ? 'pl-5 pr-2 py-3' : 'px-3 py-3']">
                     <Avatar v-if="col.badge==='avatar'" :text="p.initials" size="sm" />
                     <StatusBadge v-else-if="col.badge==='status'" :status="p.status" />
                     <template v-else>{{ col.value ? col.value(p) : p[col.key] }}</template>
                   </td>
-                  <td class="px-4 py-3 whitespace-nowrap">
+                  <td class="px-3 py-3 whitespace-nowrap">
                     <div class="flex items-center gap-1 relative">
                       <button @click="viewParent(p)" class="p-1.5 rounded-lg hover:bg-stone-100" title="View Details"><Eye :size="15" class="text-stone-500" /></button>
                       <button @click="openEdit('parent', p)" class="p-1.5 rounded-lg hover:bg-stone-100" title="Edit Parent"><Pencil :size="15" class="text-stone-500" /></button>
@@ -1271,12 +1269,12 @@ async function submitChildRegister() {
           <div class="overflow-x-auto">
             <table class="w-full text-[13px]">
               <thead><tr class="bg-stone-50">
-                <th v-for="col in childColumns" :key="col.key" class="text-left font-semibold px-4 py-3 whitespace-nowrap text-[11px] uppercase tracking-wide text-stone-500">{{ col.label }}</th>
+                <th v-for="col in childColumns" :key="col.key" class="text-left font-semibold px-3 py-3 whitespace-nowrap text-[11px] uppercase tracking-wide text-stone-500">{{ col.label }}</th>
                 <th></th>
               </tr></thead>
               <tbody>
                 <tr v-for="ch in paginatedChildren" :key="ch.id" class="border-t border-stone-200">
-                  <td v-for="col in childColumns" :key="col.key" class="whitespace-nowrap" :class="[col.muted && 'text-stone-500', col.badge==='childIcon' ? 'pl-5 pr-2 py-3' : 'px-4 py-3']">
+                  <td v-for="col in childColumns" :key="col.key" class="whitespace-nowrap" :class="[col.muted && 'text-stone-500', col.badge==='childIcon' ? 'pl-5 pr-2 py-3' : 'px-3 py-3']">
                     <div v-if="col.badge==='childIcon'" class="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-50"><Baby :size="16" class="text-emerald-700" /></div>
                     <VaccBadge v-else-if="col.badge==='vacc'" :status="ch.vaccStatus" />
                     <StatusBadge v-else-if="col.badge==='status'" :status="ch.status" />
@@ -1289,7 +1287,7 @@ async function submitChildRegister() {
                     </template>
                     <template v-else>{{ col.value ? col.value(ch) : ch[col.key] }}</template>
                   </td>
-                  <td class="px-4 py-3 whitespace-nowrap">
+                  <td class="px-3 py-3 whitespace-nowrap">
                     <div class="flex items-center gap-1 relative">
                       <button @click="viewChild(ch)" class="p-1.5 rounded-lg hover:bg-stone-100" title="View Child"><Eye :size="15" class="text-stone-500" /></button>
                       <button @click="openEdit('child', ch)" class="p-1.5 rounded-lg hover:bg-stone-100" title="Edit Child"><Pencil :size="15" class="text-stone-500" /></button>
@@ -1317,7 +1315,7 @@ async function submitChildRegister() {
       </div>
 
       <!-- ============== PAGINATION FOOTER (shared — only one table is visible at a time) ============== -->
-      <div v-if="activeFilteredCount > 0" class="flex flex-wrap items-center justify-between gap-3">
+      <div v-if="activeFilteredCount > 0" class="flex flex-wrap items-center justify-between gap-3 px-4 md:px-8">
         <div class="flex items-center gap-2 text-[12.5px] text-stone-500">
           <span>Show</span>
           <select v-model.number="pageSize" class="rounded-lg border border-stone-200 px-2 py-1 text-[12.5px] outline-none bg-white">
@@ -1577,7 +1575,7 @@ async function submitChildRegister() {
 
         <!-- ============== PARENT FORM ============== -->
         <div v-if="registerModal.kind === 'parent'" class="p-8 space-y-5 overflow-y-auto">
-          <div class="grid grid-cols-3 gap-4">
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div class="space-y-1">
               <label class="text-[10px] font-bold text-stone-400 uppercase ml-1">Given Name</label>
               <input :value="regParentForm.GivenName" @input="lettersOnlyInput('GivenName')($event)" type="text" class="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:border-emerald-500 outline-none" />
@@ -1618,7 +1616,7 @@ async function submitChildRegister() {
             </div>
           </div>
 
-          <div class="grid grid-cols-3 gap-4">
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div class="col-span-1 space-y-1">
               <label class="text-[10px] font-bold text-stone-400 uppercase ml-1">Barangay No</label>
               <select v-model="regParentForm.BarangayNo" :title="BARANGAY_HINT" class="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:border-emerald-500 outline-none">
@@ -1644,7 +1642,7 @@ async function submitChildRegister() {
               <p class="text-[11px] font-bold text-emerald-700 uppercase tracking-wide">Link to Existing Child <span class="text-stone-400 font-medium normal-case">(optional)</span></p>
               <p class="text-[11px] text-stone-400 mt-0.5">Already have a child registered? Link this new parent account to them now, or skip and link it later.</p>
             </div>
-            <div class="grid grid-cols-3 gap-3">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div class="col-span-2 space-y-1 relative">
                 <input v-model="regChildSearch" type="text" placeholder="Search by child name..." class="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:border-emerald-500 outline-none" />
                 <div v-if="regChildSearch && regFilteredChildrenForLink.length > 0" class="absolute left-0 right-0 z-10 bg-white border border-stone-200 shadow-xl rounded-xl mt-1 overflow-hidden max-h-48 overflow-y-auto">
@@ -1698,7 +1696,7 @@ async function submitChildRegister() {
                 </div>
               </div>
             </div>
-            <div class="grid grid-cols-3 gap-3 pt-2">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
               <div v-for="role in ['Mother', 'Father', 'Guardian']" :key="role" class="p-3 rounded-xl border transition-all" :class="regChildForm[role+'Name'] ? 'bg-white border-emerald-200 shadow-sm' : 'bg-emerald-50/50 border-dashed border-emerald-200'">
                 <div class="flex justify-between items-start mb-1">
                   <span class="text-[9px] font-black uppercase text-emerald-800">{{ role }}</span>
@@ -1714,7 +1712,7 @@ async function submitChildRegister() {
           <!-- STEP 2: CHILD IDENTITY -->
           <div class="space-y-4">
             <label class="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Step 2: Child Identity</label>
-            <div class="grid grid-cols-3 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div class="space-y-1">
                 <label class="text-[11px] font-bold text-stone-500 ml-1">First Name</label>
                 <input v-model="regChildForm.FirstName" type="text" class="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm outline-none focus:border-emerald-500" />
@@ -1728,7 +1726,7 @@ async function submitChildRegister() {
                 <input v-model="regChildForm.LastName" type="text" class="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm outline-none focus:border-emerald-500" />
               </div>
             </div>
-            <div class="grid grid-cols-3 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div class="space-y-1">
                 <label class="text-[11px] font-bold text-stone-500 ml-1">Birth Date</label>
                 <input v-model="regChildForm.BirthDate" type="date" :max="todayISO" class="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm outline-none" />
@@ -1750,7 +1748,7 @@ async function submitChildRegister() {
           <!-- STEP 3: PHYSICAL METRICS & ADDRESS -->
           <div class="space-y-4">
             <label class="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Step 3: Medical & Location</label>
-            <div class="grid grid-cols-4 gap-4">
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <div class="space-y-1">
                 <label class="text-[11px] font-bold text-stone-500 ml-1">Birth Weight (kg)</label>
                 <input v-model="regChildForm.BirthWeight" v-digits.decimal type="number" step="0.01" min="0.5" max="7" placeholder="e.g. 3.2" class="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm outline-none" />

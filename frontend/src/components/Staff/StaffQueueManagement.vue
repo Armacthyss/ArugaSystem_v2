@@ -18,7 +18,7 @@
         <div class="max-w-6xl mx-auto space-y-6">
 
           <!-- Summary -->
-          <div class="grid grid-cols-4 gap-4">
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <div class="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
               <p class="text-[10.5px] font-semibold uppercase tracking-wide text-stone-500">Total Entries</p>
               <p class="text-[24px] font-bold mt-1.5">{{ filteredQueues.length }}</p>

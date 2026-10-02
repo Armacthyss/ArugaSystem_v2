@@ -14,7 +14,7 @@
     <main class="flex-1 min-w-0">
       <StaffTopbar title="Account Settings" breadcrumb="Aruga / Account Settings" />
 
-      <div class="px-8 py-6 max-w-2xl space-y-6">
+      <div class="px-4 md:px-8 py-6 max-w-2xl space-y-6">
         <!-- Profile -->
         <div class="rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">
           <p class="text-[14px] font-semibold mb-4">Profile</p>

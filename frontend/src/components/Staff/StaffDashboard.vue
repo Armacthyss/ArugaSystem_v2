@@ -713,9 +713,9 @@ onUnmounted(() => {
     <main class="flex-1 min-w-0">
       <StaffTopbar title="Staff / Nurse Dashboard" breadcrumb="Aruga / Dashboard" />
 
-      <div class="px-8 py-6 space-y-6">
+      <div class="px-4 md:px-8 py-6 space-y-6">
         <!-- Summary cards -->
-        <div class="grid grid-cols-6 gap-4">
+        <div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-4">
           <div
             v-for="c in summaryCards"
             :key="c.label"
@@ -761,9 +761,9 @@ onUnmounted(() => {
         </div>
 
         <!-- Queue + side column -->
-        <div class="grid grid-cols-12 gap-6">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
           <!-- Today's Queue -->
-          <div ref="queueSectionRef" class="col-span-8 rounded-2xl border border-stone-200 bg-white shadow-sm overflow-hidden">
+          <div ref="queueSectionRef" class="lg:col-span-8 rounded-2xl border border-stone-200 bg-white shadow-sm overflow-hidden">
             
             <div class="flex items-center justify-between px-5 py-4 border-b border-stone-200">
   <div>
@@ -853,7 +853,7 @@ onUnmounted(() => {
           </div>
 
           <!-- Right column: donut + expected patients -->
-          <div class="col-span-4 flex flex-col gap-6">
+          <div class="lg:col-span-4 flex flex-col gap-6">
             <div class="rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
               <p class="text-[14px] font-semibold mb-2">Queue Overview</p>
               <div class="h-40 relative flex items-center justify-center">
@@ -938,9 +938,9 @@ onUnmounted(() => {
             {{ roomMessage }}
           </div>
 
-          <div class="grid grid-cols-12 gap-0">
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-0">
             <!-- Inside the room now -->
-            <div class="col-span-8 p-5">
+            <div class="lg:col-span-8 p-5">
               <p class="text-[11px] font-semibold uppercase tracking-wide text-stone-500 mb-2">Inside the room</p>
               <div v-if="!nowServing" class="rounded-xl border border-dashed border-stone-200 px-4 py-8 text-center text-[12.5px] text-stone-400">
                 The room is free.
@@ -992,7 +992,7 @@ onUnmounted(() => {
             </div>
 
             <!-- Next in line -->
-            <div class="col-span-4 border-l border-stone-200 p-5">
+            <div class="lg:col-span-4 border-t lg:border-t-0 lg:border-l border-stone-200 p-5">
               <p class="text-[11px] font-semibold uppercase tracking-wide text-stone-500 mb-2">Next in line</p>
               <p v-if="waitingList.length === 0" class="text-[12.5px] text-stone-400">Nobody is waiting.</p>
               <div class="space-y-1.5 max-h-56 overflow-y-auto pr-1">
@@ -1009,8 +1009,8 @@ onUnmounted(() => {
         </div>
 
         <!-- Stock alerts + activities -->
-        <div class="grid grid-cols-12 gap-6">
-          <div class="col-span-4 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div class="lg:col-span-4 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
             <p class="text-[14px] font-semibold mb-3">Vaccine Stock Alerts</p>
             <div class="space-y-2.5">
               <p v-if="stockAlerts.length === 0" class="text-[12.5px] text-emerald-700 px-3 py-2">All vaccines are sufficiently stocked.</p>
@@ -1042,7 +1042,7 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <div class="col-span-8 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
+          <div class="lg:col-span-8 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
             <p class="text-[14px] font-semibold mb-3">Recent Clinic Activities</p>
             <div class="space-y-3 max-h-[260px] overflow-y-auto pr-1">
               <p v-if="activities.length === 0" class="text-[12.5px] text-stone-400">No recent activity yet.</p>
