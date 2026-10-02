@@ -238,10 +238,11 @@ const routes = [
   },
 
 
-  // ── System Admin ───────────────────────────────────────────
+  // ── Admin / Doctor ─────────────────────────────────────────
+  // At /admin/* (was /system-admin/*). The role is still 'SystemAdmin'.
 
   {
-    path: '/system-admin/home',
+    path: '/admin/home',
     component: SystemAdminHomepage,
     meta: {
       requiresAuth: true,
@@ -250,7 +251,7 @@ const routes = [
   },
 
   {
-    path: '/system-admin/user-management',
+    path: '/admin/user-management',
     component: SystemAdminUserManagement,
     meta: {
       requiresAuth: true,
@@ -259,7 +260,7 @@ const routes = [
   },
 
   {
-    path: '/system-admin/patients',
+    path: '/admin/patients',
     component: SystemAdminPatient,
     meta: {
       requiresAuth: true,
@@ -268,7 +269,7 @@ const routes = [
   },
 
   {
-    path: '/system-admin/vaccines',
+    path: '/admin/vaccines',
     component: SystemAdminVaccine,
     meta: {
       requiresAuth: true,
@@ -277,7 +278,7 @@ const routes = [
   },
 
   {
-    path: '/system-admin/inventory',
+    path: '/admin/inventory',
     component: SystemAdminInventory,
     meta: {
       requiresAuth: true,
@@ -286,7 +287,7 @@ const routes = [
   },
 
   {
-    path: '/system-admin/notifications',
+    path: '/admin/notifications',
     component: SystemAdminNotification,
     meta: {
       requiresAuth: true,
@@ -295,7 +296,7 @@ const routes = [
   },
 
   {
-    path: '/system-admin/reports',
+    path: '/admin/reports',
     component: SystemAdminReports,
     meta: {
       requiresAuth: true,
@@ -304,10 +305,10 @@ const routes = [
   },
 
   // The audit logs moved to the Super Admin (technical adviser, Oct 2026)
-  { path: '/system-admin/audit-logs', redirect: '/system-admin/home' },
+  { path: '/admin/audit-logs', redirect: '/admin/home' },
 
   {
-    path: '/system-admin/test-api',
+    path: '/admin/test-api',
     component: TestAPI,
     meta: {
       requiresAuth: true,
@@ -316,7 +317,7 @@ const routes = [
   },
 
   {
-    path: '/system-admin/vaccine-schedule',
+    path: '/admin/vaccine-schedule',
     component: VaccineSchedule,
     meta: {
       requiresAuth: true,
@@ -325,16 +326,20 @@ const routes = [
   },
 
   // One vaccination room only (beneficiary revision), so the room list is gone
-  { path: '/system-admin/rooms', redirect: '/system-admin/home' },
+  { path: '/admin/rooms', redirect: '/admin/home' },
 
   {
-    path: '/system-admin/operating-hours',
+    path: '/admin/operating-hours',
     component: SystemOperatingHours,
     meta: {
       requiresAuth: true,
       role: 'SystemAdmin'
     }
   },
+
+
+  // Old /system-admin/* links and bookmarks
+  { path: '/system-admin/:rest(.*)*', redirect: to => `/admin/${[].concat(to.params.rest || []).join('/') || 'home'}` },
 
 
   // ── Super Admin ────────────────────────────────────────────
@@ -395,7 +400,7 @@ function homeFor(role) {
     case 'Staff':
       return '/staff/dashboard'
     case 'SystemAdmin':
-      return '/system-admin/home'
+      return '/admin/home'
     case 'SuperAdmin':
       return '/super-admin/home'
     default:

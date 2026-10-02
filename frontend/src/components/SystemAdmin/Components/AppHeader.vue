@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import axios from 'axios'
 import { Bell, Settings, KeyRound, Clock, LogOut, ArrowRight } from 'lucide-vue-next'
 import { getUser, getRole, logout } from '@/utils/auth'
+import ChangePasswordModal from './ChangePasswordModal.vue'
 
 // The Super Admin gets no clinic alerts or clinic settings
 const isSuperAdmin = getRole() === 'SuperAdmin'
@@ -56,6 +57,13 @@ async function loadNotifications() {
 async function markAllRead() {
   notifications.value.forEach(n => { n.isRead = true })
   try { await axios.patch(`${API_BASE}/Notifications/mark-all-read/user/${user.value.UserID}`) } catch { /* shown as read anyway */ }
+}
+
+// "Change my password" opens a window here instead of the first-sign-in page
+const showChangePassword = ref(false)
+function openChangePassword() {
+  open.value = null
+  showChangePassword.value = true
 }
 
 function go(path) {
@@ -123,7 +131,7 @@ onUnmounted(() => {
             <div
               v-for="n in notifications"
               :key="n.notificationID"
-              @click="['StockCheck', 'LowStock'].includes(n.type) && go('/system-admin/inventory')"
+              @click="['StockCheck', 'LowStock'].includes(n.type) && go('/admin/inventory')"
               class="px-4 py-3 border-b border-slate-50 last:border-0"
               :role="['StockCheck', 'LowStock'].includes(n.type) ? 'button' : undefined"
               :style="['StockCheck', 'LowStock'].includes(n.type) ? 'cursor:pointer' : ''"
@@ -137,7 +145,7 @@ onUnmounted(() => {
               No alerts. The weekly stock check and low-stock warnings show up here.
             </p>
           </div>
-          <button @click="go('/system-admin/notifications')" class="w-full flex items-center justify-center gap-1.5 px-4 py-2.5 text-xs font-semibold text-emerald-700 border-t border-slate-100 hover:bg-slate-50">
+          <button @click="go('/admin/notifications')" class="w-full flex items-center justify-center gap-1.5 px-4 py-2.5 text-xs font-semibold text-emerald-700 border-t border-slate-100 hover:bg-slate-50">
             Parent notifications & announcements <ArrowRight class="w-3.5 h-3.5" />
           </button>
         </div>
@@ -154,10 +162,10 @@ onUnmounted(() => {
         </button>
 
         <div v-if="open === 'settings'" class="header-panel absolute right-0 top-11 z-50 w-56 rounded-xl border border-slate-200 bg-white shadow-lg overflow-hidden py-1">
-          <button @click="go('/ChangePassword')" class="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50">
+          <button @click="openChangePassword" class="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50">
             <KeyRound class="w-4 h-4 text-slate-400" /> Change my password
           </button>
-          <button v-if="!isSuperAdmin" @click="go('/system-admin/operating-hours')" class="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50">
+          <button v-if="!isSuperAdmin" @click="go('/admin/operating-hours')" class="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50">
             <Clock class="w-4 h-4 text-slate-400" /> Clinic operating hours
           </button>
           <button @click="signOut" class="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-rose-700 hover:bg-rose-50 border-t border-slate-100">
@@ -175,5 +183,7 @@ onUnmounted(() => {
       </div>
 
     </div>
+
+    <ChangePasswordModal v-if="showChangePassword" @close="showChangePassword = false" />
   </header>
 </template>
