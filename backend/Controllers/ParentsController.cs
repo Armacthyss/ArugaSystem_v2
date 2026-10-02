@@ -40,7 +40,8 @@ namespace AndroidWebAPI.Controllers
 public async Task<IActionResult> CreateParent(
     [FromBody] CreateParentDto dto,
     [FromServices] AndroidWebAPI.Services.MessageSender sender,
-    [FromServices] AndroidWebAPI.Services.AuditService audit)
+    [FromServices] AndroidWebAPI.Services.AuditService audit,
+    [FromServices] AndroidWebAPI.Data.AppDbContext context)
 {
     try
     {
@@ -67,20 +68,11 @@ public async Task<IActionResult> CreateParent(
         if (dto.CreateLogin && string.IsNullOrWhiteSpace(dto.Email))
             return BadRequest(new { message = "Email is required when creating a login for this guardian." });
 
-        if (!string.IsNullOrWhiteSpace(dto.Email))
-        {
-            // Accounts.Username = the parent's email for this account type,
-            // so it must be unique across ALL accounts (parent + personnel).
-            var existingAccount = await _accountRepository.GetByUsernameAsync(dto.Email);
-
-            if (existingAccount != null)
-            {
-                return Conflict(new
-                {
-                    message = "An account with this email already exists."
-                });
-            }
-        }
+        // One email and one mobile number per person (parents and staff);
+        // Accounts.Username = the parent's email, so it must be free too
+        var duplicate = await AndroidWebAPI.Services.ContactCheck.DuplicateAsync(context, dto.Email, dto.ContactNo);
+        if (duplicate != null)
+            return Conflict(new { message = duplicate });
 
         // Password/login handling. A contact-only guardian
         // (CreateLogin = false) gets no password and no Accounts row.
@@ -240,6 +232,8 @@ public async Task<IActionResult> CreateParent(
     }
     catch (Exception ex)
     {
+        var duplicate = AndroidWebAPI.Services.ContactCheck.FromDatabaseError(ex);
+        if (duplicate != null) return Conflict(new { message = duplicate });
         return StatusCode(
             500,
             new
@@ -354,7 +348,8 @@ public async Task<IActionResult> CreateParent(
         // ── UPDATE: PUT /api/Parents/{id} ─────────────────────────
         [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.StaffOrAdmin)]
         [HttpPut("{id}")]
-        public async Task<IActionResult> UpdateParent(Guid id, [FromBody] UpdateParentDto dto)
+        public async Task<IActionResult> UpdateParent(Guid id, [FromBody] UpdateParentDto dto,
+            [FromServices] AndroidWebAPI.Data.AppDbContext context)
         {
             try
             {
@@ -373,6 +368,17 @@ public async Task<IActionResult> CreateParent(
                 if (dto.BarangayNo != null && dto.BarangayNo != existing.BarangayNo
                     && !AndroidWebAPI.Services.Barangays.IsServed(dto.BarangayNo))
                     return BadRequest(new { message = AndroidWebAPI.Services.Barangays.Error });
+
+                // Only a changed email / number is checked, so older records
+                // that already share one can still be edited
+                string? Changed(string? value, string? saved) =>
+                    value != null && !string.Equals(value.Trim(), saved?.Trim(), StringComparison.OrdinalIgnoreCase) ? value : null;
+                var duplicate = await AndroidWebAPI.Services.ContactCheck.DuplicateAsync(context,
+                    Changed(dto.Email, existing.Email),
+                    AndroidWebAPI.Services.MessageSender.NormalizePhNumber(dto.ContactNo) != AndroidWebAPI.Services.MessageSender.NormalizePhNumber(existing.ContactNo) ? dto.ContactNo : null,
+                    exceptParent: id);
+                if (duplicate != null)
+                    return Conflict(new { message = duplicate });
 
                 var parent = new Parent
                 {
@@ -403,6 +409,8 @@ public async Task<IActionResult> CreateParent(
             }
             catch (Exception ex)
             {
+                var duplicate = AndroidWebAPI.Services.ContactCheck.FromDatabaseError(ex);
+                if (duplicate != null) return Conflict(new { message = duplicate });
                 return StatusCode(500, new { message = "An error occurred: " + ex.Message });
             }
         }
