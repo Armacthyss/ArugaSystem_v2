@@ -27,3 +27,4 @@ Notes
 - `Setup_WithDemoData.sql` is `Schema.sql` and `DemoSeed.sql` joined together. After changing either of them, rebuild it (PowerShell, in this folder):
   `(Get-Content Schema.sql -Raw) + "`r`nGO`r`n" + (Get-Content DemoSeed.sql -Raw) | Set-Content Setup_WithDemoData.sql -Encoding utf8`
   (or ask for it to be regenerated; the header comment at the top is then lost, which is fine).
+- **Live server:** from the `ArugaSystem` folder in PowerShell, `.\seed-demo.ps1` backs up the live database and runs `DemoSeed.sql` on it (the database runs in Docker on the server, so this does the copying for you). `.\seed-demo.ps1 -Restore` puts the database back as it was before the last seed. `DemoSeed.sql` works out "today" in Manila time even though the live database's clock runs on UTC.
