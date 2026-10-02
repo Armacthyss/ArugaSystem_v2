@@ -92,7 +92,7 @@
           <div><label class="lbl">Last Name *</label><input v-model="form.lastName" class="fld" /></div>
           <div v-if="form.role === 'Doctor'"><label class="lbl">PRC License No.</label><input v-model="form.prcNo" class="fld" /></div>
           <div><label class="lbl">Email</label><input v-model="form.email" type="email" class="fld" /></div>
-          <div><label class="lbl">Contact No.</label><input v-model="form.contactNo" v-ph-mobile type="tel" class="fld" placeholder="+63 9XX XXX XXXX" /></div>
+          <div><label class="lbl">Contact No.</label><input v-model="form.contactNo" v-ph-mobile type="tel" maxlength="17" class="fld" placeholder="+63 9XX XXX XXXX" /></div>
           <p v-if="!form.editing" class="sm:col-span-2 text-xs text-slate-500">The username and a temporary password are made automatically. They choose their own password at the first sign-in.</p>
           <p v-if="form.error" class="sm:col-span-2 text-sm text-rose-600">{{ form.error }}</p>
         </div>

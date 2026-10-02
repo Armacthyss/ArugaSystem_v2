@@ -682,7 +682,7 @@ texted = !!response.data.texted
             </div>
             <div>
               <label class="block text-xs font-semibold text-slate-500 mb-1.5">Contact No.</label>
-              <input v-model="editForm.contactNo" v-ph-mobile type="tel" placeholder="+63 9XX XXX XXXX" class="w-full text-sm rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white" />
+              <input v-model="editForm.contactNo" v-ph-mobile type="tel" placeholder="+63 9XX XXX XXXX" maxlength="17" class="w-full text-sm rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white" />
             </div>
             <div class="sm:col-span-3">
               <label class="block text-xs font-semibold text-slate-500 mb-1.5">Address</label>
@@ -745,7 +745,7 @@ texted = !!response.data.texted
             </div>
             <div>
               <label class="block text-xs font-semibold text-slate-500 mb-1.5">Contact Number</label>
-              <input v-model="addForm.contactNo" v-ph-mobile type="tel" placeholder="+63 9XX XXX XXXX" class="w-full text-sm rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-colors" />
+              <input v-model="addForm.contactNo" v-ph-mobile type="tel" placeholder="+63 9XX XXX XXXX" maxlength="17" class="w-full text-sm rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-colors" />
             </div>
 
             <!-- Parent-only: Barangay -->

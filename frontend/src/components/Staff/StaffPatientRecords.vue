@@ -1582,7 +1582,7 @@ async function submitChildRegister() {
             </div>
             <div class="space-y-1">
               <label class="text-[10px] font-bold text-stone-400 uppercase ml-1">Contact No</label>
-              <input v-model="regParentForm.ContactNo" v-ph-mobile type="tel" placeholder="+63 9XX XXX XXXX" class="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:border-emerald-500 outline-none" />
+              <input v-model="regParentForm.ContactNo" v-ph-mobile type="tel" placeholder="+63 9XX XXX XXXX" maxlength="17" class="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:border-emerald-500 outline-none" />
             </div>
           </div>
 
@@ -1825,7 +1825,7 @@ async function submitChildRegister() {
                 <option value="">Select barangay</option>
                 <option v-for="b in barangayChoices(editModal.item[f.key])" :key="b.value" :value="b.value">{{ b.label }}</option>
               </select>
-              <input v-else-if="f.type === 'phone'" v-model="editModal.item[f.key]" v-ph-mobile type="tel" placeholder="+63 9XX XXX XXXX" class="mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-[13px] outline-none focus:border-emerald-500" />
+              <input v-else-if="f.type === 'phone'" v-model="editModal.item[f.key]" v-ph-mobile type="tel" placeholder="+63 9XX XXX XXXX" maxlength="17" class="mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-[13px] outline-none focus:border-emerald-500" />
               <input v-else v-model="editModal.item[f.key]" :type="f.type || 'text'" :step="f.type === 'number' ? '0.01' : undefined" class="mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-[13px] outline-none focus:border-emerald-500" />
             </div>
           </div>
