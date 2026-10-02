@@ -506,7 +506,8 @@ async function runAccountDialog() {
 /* ============================= View drawers ============================= */
 const showParentDrawer = ref(false);
 const selectedParent = ref(null);
-function viewParent(p) { selectedParent.value=p; showParentDrawer.value=true; actionsMenuOpenFor.value=null; }
+// The parent and child panels open in the same place: one replaces the other
+function viewParent(p) { showChildDrawer.value=false; selectedParent.value=p; showParentDrawer.value=true; actionsMenuOpenFor.value=null; }
 
 const showChildDrawer = ref(false);
 const selectedChild = ref(null);
@@ -599,7 +600,7 @@ async function submitHistoricalVaccinations() {
     m.submitting = false;
   }
 }
-function viewChild(c) { selectedChild.value=c; showChildDrawer.value=true; actionsMenuOpenFor.value=null; removeConfirmId.value=null; loadChildVaccinations(c.id); }
+function viewChild(c) { showParentDrawer.value=false; selectedChild.value=c; showChildDrawer.value=true; actionsMenuOpenFor.value=null; removeConfirmId.value=null; loadChildVaccinations(c.id); }
 const askRemoveAccount = (rel) => (removeConfirmId.value = rel.id);
 const cancelRemoveAccount = () => (removeConfirmId.value = null);
 
