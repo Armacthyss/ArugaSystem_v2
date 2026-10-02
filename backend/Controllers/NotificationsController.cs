@@ -185,6 +185,28 @@ public class NotificationsController : ControllerBase
         });
     }
 
+    // POST api/Notifications/run-reminders
+    // "Send due reminders now": the 8:00 AM reminder run, right away (app,
+    // email and SMS). Reminders already sent are not sent again; demo
+    // accounts never get real texts or emails.
+    [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.Admin)]
+    [HttpPost("run-reminders")]
+    public async Task<IActionResult> RunRemindersNow([FromServices] NotificationGeneratorService generator)
+    {
+        var sent = await generator.RunNowAsync();
+        await _audit.LogAsync("Notifications", "Send", "Vaccination reminders",
+            $"Ran the reminder check now: {sent.InApp} in-app, {sent.Emails} email, {sent.Texts} SMS.");
+        return Ok(new
+        {
+            inApp = sent.InApp,
+            emails = sent.Emails,
+            texts = sent.Texts,
+            message = sent.InApp == 0
+                ? "No new reminders are due right now (each reminder is only sent once)."
+                : $"Sent {sent.InApp} reminder(s): {sent.Emails} by email and {sent.Texts} by SMS.",
+        });
+    }
+
     // POST api/Notifications/{id}/resend
     // Re-delivers a notification to the same recipient as a new unread copy.
     [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.Admin)]

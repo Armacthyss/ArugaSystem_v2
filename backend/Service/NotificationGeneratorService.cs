@@ -53,6 +53,19 @@ public class NotificationGeneratorService : BackgroundService
     // is (re)started at night, parents shouldn't get texts in the middle of it.
     private const int QuietFromHour = 20;
 
+    // The daily run and "Send due reminders now" (Admin) never run at the
+    // same time, so the duplicate check always sees what the other one sent
+    private static readonly SemaphoreSlim RunLock = new(1, 1);
+
+    // Admin "Send due reminders now": the same run as every morning, right
+    // away. Reminders already sent are never sent again.
+    public async Task<ParentNotifier.Delivery> RunNowAsync()
+    {
+        await RunLock.WaitAsync();
+        try { return await GenerateNotificationsAsync(); }
+        finally { RunLock.Release(); }
+    }
+
     public NotificationGeneratorService(
         IServiceScopeFactory scopeFactory,
         ILogger<NotificationGeneratorService> logger)
@@ -68,10 +81,15 @@ public class NotificationGeneratorService : BackgroundService
             try
             {
                 int hour = DateTime.Now.Hour;
-                if (hour >= DailyRunHour && hour < QuietFromHour)
-                    await GenerateNotificationsAsync();
-                else
-                    await UpdateMissedAsync();   // messages wait for the morning run
+                await RunLock.WaitAsync(stoppingToken);
+                try
+                {
+                    if (hour >= DailyRunHour && hour < QuietFromHour)
+                        await GenerateNotificationsAsync();
+                    else
+                        await UpdateMissedAsync();   // messages wait for the morning run
+                }
+                finally { RunLock.Release(); }
             }
             catch (Exception ex)
             {
@@ -92,7 +110,7 @@ public class NotificationGeneratorService : BackgroundService
         await scope.ServiceProvider.GetRequiredService<IVaccinationTimelineRepository>().UpdateMissedVaccinationsAsync();
     }
 
-    private async Task GenerateNotificationsAsync()
+    private async Task<ParentNotifier.Delivery> GenerateNotificationsAsync()
     {
         using var scope = _scopeFactory.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -249,6 +267,7 @@ public class NotificationGeneratorService : BackgroundService
         _logger.LogInformation(
             "Notifications generated at {Time}: {Count} reminders ({Emails} emails, {Texts} SMS), {Stock} stock notices, stock check sent to {Check}",
             DateTime.Now, tally.InApp, tally.Emails, tally.Texts, stock.InApp, stockCheck);
+        return tally;
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────

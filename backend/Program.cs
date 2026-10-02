@@ -119,7 +119,9 @@ builder.Services.AddCors(options =>
               .AllowAnyMethod());
 });
 
-builder.Services.AddHostedService<NotificationGeneratorService>();  // ← only once
+// One instance: it runs every morning and also serves "Send due reminders now"
+builder.Services.AddSingleton<NotificationGeneratorService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<NotificationGeneratorService>());  // ← only once
 // Queue QR Code
 builder.Services.AddScoped<IQueueQRCodeService, QueueQRCodeService>();
 
