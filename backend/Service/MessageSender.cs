@@ -119,26 +119,7 @@ namespace AndroidWebAPI.Services
 
             try
             {
-                var from = _config["Email:FromAddress"];
-                if (string.IsNullOrWhiteSpace(from)) from = _config["Email:Username"]!;
-                var fromName = _config["Email:FromName"] ?? "Leveriza Health Center";
-
-                using var message = new MailMessage
-                {
-                    From = new MailAddress(from, fromName),
-                    Subject = subject,
-                    Body = Wrap(subject, body),
-                    IsBodyHtml = true,
-                };
-                message.To.Add(to.Trim());
-
-                using var client = new SmtpClient(_config["Email:Host"], int.TryParse(_config["Email:Port"], out var port) ? port : 587)
-                {
-                    EnableSsl = !string.Equals(_config["Email:EnableSsl"], "false", StringComparison.OrdinalIgnoreCase),
-                    Credentials = new NetworkCredential(_config["Email:Username"], _config["Email:Password"]),
-                    Timeout = 15000,
-                };
-                await client.SendMailAsync(message);
+                await DeliverEmailAsync(to, subject, body);
                 return true;
             }
             catch (Exception ex)
@@ -146,6 +127,59 @@ namespace AndroidWebAPI.Services
                 _logger.LogError(ex, "Could not send email to {To}", to);
                 return false;
             }
+        }
+
+        // Hands one email to the SMTP server (Gmail); throws when it can't
+        private async Task DeliverEmailAsync(string to, string subject, string body)
+        {
+            var from = _config["Email:FromAddress"];
+            if (string.IsNullOrWhiteSpace(from)) from = _config["Email:Username"]!;
+            var fromName = _config["Email:FromName"] ?? "Leveriza Health Center";
+
+            using var message = new MailMessage
+            {
+                From = new MailAddress(from, fromName),
+                Subject = subject,
+                Body = Wrap(subject, body),
+                IsBodyHtml = true,
+            };
+            message.To.Add(to.Trim());
+
+            using var client = new SmtpClient(_config["Email:Host"], int.TryParse(_config["Email:Port"], out var port) ? port : 587)
+            {
+                EnableSsl = !string.Equals(_config["Email:EnableSsl"], "false", StringComparison.OrdinalIgnoreCase),
+                Credentials = new NetworkCredential(_config["Email:Username"], _config["Email:Password"]),
+                Timeout = 15000,
+            };
+            await client.SendMailAsync(message);
+        }
+
+        // Super Admin "Send a test message": sends right away and returns why it
+        // failed (null = sent), so a setup problem shows on screen, not only in
+        // the server log. A test text uses one of the day's SMS allowance.
+        public async Task<string?> TestEmailAsync(string to)
+        {
+            if (!EmailEnabled) return "Email is not set up on this server (Email:Host, Email:Username and Email:Password in appsettings.json).";
+            try
+            {
+                await DeliverEmailAsync(to, "Aruga test email",
+                    "This is a test email from Aruga. If you can read this, email notifications work on this server.");
+                return null;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Test email to {To} failed", to);
+                return ex.InnerException?.Message is { Length: > 0 } inner ? $"{ex.Message} ({inner})" : ex.Message;
+            }
+        }
+
+        public async Task<string?> TestSmsAsync(string number)
+        {
+            if (!SmsEnabled) return "SMS is not set up on this server (Sms:TextBeeApiKey in appsettings.json).";
+            var normalized = NormalizePhNumber(number);
+            if (normalized == null) return "Please enter a Philippine mobile number, e.g. 0917 123 4567.";
+            if (!TakeSmsAllowance()) return $"Today's limit of {SmsDailyLimit} texts has been reached.";
+            return await DeliverSmsAsync(normalized, "Aruga test text: SMS notifications work on this server.");
         }
 
         // demoRecipient: a demo account (DemoSeed.sql) whose made-up number could
@@ -168,6 +202,12 @@ namespace AndroidWebAPI.Services
                 return false;
             }
 
+            return await DeliverSmsAsync(normalized, text) == null;
+        }
+
+        // Hands one text to the SMS provider; returns why it failed (null = sent)
+        private async Task<string?> DeliverSmsAsync(string normalized, string text)
+        {
             // Plain characters keep a text at 160 characters per SMS; one "·" or
             // "–" would switch the whole message to Unicode (70 per SMS).
             text = text.Replace(" · ", ", ").Replace('·', '-').Replace('–', '-').Replace('—', '-')
@@ -213,15 +253,16 @@ namespace AndroidWebAPI.Services
 
                 if (!res.IsSuccessStatusCode)
                 {
-                    _logger.LogError("SMS to {Number} failed: {Status} {Body}", normalized, res.StatusCode, await res.Content.ReadAsStringAsync());
-                    return false;
+                    var reply = await res.Content.ReadAsStringAsync();
+                    _logger.LogError("SMS to {Number} failed: {Status} {Body}", normalized, res.StatusCode, reply);
+                    return $"{SmsProvider} answered {(int)res.StatusCode} {res.StatusCode}: {(reply.Length > 300 ? reply[..300] : reply)}";
                 }
-                return true;
+                return null;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Could not send SMS to {Number}", normalized);
-                return false;
+                return ex.Message;
             }
         }
 

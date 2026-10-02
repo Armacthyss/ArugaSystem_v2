@@ -83,6 +83,32 @@
           </div>
         </section>
 
+        <!-- Send a test email / text to check Gmail and TextBee on this server -->
+        <section class="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
+          <h2 class="text-sm font-bold text-slate-900 mb-1 flex items-center gap-2"><Send class="w-4 h-4 text-emerald-600" /> Send a test message</h2>
+          <p class="text-xs text-slate-500 mb-4">Sends one email and/or one text right now, so you can check that notifications work on this server. Use your own address and number.</p>
+          <form class="flex flex-col md:flex-row md:items-end gap-3" @submit.prevent="sendTest">
+            <label class="flex-1 text-xs font-medium text-slate-600">
+              Email address
+              <input v-model="testEmail" type="email" placeholder="you@gmail.com" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+            </label>
+            <label class="flex-1 text-xs font-medium text-slate-600">
+              Mobile number
+              <input v-model="testPhone" type="tel" placeholder="0917 123 4567" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+            </label>
+            <button type="submit" :disabled="testing || (!testEmail.trim() && !testPhone.trim())" class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed">
+              {{ testing ? 'Sending…' : 'Send test' }}
+            </button>
+          </form>
+          <ul v-if="testResults.length || testError" class="mt-4 space-y-2 text-sm">
+            <li v-if="testError" class="rounded-lg bg-rose-50 border border-rose-100 px-3 py-2 text-rose-700">{{ testError }}</li>
+            <li v-for="r in testResults" :key="r.label" class="rounded-lg border px-3 py-2"
+              :class="r.sent ? 'bg-emerald-50 border-emerald-100 text-emerald-800' : 'bg-rose-50 border-rose-100 text-rose-700'">
+              <span class="font-semibold">{{ r.label }}:</span> {{ r.sent ? 'sent. Check your inbox / phone.' : r.error }}
+            </li>
+          </ul>
+        </section>
+
         <!-- What this level can do -->
         <section class="rounded-xl border border-emerald-100 bg-emerald-50/60 p-5 text-sm text-emerald-900">
           <p class="font-semibold mb-1 flex items-center gap-2"><ShieldCheck class="w-4 h-4" /> Super Admin access</p>
@@ -99,7 +125,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import axios from 'axios'
-import { RefreshCw, ArrowRight, ShieldCheck, UserCog, Stethoscope, Users, Baby } from 'lucide-vue-next'
+import { RefreshCw, ArrowRight, ShieldCheck, UserCog, Stethoscope, Users, Baby, Send } from 'lucide-vue-next'
 import AppSidebar from '@/components/SystemAdmin/Components/AppSidebar.vue'
 import AppHeader from '@/components/SystemAdmin/Components/AppHeader.vue'
 import { API_BASE, relativeTime } from '@/utils/format'
@@ -157,4 +183,30 @@ async function load() {
 }
 
 onMounted(load)
+
+// ── Send a test message ──────────────────────────────────────
+const testEmail = ref('')
+const testPhone = ref('')
+const testing = ref(false)
+const testResults = ref([])
+const testError = ref('')
+
+async function sendTest() {
+  testing.value = true
+  testError.value = ''
+  testResults.value = []
+  try {
+    const { data } = await axios.post(`${API_BASE}/SystemStatus/test-message`, {
+      email: testEmail.value.trim() || null,
+      phone: testPhone.value.trim() || null,
+    })
+    if (data.email) testResults.value.push({ label: 'Email', ...data.email })
+    if (data.sms) testResults.value.push({ label: 'SMS', ...data.sms })
+    load()   // refresh the texts-used-today count
+  } catch (e) {
+    testError.value = e.response?.data?.message || 'Could not send the test.'
+  } finally {
+    testing.value = false
+  }
+}
 </script>
