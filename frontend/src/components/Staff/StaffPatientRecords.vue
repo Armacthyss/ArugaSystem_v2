@@ -981,7 +981,12 @@ async function submitParentRegister() {
     }
   } catch (e) {
     console.error("Error registering parent:", e);
-    error.value = `Registration failed: ${e.response?.data?.message || e.message}`;
+    let errorMsg = e.response?.data?.message || e.message;
+    // Convert database truncation errors to user-friendly message
+    if (errorMsg?.includes("String or binary data would be truncated") || errorMsg?.includes("ContactNo")) {
+      errorMsg = "Contact number is too long. Please enter a valid Philippines mobile number (e.g., 09171234567).";
+    }
+    error.value = `Registration failed: ${errorMsg}`;
   } finally { registerSubmitting.value = false; }
 }
 
@@ -1582,7 +1587,7 @@ async function submitChildRegister() {
             </div>
             <div class="space-y-1">
               <label class="text-[10px] font-bold text-stone-400 uppercase ml-1">Contact No</label>
-              <input v-model="regParentForm.ContactNo" v-ph-mobile type="tel" placeholder="+63 9XX XXX XXXX" maxlength="17" class="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:border-emerald-500 outline-none" />
+              <input v-model="regParentForm.ContactNo" v-ph-mobile type="tel" placeholder="09xx xxx xxxx" maxlength="17" class="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:border-emerald-500 outline-none" />
             </div>
           </div>
 
