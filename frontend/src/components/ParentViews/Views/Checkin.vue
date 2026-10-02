@@ -79,7 +79,7 @@
                 </template>
 
                 <!-- QR check-in -->
-                <template v-else-if="qrRequired">
+                <template v-else-if="qrRequired && canScanQr">
                   <p class="text-white/60 text-xs mb-6">
                     When you arrive at Leveriza Health Center, scan the QR code posted at the entrance,
                     or type the 6-letter code printed under it.
@@ -133,6 +133,12 @@
                       {{ validating ? '…' : 'Go' }}
                     </button>
                   </form>
+                </template>
+
+                <!-- Not all children are overdue for vaccination -->
+                <template v-else-if="qrRequired && !canScanQr">
+                  <div class="w-20 h-20 mx-auto my-6 rounded-full bg-white/5 border-2 border-white/20 flex items-center justify-center text-4xl">✅</div>
+                  <p class="text-white/80 text-sm">All children are up to date on vaccinations. No check-in is needed at this time.</p>
                 </template>
 
                 <!-- QR switched off by the clinic -->
@@ -339,6 +345,9 @@ async function fetchChildren() {
         guardianName: relationshipType === 'Guardian' ? relatedParentName : undefined,
       }
     })
+
+    // Load vaccination status for all children to determine if QR scanner should be available
+    await Promise.all(children.value.map(child => fetchUpcomingDoses(child.childID)))
   } catch (err) {
     console.error('Failed to load parent children:', err)
     children.value = []
@@ -637,9 +646,21 @@ function cancelChildSelection() {
 // children that were actually selected, after confirm.
 // =====================================================
 
+const childrenOverdueStatus = ref({})  // { childID: isOverdue }
+
 function formatDisplayDate(date) {
   if (!date) return '—'
   try { return format(new Date(date), 'MMM d, yyyy') } catch { return '—' }
+}
+
+// Check if a child is overdue for vaccination (has pending doses with scheduled date in the past)
+function isChildOverdue(scheduledDate) {
+  if (!scheduledDate) return false
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const scheduled = new Date(scheduledDate)
+  scheduled.setHours(0, 0, 0, 0)
+  return scheduled < today
 }
 
 // Next due doses for a child, from the backend timeline (shared with the
@@ -648,14 +669,29 @@ async function fetchUpcomingDoses(childId) {
   if (!childId) return []
   try {
     const { timeline, records } = await fetchChildSchedule(childId)
-    return buildSchedule(timeline, records)
+    const doses = buildSchedule(timeline, records)
       .filter(d => !d.isCompleted)
       .sort((a, b) => a.scheduledDate - b.scheduledDate)
+
+    // Check if this child is overdue (has any pending dose with date in the past)
+    const overdue = doses.length > 0 && isChildOverdue(doses[0].scheduledDate)
+    childrenOverdueStatus.value[childId] = overdue
+
+    return doses
   } catch (err) {
     console.error('fetchUpcomingDoses error:', err)
+    childrenOverdueStatus.value[childId] = false
     return []
   }
 }
+
+// Check if ALL children have overdue vaccinations
+const canScanQr = computed(() => {
+  if (children.value.length === 0) return false
+
+  // All children must be overdue
+  return children.value.every(child => childrenOverdueStatus.value[child.childID] === true)
+})
 
 // =====================================================
 // CONFIRM CHILDREN → POST /api/Queue with today's code

@@ -7,6 +7,7 @@ namespace AndroidWebAPI.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.ClinicTeam)]
     public class RecordsController : ControllerBase
     {
         private readonly AppDbContext _context;
