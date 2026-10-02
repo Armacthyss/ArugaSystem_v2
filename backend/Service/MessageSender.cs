@@ -102,7 +102,9 @@ namespace AndroidWebAPI.Services
             (email.Contains("@demo.", StringComparison.OrdinalIgnoreCase) ||
              email.EndsWith("@example.com", StringComparison.OrdinalIgnoreCase));
 
-        public async Task<bool> SendEmailAsync(string? to, string subject, string body)
+        // highlight: a value in the body (e.g. a reset code) shown in a large
+        // box instead of as plain text, when it stands on a line of its own
+        public async Task<bool> SendEmailAsync(string? to, string subject, string body, string? highlight = null)
         {
             if (string.IsNullOrWhiteSpace(to) || !to.Contains('@')) return false;
 
@@ -119,7 +121,7 @@ namespace AndroidWebAPI.Services
 
             try
             {
-                await DeliverEmailAsync(to, subject, body);
+                await DeliverEmailAsync(to, subject, body, highlight);
                 return true;
             }
             catch (Exception ex)
@@ -130,7 +132,7 @@ namespace AndroidWebAPI.Services
         }
 
         // Hands one email to the SMTP server (Gmail); throws when it can't
-        private async Task DeliverEmailAsync(string to, string subject, string body)
+        private async Task DeliverEmailAsync(string to, string subject, string body, string? highlight = null)
         {
             var from = _config["Email:FromAddress"];
             if (string.IsNullOrWhiteSpace(from)) from = _config["Email:Username"]!;
@@ -140,7 +142,7 @@ namespace AndroidWebAPI.Services
             {
                 From = new MailAddress(from, fromName),
                 Subject = subject,
-                Body = Wrap(subject, body),
+                Body = Wrap(subject, body, highlight),
                 IsBodyHtml = true,
             };
             message.To.Add(to.Trim());
@@ -288,9 +290,15 @@ namespace AndroidWebAPI.Services
         public static string MaskPhone(string phone) =>
             phone.Length < 7 ? phone : phone[..4] + new string('*', phone.Length - 6) + phone[^2..];
 
-        private static string Wrap(string title, string body)
+        private static string Wrap(string title, string body, string? highlight = null)
         {
             var html = WebUtility.HtmlEncode(body).Replace("\n", "<br>");
+            if (!string.IsNullOrWhiteSpace(highlight))
+            {
+                var value = WebUtility.HtmlEncode(highlight);
+                var box = $@"<div style=""margin:16px 0;padding:18px 12px;background:#f3f6ef;border:2px solid #c9d6bd;border-radius:12px;text-align:center;font-size:34px;font-weight:800;letter-spacing:8px;color:#546b41"">{value}</div>";
+                html = html.Replace($"<br><br>{value}<br><br>", box);
+            }
             return $@"<div style=""font-family:Segoe UI,Arial,sans-serif;max-width:560px;margin:auto;border:1px solid #e7e5e4;border-radius:12px;overflow:hidden"">
   <div style=""background:#546b41;color:#fff;padding:16px 20px"">
     <div style=""font-size:12px;opacity:.85"">Leveriza Health Center · Aruga</div>
