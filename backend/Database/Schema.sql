@@ -87,9 +87,11 @@ CREATE TABLE dbo.Parents (
     LastLogin                  datetime2        NULL,
     ConsentRecordedAt          datetime2        NULL,   -- staff recorded the Data Privacy consent at registration
     PrivacyConsentAt           datetime2        NULL,   -- parent accepted the Data Privacy Notice in the app
-    CONSTRAINT PK_Parents PRIMARY KEY (ParentID),
-    CONSTRAINT UQ_Parents_Email UNIQUE (Email)
+    CONSTRAINT PK_Parents PRIMARY KEY (ParentID)
 );
+-- Email is optional (guardians without a portal login); real emails are unique
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_Parents_Email')
+    CREATE UNIQUE INDEX UX_Parents_Email ON dbo.Parents (Email) WHERE Email IS NOT NULL;
 
 IF OBJECT_ID(N'dbo.Accounts', N'U') IS NULL
 CREATE TABLE dbo.Accounts (

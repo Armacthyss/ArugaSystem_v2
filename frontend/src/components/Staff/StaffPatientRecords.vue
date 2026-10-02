@@ -834,7 +834,8 @@ async function submitEdit() {
       if (phoneError) { error.value = phoneError; return; }
       await api.updateParent(item.id, {
         firstName:item.firstName.trim(), middleName:item.middleName?.trim() || "", lastName:item.lastName.trim(),
-        email:item.email?.trim() || null, contactNo:item.contact, address:item.address || "", barangayNo:item.barangay || "",
+        // "" = email removed (allowed for a guardian without a portal login)
+        email:item.email?.trim() ?? "", contactNo:item.contact, address:item.address || "", barangayNo:item.barangay || "",
       });
     } else {
       const raw = item.raw || {};
