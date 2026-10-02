@@ -103,8 +103,11 @@ namespace AndroidWebAPI.Services
              email.EndsWith("@example.com", StringComparison.OrdinalIgnoreCase));
 
         // highlight: a value in the body (e.g. a reset code) shown in a large
-        // box instead of as plain text, when it stands on a line of its own
-        public async Task<bool> SendEmailAsync(string? to, string subject, string body, string? highlight = null)
+        // box instead of as plain text, when it stands on a line of its own.
+        // preview: the line the inbox list and phone notification show instead
+        // of the start of the message, so codes and passwords only appear once
+        // the email is opened (technical adviser).
+        public async Task<bool> SendEmailAsync(string? to, string subject, string body, string? highlight = null, string? preview = null)
         {
             if (string.IsNullOrWhiteSpace(to) || !to.Contains('@')) return false;
 
@@ -121,7 +124,7 @@ namespace AndroidWebAPI.Services
 
             try
             {
-                await DeliverEmailAsync(to, subject, body, highlight);
+                await DeliverEmailAsync(to, subject, body, highlight, preview);
                 return true;
             }
             catch (Exception ex)
@@ -132,7 +135,7 @@ namespace AndroidWebAPI.Services
         }
 
         // Hands one email to the SMTP server (Gmail); throws when it can't
-        private async Task DeliverEmailAsync(string to, string subject, string body, string? highlight = null)
+        private async Task DeliverEmailAsync(string to, string subject, string body, string? highlight = null, string? preview = null)
         {
             var from = _config["Email:FromAddress"];
             if (string.IsNullOrWhiteSpace(from)) from = _config["Email:Username"]!;
@@ -142,7 +145,7 @@ namespace AndroidWebAPI.Services
             {
                 From = new MailAddress(from, fromName),
                 Subject = subject,
-                Body = Wrap(subject, body, highlight),
+                Body = Wrap(subject, body, highlight, preview),
                 IsBodyHtml = true,
             };
             message.To.Add(to.Trim());
@@ -290,8 +293,13 @@ namespace AndroidWebAPI.Services
         public static string MaskPhone(string phone) =>
             phone.Length < 7 ? phone : phone[..4] + new string('*', phone.Length - 6) + phone[^2..];
 
-        private static string Wrap(string title, string body, string? highlight = null)
+        private static string Wrap(string title, string body, string? highlight = null, string? preview = null)
         {
+            // Hidden "preheader": inbox lists and phone notifications show this
+            // line, then invisible filler, instead of the start of the message
+            var preheader = string.IsNullOrWhiteSpace(preview) ? "" :
+                $@"<div style=""display:none;max-height:0;max-width:0;overflow:hidden;opacity:0;font-size:1px;line-height:1px;color:#ffffff;mso-hide:all"">{WebUtility.HtmlEncode(preview)}{string.Concat(Enumerable.Repeat("&#847;&zwnj;&nbsp;", 180))}</div>";
+
             var html = WebUtility.HtmlEncode(body).Replace("\n", "<br>");
             if (!string.IsNullOrWhiteSpace(highlight))
             {
@@ -299,7 +307,7 @@ namespace AndroidWebAPI.Services
                 var box = $@"<div style=""margin:16px 0;padding:18px 12px;background:#f3f6ef;border:2px solid #c9d6bd;border-radius:12px;text-align:center;font-size:34px;font-weight:800;letter-spacing:8px;color:#546b41"">{value}</div>";
                 html = html.Replace($"<br><br>{value}<br><br>", box);
             }
-            return $@"<div style=""font-family:Segoe UI,Arial,sans-serif;max-width:560px;margin:auto;border:1px solid #e7e5e4;border-radius:12px;overflow:hidden"">
+            return preheader + $@"<div style=""font-family:Segoe UI,Arial,sans-serif;max-width:560px;margin:auto;border:1px solid #e7e5e4;border-radius:12px;overflow:hidden"">
   <div style=""background:#546b41;color:#fff;padding:16px 20px"">
     <div style=""font-size:12px;opacity:.85"">Leveriza Health Center · Aruga</div>
     <div style=""font-size:18px;font-weight:700"">{WebUtility.HtmlEncode(title)}</div>

@@ -244,7 +244,8 @@ public async Task<IActionResult> CreatePersonnelAccount(
         $"Hi {dto.FirstName},\n\nAn Aruga account was created for you at Leveriza Health Center " +
         $"({level}).\n\n" +
         $"Username: {username}\nTemporary password: {temporaryPassword}\n\n" +
-        "You'll be asked to choose your own password the first time you sign in.");
+        "You'll be asked to choose your own password the first time you sign in.",
+        preview: "Open this email to see your sign-in details.");
 
     // ...and by text (test accounts are never texted)
     bool texted = await TextTemporaryPasswordAsync(sender, dto.ContactNo, dto.Email,
@@ -409,7 +410,8 @@ private static async Task<bool> TextTemporaryPasswordAsync(
                 $"Leveriza Health Center reset the password for your Aruga account ({account.Username}).\n\n" +
                 $"Temporary password: {temporaryPassword}\n\n" +
                 "You'll be asked to choose your own password the next time you sign in. " +
-                "If you didn't ask for this, please contact Leveriza Health Center.");
+                "If you didn't ask for this, please contact Leveriza Health Center.",
+                preview: "Open this email to see your temporary password.");
             bool texted = await TextTemporaryPasswordAsync(sender, owner?.ContactNo, owner?.Email,
                 $"Aruga - Leveriza Health Center reset your password ({account.Username}). " +
                 $"Temporary password: {temporaryPassword} You will choose a new one when you sign in.");
