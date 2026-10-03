@@ -78,8 +78,15 @@
                   <p class="text-white/80 text-sm">{{ closedMessage }}</p>
                 </template>
 
+                <!-- No child has a vaccine due today -->
+                <template v-else-if="!childrenLoading && children.length > 0 && !canScanQr">
+                  <div class="w-20 h-20 mx-auto my-6 rounded-full bg-white/5 border-2 border-white/20 flex items-center justify-center text-4xl">✅</div>
+                  <p class="text-white/80 text-sm">No vaccine is due today for your {{ children.length === 1 ? 'child' : 'children' }}, so there's no need to check in.</p>
+                  <p v-if="nextDueNote" class="text-white/50 text-xs mt-2">{{ nextDueNote }}</p>
+                </template>
+
                 <!-- QR check-in -->
-                <template v-else-if="qrRequired && canScanQr">
+                <template v-else-if="qrRequired">
                   <p class="text-white/60 text-xs mb-6">
                     When you arrive at Leveriza Health Center, scan the QR code posted at the entrance,
                     or type the 6-letter code printed under it.
@@ -135,12 +142,6 @@
                   </form>
                 </template>
 
-                <!-- Not all children are overdue for vaccination -->
-                <template v-else-if="qrRequired && !canScanQr">
-                  <div class="w-20 h-20 mx-auto my-6 rounded-full bg-white/5 border-2 border-white/20 flex items-center justify-center text-4xl">✅</div>
-                  <p class="text-white/80 text-sm">All children are up to date on vaccinations. No check-in is needed at this time.</p>
-                </template>
-
                 <!-- QR switched off by the clinic -->
                 <template v-else>
                   <p class="text-white/50 text-xs mb-8">Tap below to check in your child for today's visit.</p>
@@ -177,7 +178,8 @@
               :key="child.childID"
               type="button"
               @click="toggleChildSelection(child)"
-              class="w-full flex items-center gap-3 p-3 rounded-xl border transition-all text-left"
+              :disabled="!isChildDue(child)"
+              class="w-full flex items-center gap-3 p-3 rounded-xl border transition-all text-left disabled:opacity-50 disabled:cursor-not-allowed"
               :class="isChildSelected(child) ? 'border-emerald-500 bg-emerald-50' : 'border-slate-100 hover:border-slate-200'"
             >
               <div class="w-9 h-9 rounded-xl bg-white border border-slate-100 flex items-center justify-center text-lg shrink-0">
@@ -185,7 +187,14 @@
               </div>
               <div class="flex-1 min-w-0">
                 <p class="text-xs font-bold text-slate-800 truncate">{{ child.firstName }} {{ child.lastName }}</p>
-                <p class="text-[10px] text-slate-400">{{ child.relationshipType || 'Linked child' }}</p>
+                <p v-if="!isChildDue(child)" class="text-[10px] text-slate-400">No vaccine due today</p>
+                <p v-else-if="childrenDueCount[child.childID] > 1" class="text-[10px] text-emerald-600">
+                  {{ childrenDueCount[child.childID] }} vaccines due
+                </p>
+                <p v-else-if="childrenNextDose[child.childID]" class="text-[10px] text-emerald-600">
+                  Due: {{ childrenNextDose[child.childID].name }} · Dose {{ childrenNextDose[child.childID].doseNumber }}
+                </p>
+                <p v-else class="text-[10px] text-slate-400">{{ child.relationshipType || 'Linked child' }}</p>
               </div>
               <div
                 class="w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0"
@@ -617,12 +626,14 @@ function openChildSelection() {
     qrError.value = 'No children are linked to this account.'
     return
   }
-  selectedChildren.value = children.value.length === 1 ? [children.value[0]] : []
+  const due = children.value.filter(isChildDue)
+  selectedChildren.value = due.length === 1 ? [due[0]] : []
   checkInError.value = ''
   showChildSelection.value = true
 }
 
 function toggleChildSelection(child) {
+  if (!isChildDue(child)) return
   const index = selectedChildren.value.findIndex(c => c.childID === child.childID)
 
   if (index >= 0) {
@@ -642,25 +653,27 @@ function cancelChildSelection() {
 }
 
 // =====================================================
-// VACCINATION (DOH schedule) — loaded only for the
-// children that were actually selected, after confirm.
+// VACCINATION (DOH schedule) — loaded for every linked
+// child, to tell who has a dose due today.
 // =====================================================
 
-const childrenOverdueStatus = ref({})  // { childID: isOverdue }
+const childrenDueStatus = ref({})  // { childID: has a dose due today or earlier }
+const childrenNextDose = ref({})   // { childID: next pending dose }
+const childrenDueCount = ref({})   // { childID: number of doses due now }
 
 function formatDisplayDate(date) {
   if (!date) return '—'
   try { return format(new Date(date), 'MMM d, yyyy') } catch { return '—' }
 }
 
-// Check if a child is overdue for vaccination (has pending doses with scheduled date in the past)
-function isChildOverdue(scheduledDate) {
+// A dose can be given once its date is reached: due today, or missed earlier
+function isDoseDue(scheduledDate) {
   if (!scheduledDate) return false
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   const scheduled = new Date(scheduledDate)
   scheduled.setHours(0, 0, 0, 0)
-  return scheduled < today
+  return scheduled <= today
 }
 
 // Next due doses for a child, from the backend timeline (shared with the
@@ -673,24 +686,35 @@ async function fetchUpcomingDoses(childId) {
       .filter(d => !d.isCompleted)
       .sort((a, b) => a.scheduledDate - b.scheduledDate)
 
-    // Check if this child is overdue (has any pending dose with date in the past)
-    const overdue = doses.length > 0 && isChildOverdue(doses[0].scheduledDate)
-    childrenOverdueStatus.value[childId] = overdue
+    childrenDueStatus.value[childId] = doses.length > 0 && isDoseDue(doses[0].scheduledDate)
+    childrenNextDose.value[childId] = doses[0] ?? null
+    childrenDueCount.value[childId] = doses.filter(d => isDoseDue(d.scheduledDate)).length
 
     return doses
   } catch (err) {
     console.error('fetchUpcomingDoses error:', err)
-    childrenOverdueStatus.value[childId] = false
+    // Schedule couldn't be loaded: don't lock the parent out; the nurse checks at the station
+    childrenDueStatus.value[childId] = true
+    childrenNextDose.value[childId] = null
     return []
   }
 }
 
-// Check if ALL children have overdue vaccinations
-const canScanQr = computed(() => {
-  if (children.value.length === 0) return false
+function isChildDue(child) {
+  return childrenDueStatus.value[child.childID] === true
+}
 
-  // All children must be overdue
-  return children.value.every(child => childrenOverdueStatus.value[child.childID] === true)
+// Check-in opens when at least one child has a dose due today (or missed earlier)
+const canScanQr = computed(() => children.value.some(isChildDue))
+
+// Shown when nothing is due: the soonest upcoming dose across the children
+const nextDueNote = computed(() => {
+  const next = children.value
+    .map(child => ({ child, dose: childrenNextDose.value[child.childID] }))
+    .filter(x => x.dose)
+    .sort((a, b) => a.dose.scheduledDate - b.dose.scheduledDate)[0]
+  if (!next) return ''
+  return `Next: ${next.child.firstName}'s ${next.dose.name} (Dose ${next.dose.doseNumber}) on ${formatDisplayDate(next.dose.scheduledDate)}.`
 })
 
 // =====================================================
@@ -743,7 +767,7 @@ onMounted(async () => {
   fetchUnreadCount()
 
   // Opened by scanning the clinic QR with the phone camera
-  if (!myStatus.value?.checkedIn && route.query.code) {
+  if (!myStatus.value?.checkedIn && route.query.code && canScanQr.value && clinic.value?.checkInOpenNow !== false) {
     validateCode(String(route.query.code))
   }
 
