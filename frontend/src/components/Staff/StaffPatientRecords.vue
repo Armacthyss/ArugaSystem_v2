@@ -1,7 +1,7 @@
 <script setup>
 import { API_ORIGIN } from '@/utils/apiBase'
 import { ref, reactive, computed, watch, onMounted, onUnmounted, h } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import {
   Users, Syringe, Search,
   UserPlus, Eye, Pencil, Link2, KeyRound, Ban,
@@ -19,6 +19,7 @@ import { showAlert } from "@/utils/dialog";
 import { phMobileError } from "@/utils/phone";
 
 const route = useRoute();
+const router = useRouter();
 // Birth dates and Yellow Book doses can't be in the future
 const todayISO = toISODate();
 
@@ -29,7 +30,7 @@ onMounted(() => {
     // instead of the old separate Parent/Children Record pages.
     if (route.query.tab === "children") activeTab.value = "children";
     if (route.query.openRegister === "1") {
-      openRegisterModal(activeTab.value === "children" ? "child" : "parent");
+      openRegisterModal(activeTab.value === "children" ? "child" : "parent", { walkIn: route.query.walkin === "1" });
     }
 });
 
@@ -883,11 +884,13 @@ function fieldRows(fields) {
    record types get created, using the `parents.value` / `children.value`
    already loaded by loadAll() instead of a separate fetch.
 ========================================================================= */
-const registerModal = ref({ open:false, kind:null }); // kind: "parent" | "child"
+// walkIn: "Add Walk-in Patient" on the Dashboard — a new child who is here
+// now, so after registering they're also added to today's queue.
+const registerModal = ref({ open:false, kind:null, walkIn:false }); // kind: "parent" | "child"
 const registerSubmitting = ref(false);
 
 function openRegisterModal(kind, ctx = {}) {
-  registerModal.value = { open:true, kind };
+  registerModal.value = { open:true, kind, walkIn: kind === "child" && !!ctx.walkIn };
   actionsMenuOpenFor.value = null;
   error.value = null;
   if (kind === "parent") {
@@ -1165,8 +1168,33 @@ async function submitChildRegister() {
       priorVaccinationSaveFailed = true;
     }
 
+    // Walk-in: put the new child in today's queue under their primary contact
+    let walkInMessage = "";
+    let walkInQueued = false;
+    if (registerModal.value.walkIn && newChildID) {
+      try {
+        const queued = (await axios.post(`${API_BASE}/Queue`, { ParentID: linkedParents[0].parentID, ChildIDs: [newChildID] })).data;
+        walkInQueued = true;
+        walkInMessage = `${regChildForm.FirstName} was added to today's queue as Q-${String(queued?.queueNumber ?? "").padStart(3, "0")}.`;
+      } catch (e) {
+        console.error("Error adding walk-in to the queue:", e);
+        walkInMessage = e.response?.status === 409
+          ? `This family is already in today's queue (Q-${String(e.response.data?.queueNumber ?? "").padStart(3, "0")}), so ${regChildForm.FirstName} wasn't added to it. To add them, remove that entry in Queue Management, then use Check-In Patient on the Dashboard and tick all the children.`
+          : `${regChildForm.FirstName} was registered, but couldn't be added to the queue: ${e.response?.data?.message || e.message}. Use Check-In Patient on the Dashboard.`;
+      }
+    }
+
     await loadAll();
     closeRegisterModal();
+    if (walkInMessage) {
+      await showAlert({
+        title: walkInQueued ? "Walk-in checked in" : "Child registered, not in the queue",
+        message: walkInMessage,
+        tone: walkInQueued ? "primary" : "error",
+      });
+      // Back to the Dashboard, where the child now waits in Today's Queue
+      if (walkInQueued && !priorVaccinationSaveFailed) router.push("/staff/dashboard");
+    }
     if (priorVaccinationSaveFailed) {
       error.value = null;
       showAlert({
@@ -1567,8 +1595,9 @@ async function submitChildRegister() {
       <div class="relative bg-white w-full rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]" :class="registerModal.kind === 'child' ? 'max-w-4xl' : 'max-w-2xl'">
         <div class="p-6 border-b border-stone-200 flex justify-between items-center bg-white sticky top-0 z-10">
           <div>
-            <p class="text-[16px] font-semibold">Register {{ registerModal.kind === 'parent' ? 'Parent' : 'New Child' }}</p>
-            <p v-if="registerModal.kind === 'child'" class="text-[11px] text-stone-400 uppercase font-bold tracking-wider">Health Intake Form</p>
+            <p class="text-[16px] font-semibold">{{ registerModal.walkIn ? 'Add Walk-in Patient' : `Register ${registerModal.kind === 'parent' ? 'Parent' : 'New Child'}` }}</p>
+            <p v-if="registerModal.walkIn" class="text-[11px] text-emerald-700 font-semibold">Registers the child and adds them to today's queue</p>
+            <p v-else-if="registerModal.kind === 'child'" class="text-[11px] text-stone-400 uppercase font-bold tracking-wider">Health Intake Form</p>
           </div>
           <button @click="closeRegisterModal" class="p-1.5 rounded-lg hover:bg-stone-100"><X :size="18" class="text-stone-500" /></button>
         </div>
@@ -1831,7 +1860,7 @@ async function submitChildRegister() {
             :disabled="registerSubmitting || (registerModal.kind === 'parent' && !regParentForm.PrivacyConsent)"
             class="rounded-xl px-5 py-2.5 text-[13px] font-semibold text-white bg-emerald-700 hover:bg-emerald-800 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {{ registerSubmitting ? 'Saving...' : `Register ${registerModal.kind === 'parent' ? 'Parent' : 'Child'}` }}
+            {{ registerSubmitting ? 'Saving...' : registerModal.walkIn ? 'Register & Add to Queue' : `Register ${registerModal.kind === 'parent' ? 'Parent' : 'Child'}` }}
           </button>
         </div>
       </div>
