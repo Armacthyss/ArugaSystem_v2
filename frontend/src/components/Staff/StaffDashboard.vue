@@ -97,17 +97,19 @@ const summaryCards = computed(() => [
 ]);
 
 // Each action either routes to the page that actually owns that workflow
-// (Register Child / Search Patient) or acts locally on this page (View
+// (Register Parent / Search Patient) or acts locally on this page (View
 // Today's Queue scrolls to the table already on this dashboard). "Scan Queue
 // QR" has no scanning feature built anywhere yet, so it's disabled rather
 // than pretending to work.
 const quickActions = [
-  { icon: UserPlus, label: "Register Child", action: () => router.push("/staff/patient-records?tab=children&openRegister=1") },
+  // New children are registered with Add Walk-in Patient (here today) or
+  // from Patient Records; this one registers the parent/guardian first.
+  { icon: UserPlus, label: "Register Parent", action: () => router.push("/staff/patient-records?tab=parents&openRegister=1") },
   { icon: QrCode, label: "Check-in QR", action: () => router.push("/staff/checkin-qr") },
   // For an already-registered patient who walks in without their parent's
   // login (no QR, no parent account access) — this opens a modal to look
   // up the parent/child and add them straight to today's queue, instead of
-  // routing to Register Child (which is for brand-new patients).
+  // routing to registration (which is for brand-new patients).
   { icon: ClipboardCheck, label: "Check-In Patient", action: () => openCheckInModal() },
   { icon: UserPlus, label: "Add Walk-in Patient", action: () => router.push("/staff/patient-records?tab=children&openRegister=1&walkin=1") },
   { icon: Search, label: "Search Patient", action: () => router.push("/staff/patient-records?tab=parents") },

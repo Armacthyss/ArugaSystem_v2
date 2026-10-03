@@ -1025,7 +1025,7 @@ const regChildForm = reactive({
   FirstName:"", MiddleName:"", LastName:"", BirthDate:"", Sex:"Male", PlaceOfBirth:"", Address:"",
   MotherName:"", MotherEmail:"", MotherID:null,
   FatherName:"", FatherEmail:"", FatherID:null,
-  GuardianName:"", GuardianEmail:"", GuardianID:null,
+  GuardianName:"", GuardianEmail:"", GuardianID:null, GuardianRelationship:"Guardian",
   BirthWeight:null, BirthHeight:null,
   HealthCenter:"Leveriza Health Center", Barangay:"", FamilyNo:"",
 });
@@ -1034,7 +1034,7 @@ function resetChildForm() {
     FirstName:"", MiddleName:"", LastName:"", BirthDate:"", Sex:"Male", PlaceOfBirth:"", Address:"",
     MotherName:"", MotherEmail:"", MotherID:null,
     FatherName:"", FatherEmail:"", FatherID:null,
-    GuardianName:"", GuardianEmail:"", GuardianID:null,
+    GuardianName:"", GuardianEmail:"", GuardianID:null, GuardianRelationship:"Guardian",
     BirthWeight:null, BirthHeight:null,
     HealthCenter:"Leveriza Health Center", Barangay:"", FamilyNo:"",
   });
@@ -1066,14 +1066,23 @@ const regFilteredParents = computed(() => {
   return parents.value.filter(p => p.name.toLowerCase().includes(q) || p.email.toLowerCase().includes(q)).slice(0, 5);
 });
 
-function regHandleManualNameEntry() {
+// Mother and Father have their own slot; every other relationship
+// (Guardian, Grandmother, Aunt...) goes in the third slot, which keeps
+// the relationship that was picked.
+function regSlot() {
   const role = regSelectedRole.value;
+  if (role === "Mother" || role === "Father") return role;
+  regChildForm.GuardianRelationship = role;
+  return "Guardian";
+}
+function regHandleManualNameEntry() {
+  const role = regSlot();
   regChildForm[`${role}Name`] = regParentSearch.value;
   regChildForm[`${role}ID`] = null;
   regChildForm[`${role}Email`] = "";
 }
 function regLinkExistingParent(parent) {
-  const role = regSelectedRole.value;
+  const role = regSlot();
   regChildForm[`${role}Name`] = parent.name;
   regChildForm[`${role}ID`] = parent.id;
   regChildForm[`${role}Email`] = parent.email;
@@ -1087,6 +1096,7 @@ function regLinkExistingParent(parent) {
 }
 function regClearParentRole(role) {
   regChildForm[`${role}Name`] = ""; regChildForm[`${role}ID`] = null; regChildForm[`${role}Email`] = "";
+  if (role === "Guardian") regChildForm.GuardianRelationship = "Guardian";
 }
 
 // ChildrenController's real DTO takes a Parents ARRAY (confirmed from the
@@ -1102,7 +1112,8 @@ async function submitChildRegister() {
   for (const role of ["Mother", "Father", "Guardian"]) {
     const parentID = regChildForm[`${role}ID`];
     if (parentID) {
-      linkedParents.push({ parentID, relationshipType: role, isPrimaryContact: linkedParents.length === 0, canReceiveNotifications: true });
+      const relationshipType = role === "Guardian" ? regChildForm.GuardianRelationship : role;
+      linkedParents.push({ parentID, relationshipType, isPrimaryContact: linkedParents.length === 0, canReceiveNotifications: true });
     }
   }
   if (linkedParents.length === 0) {
@@ -1709,9 +1720,7 @@ async function submitChildRegister() {
               <div class="space-y-1">
                 <label class="text-[11px] font-bold text-emerald-800 ml-1">Assign To Role</label>
                 <select v-model="regSelectedRole" class="w-full px-4 py-2.5 bg-white border border-emerald-200 rounded-xl text-sm outline-none">
-                  <option value="Mother">Mother</option>
-                  <option value="Father">Father</option>
-                  <option value="Guardian">Guardian</option>
+                  <option v-for="r in regLinkRoleOptions" :key="r" :value="r">{{ r }}</option>
                 </select>
               </div>
               <div class="space-y-1 relative">
@@ -1728,7 +1737,7 @@ async function submitChildRegister() {
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
               <div v-for="role in ['Mother', 'Father', 'Guardian']" :key="role" class="p-3 rounded-xl border transition-all" :class="regChildForm[role+'Name'] ? 'bg-white border-emerald-200 shadow-sm' : 'bg-emerald-50/50 border-dashed border-emerald-200'">
                 <div class="flex justify-between items-start mb-1">
-                  <span class="text-[9px] font-black uppercase text-emerald-800">{{ role }}</span>
+                  <span class="text-[9px] font-black uppercase text-emerald-800">{{ role === 'Guardian' ? (regChildForm.GuardianName ? regChildForm.GuardianRelationship : 'Guardian / Relative') : role }}</span>
                   <button v-if="regChildForm[role+'Name']" @click="regClearParentRole(role)" class="text-emerald-300 hover:text-red-400"><X class="w-3 h-3"/></button>
                 </div>
                 <p class="text-xs font-bold text-stone-700 truncate">{{ regChildForm[role+'Name'] || 'Empty' }}</p>
