@@ -1063,7 +1063,7 @@ function removeRegPriorVaccinationRow(idx) {
 const regFilteredParents = computed(() => {
   if (!regParentSearch.value) return [];
   const q = regParentSearch.value.toLowerCase();
-  return parents.value.filter(p => p.name.toLowerCase().includes(q) || p.email.toLowerCase().includes(q)).slice(0, 5);
+  return parents.value.filter(p => p.name.toLowerCase().includes(q) || (p.email || "").toLowerCase().includes(q) || (p.contact || "").replace(/\D/g, "").includes(q.replace(/\D/g, "") || "-")).slice(0, 5);
 });
 
 // Mother and Father have their own slot; every other relationship
@@ -1074,12 +1074,6 @@ function regSlot() {
   if (role === "Mother" || role === "Father") return role;
   regChildForm.GuardianRelationship = role;
   return "Guardian";
-}
-function regHandleManualNameEntry() {
-  const role = regSlot();
-  regChildForm[`${role}Name`] = regParentSearch.value;
-  regChildForm[`${role}ID`] = null;
-  regChildForm[`${role}Email`] = "";
 }
 function regLinkExistingParent(parent) {
   const role = regSlot();
@@ -1117,7 +1111,7 @@ async function submitChildRegister() {
     }
   }
   if (linkedParents.length === 0) {
-    error.value = "Link at least one parent/guardian to an existing account (search and select from the results) — a manually-typed name with no account can't be saved yet.";
+    error.value = "Link at least one parent/guardian: search for a registered parent and pick them from the results.";
     return;
   }
 
@@ -1714,7 +1708,7 @@ async function submitChildRegister() {
           <div class="p-6 bg-emerald-50 rounded-2xl border border-emerald-100 space-y-4">
             <div class="flex justify-between items-end">
               <label class="text-[10px] font-bold text-emerald-700 uppercase tracking-widest">Step 1: Parent/Guardian Information</label>
-              <span class="text-[9px] text-emerald-600 bg-white px-2 py-1 rounded border border-emerald-100">Search to link existing account</span>
+              <span class="text-[9px] text-emerald-600 bg-white px-2 py-1 rounded border border-emerald-100">Pick from the search results to link</span>
             </div>
             <div class="grid grid-cols-2 gap-4">
               <div class="space-y-1">
@@ -1724,14 +1718,19 @@ async function submitChildRegister() {
                 </select>
               </div>
               <div class="space-y-1 relative">
-                <label class="text-[11px] font-bold text-emerald-800 ml-1">Type Name or Search Email</label>
-                <input v-model="regParentSearch" @input="regHandleManualNameEntry" type="text" placeholder="Type name manually or search account..." class="w-full px-4 py-2.5 bg-white border border-emerald-200 rounded-xl text-sm outline-none" />
+                <label class="text-[11px] font-bold text-emerald-800 ml-1">Search Registered Parent</label>
+                <!-- Search only: a slot is filled by picking a registered parent
+                     from the results, never by the typed text itself. -->
+                <input v-model="regParentSearch" type="text" placeholder="Name, email or mobile number..." class="w-full px-4 py-2.5 bg-white border border-emerald-200 rounded-xl text-sm outline-none" />
                 <div v-if="regFilteredParents.length > 0" class="absolute left-0 right-0 z-[70] bg-white border border-stone-200 shadow-xl rounded-xl mt-1 overflow-hidden">
                   <div v-for="p in regFilteredParents" :key="p.id" @click="regLinkExistingParent(p)" class="px-4 py-3 hover:bg-emerald-50 cursor-pointer border-b border-stone-50 last:border-none">
                     <p class="text-sm font-bold text-stone-700">{{ p.name }}</p>
-                    <p class="text-[10px] text-emerald-600 font-bold">LINK ACCOUNT: {{ p.email }}</p>
+                    <p class="text-[10px] text-emerald-600 font-bold">LINK AS {{ regSelectedRole.toUpperCase() }}: {{ p.email || p.contact || "no email" }}</p>
                   </div>
                 </div>
+                <p v-else-if="regParentSearch.trim()" class="text-[11px] text-amber-700 ml-1 mt-1">
+                  No registered parent matches “{{ regParentSearch.trim() }}”. Register the parent first (Patient Records → Parents → Register Parent), then link them here.
+                </p>
               </div>
             </div>
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
@@ -1742,7 +1741,7 @@ async function submitChildRegister() {
                 </div>
                 <p class="text-xs font-bold text-stone-700 truncate">{{ regChildForm[role+'Name'] || 'Empty' }}</p>
                 <p v-if="regChildForm[role+'Email']" class="text-[8px] text-emerald-500 font-bold uppercase mt-1">Linked: {{ regChildForm[role+'Email'] }}</p>
-                <p v-else-if="regChildForm[role+'Name']" class="text-[8px] text-stone-400 font-medium uppercase mt-1">Manual Entry</p>
+                <p v-else-if="regChildForm[role+'Name']" class="text-[8px] text-emerald-500 font-bold uppercase mt-1">Linked (no email)</p>
               </div>
             </div>
           </div>
