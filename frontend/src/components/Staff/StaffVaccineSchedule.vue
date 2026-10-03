@@ -11,6 +11,7 @@ import StaffSidebar from "./StaffSidebar.vue";
 import StaffTopbar from "./StaffTopbar.vue";
 import { API_BASE, ageLabel, ageParts, formatDate, toISODate, downloadCSV } from "@/utils/format";
 import { useFloatingMenu } from "@/utils/floatingMenu";
+import { askConfirm } from "@/utils/dialog";
 
 /* ---------------------------------------------------------
    Aruga Pediatric System — Vaccine Schedule (Staff / Nurse)
@@ -235,7 +236,17 @@ const queueingKey = ref("");
 const canQueue = (a) => !a.inQueue && a.status !== "Completed" && a.parentID && (a.overdue || a.dueISO === todayISO);
 
 // POST /api/Queue — the whole visit for this child's parent today.
+// Parents normally check in themselves with the clinic QR; this is the desk
+// fallback for one who is here without a phone, so it asks first: a family
+// that isn't here would be called in by Call Next and never come.
 async function addToQueue(appt) {
+  const ok = await askConfirm({
+    title: `Is ${appt.parent} here at the clinic now?`,
+    message: `${appt.child} will be added to today's queue. Only check in families who are here. Parents with a phone check in themselves by scanning the clinic QR.`,
+    confirmText: "Yes, Check In",
+    cancelText: "Not Yet",
+  });
+  if (!ok) return;
   queueingKey.value = appt.key;
   try {
     const res = await axios.post(`${API_BASE}/Queue`, { parentID: appt.parentID, childIDs: [appt.childID] });
@@ -243,7 +254,7 @@ async function addToQueue(appt) {
     await loadData();
   } catch (e) {
     if (e.response?.status === 409) {
-      flash(`${appt.parent} already has queue #${e.response.data.queueNumber} today — add ${appt.child} to that visit from Queue Management.`);
+      flash(`${appt.parent} already has queue #${e.response.data.queueNumber} today. To add ${appt.child}, remove that entry in Queue Management, then use Check-In Patient on the Dashboard and tick all the children.`);
     } else {
       flash(e.response?.data?.message || "Could not add to the queue.");
     }
@@ -552,8 +563,8 @@ const selectedDaySchedule = computed(() => {
                           <div class="flex items-center gap-1 relative">
                             <button v-if="canQueue(appt)" @click="addToQueue(appt)" :disabled="queueingKey === appt.key"
                               class="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] font-semibold text-white bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50"
-                              title="Add this child to today's queue">
-                              <ListPlus :size="14" /> Add to Queue
+                              title="The parent is here but can't check in on their phone: check them in for them">
+                              <ListPlus :size="14" /> Check In at Desk
                             </button>
                             <span v-else-if="appt.inQueue" class="text-[11.5px] text-stone-500 px-2">In queue {{ appt.queueNo }}</span>
                             <button @click="toggleActionsMenu(appt.key, $event)" class="p-1.5 rounded-lg hover:bg-stone-100 ml-auto" title="More actions">
