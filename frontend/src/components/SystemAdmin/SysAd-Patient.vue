@@ -351,6 +351,8 @@ const saveEdit = async () => {
 
 /* --------------------------------- Link parent modal --------------------------------- */
 const showLinkModal = ref(false)
+// Same list as Staff > Patient Records: who can bring the child in
+const relationshipOptions = ["Mother", "Father", "Guardian", "Grandmother", "Grandfather", "Aunt", "Uncle", "Sibling", "Foster Parent", "Relative", "Other"]
 const linkForm = reactive({ childId: null, childName: '', search: '', selected: null, relationship: 'Mother', primary: false })
 
 const openLinkModal = async (patient) => {
@@ -680,7 +682,7 @@ const saveLink = async () => {
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
                 <div>
                   <label class="block text-xs font-semibold text-slate-500 mb-1.5">Relationship</label>
-                  <select v-model="registerForm.relationship" class="field"><option>Mother</option><option>Father</option><option>Guardian</option></select>
+                  <select v-model="registerForm.relationship" class="field"><option v-for="r in relationshipOptions" :key="r">{{ r }}</option></select>
                 </div>
               </div>
             </div>
@@ -750,7 +752,7 @@ const saveLink = async () => {
             </template>
             <div>
               <label class="block text-xs font-semibold text-slate-500 mb-1.5">Relationship</label>
-              <select v-model="linkForm.relationship" class="field"><option>Mother</option><option>Father</option><option>Guardian</option></select>
+              <select v-model="linkForm.relationship" class="field"><option v-for="r in relationshipOptions" :key="r">{{ r }}</option></select>
             </div>
             <label class="flex items-center gap-2 text-sm text-slate-700">
               <input v-model="linkForm.primary" type="checkbox" class="w-4 h-4 rounded border-slate-300 text-emerald-600" />
