@@ -24,6 +24,17 @@ const loading = ref(false)
 const loadError = ref('')
 const actionMessage = ref('')
 
+// The line under the title: the child it's about. Only announcements and
+// clinic-closed notices go to every parent. "It's your turn" isn't linked to
+// one child (a family can bring several), so their names come from its text.
+const BROADCAST_TYPES = ['Announcement', 'ClinicClosed']
+function subLabel(n) {
+  if (n.child && n.child !== '—') return n.child
+  if (BROADCAST_TYPES.includes(n.rawType)) return 'All parents'
+  if (n.rawType === 'Called') return n.message?.match(/bring (.+?) inside/)?.[1] || ''
+  return ''
+}
+
 async function fetchNotifications() {
   loading.value = true
   loadError.value = ''
@@ -392,7 +403,7 @@ const reminderSchedule = {
                 >
                   <td class="px-5 py-3">
                     <p class="font-semibold text-slate-900 whitespace-nowrap">{{ n.title }}</p>
-                    <p class="text-xs text-slate-400 whitespace-nowrap">{{ n.child !== '—' ? n.child : 'Broadcast' }}</p>
+                    <p v-if="subLabel(n)" class="text-xs text-slate-400 whitespace-nowrap">{{ subLabel(n) }}</p>
                   </td>
                   <td class="px-3 py-3 text-slate-500 whitespace-nowrap">{{ n.recipient }}</td>
                   <td class="px-3 py-3 text-slate-500 whitespace-nowrap">{{ n.type }}</td>

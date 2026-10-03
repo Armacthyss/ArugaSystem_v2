@@ -172,8 +172,10 @@ const statusMeta = {
 }
 const getStatusMeta = (status) => statusMeta[String(!!status)]
 
-const ageCategoryOptions = ['Birth', '6 Weeks', '10 Weeks', '14 Weeks', '9 Months', '12 Months', 'Booster']
-const infantCategories = ['6 Weeks', '10 Weeks', '14 Weeks', '9 Months', '12 Months']
+// The values stored in Vaccines.AgeCategory (Schema.sql): Infant = first
+// year, Child = from 9 months on (MMR). The clinic's schedule has no
+// booster doses, so there is no Booster category.
+const ageCategoryOptions = ['Infant', 'Child']
 
 const routeOptions = ['Intramuscular', 'Intradermal', 'Subcutaneous', 'Oral']
 
@@ -245,9 +247,9 @@ const summary = computed(() => ({
   total: vaccines.value.length,
   active: vaccines.value.filter((v) => v.status).length,
   inactive: vaccines.value.filter((v) => !v.status).length,
-  birth: vaccines.value.filter((v) => v.ageCategory === 'Birth').length,
-  infant: vaccines.value.filter((v) => infantCategories.includes(v.ageCategory)).length,
-  booster: vaccines.value.filter((v) => v.ageCategory === 'Booster').length,
+  // BCG and Hepatitis B: "At birth"
+  birth: vaccines.value.filter((v) => /birth/i.test(v.recommendedAge || '')).length,
+  infant: vaccines.value.filter((v) => v.ageCategory === 'Infant').length,
 }))
 
 /* ------------------------------ Row actions menu ---------------------------- */
@@ -416,7 +418,7 @@ function openCreate() {
     description: "",
     targetDisease: "",
     recommendedAge: "",
-    ageCategory: "Birth",
+    ageCategory: "Infant",
     administrationRoute: "Intramuscular",
     status: true,
   }
@@ -581,7 +583,7 @@ async function save() {
       <!-- Content -->
       <main class="p-6 space-y-6">
         <!-- Summary cards -->
-        <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+        <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
           <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
             <div class="flex items-start justify-between gap-2">
               <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Total Vaccines</p>
@@ -605,7 +607,7 @@ async function save() {
           </div>
           <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
             <div class="flex items-start justify-between gap-2">
-              <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Birth Vaccines</p>
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Given at Birth</p>
               <div class="bg-sky-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm">👶</div>
             </div>
             <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.birth }}</p>
@@ -616,13 +618,6 @@ async function save() {
               <div class="bg-amber-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm">🧒</div>
             </div>
             <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.infant }}</p>
-          </div>
-          <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
-            <div class="flex items-start justify-between gap-2">
-              <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Booster Vaccines</p>
-              <div class="bg-violet-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm">🔁</div>
-            </div>
-            <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.booster }}</p>
           </div>
         </section>
 
