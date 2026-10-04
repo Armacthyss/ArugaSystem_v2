@@ -125,6 +125,10 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<NotificationGenera
 // Queue QR Code
 builder.Services.AddScoped<IQueueQRCodeService, QueueQRCodeService>();
 
+// Survey mode (public test copy): resets the database after testers leave
+builder.Services.AddSingleton<SurveyMode>();
+builder.Services.AddHostedService<SurveyResetService>();
+
 // ── Build ─────────────────────────────────────────────────────
 var app = builder.Build();
 
@@ -173,6 +177,23 @@ app.UseCors("AllowVueApp");
 
 app.UseAuthentication();
 app.UseAuthorization();
+
+// Survey mode (off unless switched on with survey-mode.ps1): note who is
+// still using the test system, see Service/SurveyMode.cs
+var surveyMode = app.Services.GetRequiredService<SurveyMode>();
+if (surveyMode.Enabled)
+{
+    app.Use(async (context, next) =>
+    {
+        var auth = context.Request.Headers.Authorization.ToString();
+        if (auth.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) &&
+            !context.Request.Path.StartsWithSegments("/api/auth/logout"))
+        {
+            surveyMode.Touch(SurveyMode.KeyFor(auth[7..].Trim()), !HttpMethods.IsGet(context.Request.Method));
+        }
+        await next();
+    });
+}
 
 app.MapControllers();
 

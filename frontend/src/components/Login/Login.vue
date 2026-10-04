@@ -202,6 +202,10 @@ const handleLogin = async () => {
 }
 
 const currentYear = new Date().getFullYear()
+
+// Survey mode (public test copy): show a note only while it's switched on
+const surveyMode = ref(false)
+axios.get(`${API_BASE_URL}/survey`).then(r => { surveyMode.value = !!r.data?.enabled }).catch(() => {})
 </script>
 
 <template>
@@ -242,6 +246,11 @@ const currentYear = new Date().getFullYear()
         <div class="mb-8">
           <h2 class="text-3xl font-black text-[#2d3a26]">Welcome to Aruga</h2>
           <p class="text-gray-500 mt-2">Sign in to continue to your account.</p>
+        </div>
+
+        <div v-if="surveyMode" class="mb-6 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-900">
+          <p class="font-bold">Test copy for our survey</p>
+          <p class="mt-0.5">Feel free to try anything. Please <b>log out</b> when you're done: everything resets for the next person a few minutes after everyone has logged out.</p>
         </div>
 
         <!-- USERNAME / EMAIL -->

@@ -1,3 +1,5 @@
+import { API_BASE } from './apiBase'
+
 export function getAccount() {
   const savedAccount = localStorage.getItem('account')
 
@@ -38,6 +40,14 @@ export function isLoggedIn() {
 }
 
 export function logout() {
+  // Tell the API this browser has left (only used by survey mode, where the
+  // test data resets once every tester has logged out). Fire-and-forget:
+  // logging out never waits for it.
+  const token = getToken()
+  if (token) {
+    fetch(`${API_BASE}/auth/logout`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, keepalive: true }).catch(() => {})
+  }
+
   localStorage.removeItem('account')
   localStorage.removeItem('authToken')
 
