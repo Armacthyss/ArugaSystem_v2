@@ -413,7 +413,10 @@ const closedMessage = computed(() => {
   if (!c.openToday) {
     return `There are no vaccinations today. The next vaccination day is ${c.nextOpenDay}.`
   }
-  return `Check-in for vaccinations today is from ${c.opensAt} until ${c.checkInUntil}. The next vaccination day is ${c.nextOpenDay}.`
+  if (c.checkInNotYetOpen) {
+    return `Today is a vaccination day. Check-in opens at ${c.opensAt} and runs until ${c.checkInUntil}.`
+  }
+  return `Check-in for vaccinations today closed at ${c.checkInUntil}. The next vaccination day is ${c.nextOpenDay}.`
 })
 
 async function loadClinicInfo() {

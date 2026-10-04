@@ -22,87 +22,142 @@
               <p class="text-2xl mb-2">👶</p>
               <p class="font-bold text-sm">Select a child from Family Profiles to view their schedule.</p>
             </div>
-            <!-- Side by side on a computer; on a phone the dose list comes first
-                 (scrolling on its own) and the calendar below it -->
-            <div v-else class="flex flex-col lg:flex-row gap-5 lg:items-start">
-              <div class="w-full lg:w-[42%] shrink-0 flex flex-col bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden max-h-[55vh] lg:max-h-[680px]">
-                <div class="px-6 pt-6 pb-4 border-b border-slate-50">
-                  <p class="text-[10px] font-bold text-emerald-500 uppercase tracking-[0.2em]">Vaccination Schedule</p>
-                  <p class="text-xs text-slate-400 mt-0.5">{{ selectedChild.firstName }} · {{ computedVaccineList.length }} doses</p>
+            <!-- One calendar with every dose of the child. Hovering a day (computer)
+                 or tapping it (phone) shows that day's details in the panel,
+                 which sits beside the calendar on a computer and below it on a phone. -->
+            <div v-else class="space-y-4">
+              <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="px-6 pt-6 pb-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p class="text-[10px] font-bold text-emerald-600 uppercase tracking-[0.2em]">Vaccination Calendar</p>
+                    <p class="text-xs text-slate-500 mt-0.5">
+                      {{ selectedChild.firstName }} {{ selectedChild.lastName }} ·
+                      <span class="font-bold text-emerald-600">{{ vaccinatedCount }} of {{ computedVaccineList.length }}</span> doses vaccinated
+                    </p>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <button @click="goToToday" class="px-3 h-8 rounded-lg bg-slate-50 hover:bg-slate-100 text-[10px] font-bold text-slate-600 uppercase tracking-wide transition-all">Today</button>
+                    <button v-if="nextDose" @click="goToDate(nextDose.scheduledDate)" class="px-3 h-8 rounded-lg bg-blue-50 hover:bg-blue-100 text-[10px] font-bold text-blue-700 uppercase tracking-wide transition-all">Next dose →</button>
+                  </div>
                 </div>
-                <div class="overflow-y-auto flex-1 p-4 space-y-2">
-                  <template v-for="(group, gIdx) in groupedVaccineList" :key="gIdx">
-                    <p class="text-[9px] font-bold text-slate-700 uppercase tracking-widest px-2 pt-3 pb-1 first:pt-0">{{ group.name }}</p>
-                    <button v-for="vax in group.doses" :key="vax.doseId" @click="selectedVax = vax"
-                      :class="selectedVax?.doseId === vax.doseId ? 'bg-emerald-600 text-white shadow-md' : 'bg-slate-50 hover:bg-slate-100 text-slate-700'"
-                      class="w-full px-4 py-3 rounded-xl flex items-center justify-between transition-all text-left">
-                      <div class="flex items-center gap-3">
-                        <span :class="selectedVax?.doseId === vax.doseId ? 'bg-white/20' : vax.isCompleted ? 'bg-emerald-100' : 'bg-white'" class="w-7 h-7 rounded-lg flex items-center justify-center text-xs shadow-sm shrink-0">
-                          {{ vax.isCompleted ? '✅' : '💉' }}
+
+                <div class="grid grid-cols-1 lg:grid-cols-3">
+                  <!-- Calendar -->
+                  <div class="lg:col-span-2 p-4 sm:p-6 lg:border-r border-slate-100">
+                    <div class="flex items-center justify-between mb-4">
+                      <button @click="prevMonth" aria-label="Previous month" class="w-9 h-9 rounded-xl bg-slate-50 hover:bg-slate-100 flex items-center justify-center text-slate-500 font-bold transition-all">‹</button>
+                      <h3 class="font-bold text-base text-slate-800">{{ calendarMonthLabel }}</h3>
+                      <button @click="nextMonth" aria-label="Next month" class="w-9 h-9 rounded-xl bg-slate-50 hover:bg-slate-100 flex items-center justify-center text-slate-500 font-bold transition-all">›</button>
+                    </div>
+                    <div class="grid grid-cols-7 gap-1 sm:gap-1.5 mb-1.5">
+                      <div v-for="(label, i) in ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']" :key="i" class="text-center text-[9px] font-bold text-slate-400 uppercase py-1">{{ label }}</div>
+                    </div>
+                    <div class="grid grid-cols-7 gap-1 sm:gap-1.5" @mouseleave="hoveredKey = null">
+                      <div v-for="n in calendarOffset" :key="'sp-' + n" class="aspect-square"></div>
+                      <button v-for="cell in calendarCells" :key="cell.key" type="button"
+                        @click="selectedKey = cell.key"
+                        @mouseenter="hoveredKey = cell.key"
+                        :aria-label="cell.ariaLabel"
+                        :class="[cellClass(cell), cell.key === activeKey && !showMonthSummary ? 'ring-2 ring-offset-2 ring-emerald-600' : '', cell.isToday ? 'outline-2 outline-dashed outline-offset-2 outline-amber-500' : '']"
+                        class="relative aspect-square rounded-xl flex flex-col items-center justify-center text-xs sm:text-sm font-bold transition-colors">
+                        <span>{{ cell.day }}</span>
+                        <span v-if="cell.isToday" class="text-[7px] sm:text-[8px] font-black uppercase leading-none mt-0.5 opacity-80">Today</span>
+                        <!-- Dots only when a day mixes statuses (the fill shows the main one) -->
+                        <span v-if="cell.types.length > 1" class="flex gap-0.5 mt-0.5">
+                          <span v-for="t in cell.types" :key="t" class="w-1.5 h-1.5 rounded-full ring-1 ring-white" :class="STATUS[t].dot"></span>
                         </span>
-                        <div>
-                          <p class="text-[11px] font-bold leading-tight" :class="selectedVax?.doseId === vax.doseId ? 'text-white' : 'text-slate-700'">
-                            Dose {{ vax.doseNumber }}
-                            <span v-if="vax.isCompleted" class="ml-1 text-[8px] font-bold text-emerald-600 bg-emerald-100 px-1.5 py-0.5 rounded-full uppercase">Taken</span>
-                          </p>
-                          <div v-if="vax.isCompleted && vax.wasLate" class="mt-0.5 space-y-0.5">
-                            <p class="text-[9px]" :class="selectedVax?.doseId === vax.doseId ? 'text-white/50' : 'text-slate-400'">
-                              Due: {{ formatDisplayDate(vax.originalDueDate) }}
-                              <span class="text-amber-500 font-bold ml-1">+{{ vax.daysLate }}d late</span>
-                            </p>
-                            <p class="text-[10px] font-bold" :class="selectedVax?.doseId === vax.doseId ? 'text-white/80' : 'text-slate-600'">Given: {{ formatDisplayDate(vax.administeredDate) }}</p>
+                        <span v-if="cell.events.length > 1" class="absolute -top-1.5 -right-1.5 min-w-4 h-4 px-1 rounded-full bg-slate-800 text-white text-[9px] leading-4 text-center">{{ cell.events.length }}</span>
+                      </button>
+                    </div>
+
+                    <!-- Legend -->
+                    <div class="mt-5 pt-4 border-t border-slate-100 grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2">
+                      <div v-for="item in legend" :key="item.label" class="flex items-center gap-2">
+                        <span class="w-4 h-4 rounded-md shrink-0" :class="item.swatch"></span>
+                        <span class="text-[10px] text-slate-600 font-bold">{{ item.label }}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Day details. On a computer the panel is pinned to the
+                       calendar's height and scrolls inside, so hovering over
+                       days never resizes the card. -->
+                  <div class="relative bg-slate-50/60 border-t lg:border-t-0 border-slate-100">
+                  <div class="p-5 sm:p-6 lg:absolute lg:inset-0 lg:overflow-y-auto">
+                    <template v-if="showMonthSummary">
+                      <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">This Month</p>
+                      <h4 class="text-lg font-black text-slate-800 leading-tight">{{ calendarMonthLabel }}</h4>
+                    </template>
+                    <template v-else>
+                    <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">{{ hoveredKey && hoveredKey !== selectedKey ? 'Previewing' : 'Selected Day' }}</p>
+                    <h4 class="text-lg font-black text-slate-800 leading-tight">{{ activeDayLabel }}</h4>
+                    </template>
+                    <p v-if="!showMonthSummary" class="text-[11px] font-bold mt-1" :class="activeCell?.closedReason ? 'text-red-600' : activeCell?.isClinicDay ? 'text-emerald-700' : 'text-slate-400'">
+                      {{ activeCell?.closedReason ? 'Health center closed' : activeCell?.isClinicDay ? `Vaccination day${clinic?.hoursText ? ' · ' + clinic.hoursText.split('·').slice(1).join('·').trim() : ''}` : 'No vaccinations on this day' }}
+                    </p>
+
+                    <p v-if="activeCell?.events.length" class="text-[11px] text-slate-500 mt-3">
+                      For <span class="font-bold text-slate-700">{{ selectedChild.firstName }} {{ selectedChild.lastName }}</span>
+                    </p>
+
+                    <div class="mt-2 space-y-2">
+                      <div v-for="ev in activeCell?.events || []" :key="ev.type + ev.vax.doseId"
+                        class="bg-white rounded-xl border-l-4 border border-slate-100 px-4 py-3" :class="STATUS[ev.type].accent">
+                        <div class="flex items-start justify-between gap-2">
+                          <div class="min-w-0">
+                            <p class="text-xs font-bold text-slate-800 leading-tight">{{ ev.vax.name }}</p>
+                            <p class="text-[10px] font-bold text-slate-500">Dose {{ ev.vax.doseNumber }}</p>
                           </div>
-                          <p v-else-if="vax.isCompleted" class="text-[10px] font-bold mt-0.5" :class="selectedVax?.doseId === vax.doseId ? 'text-white/80' : 'text-slate-600'">Given: {{ formatDisplayDate(vax.administeredDate) }}</p>
-                          <p v-else class="text-[10px] mt-0.5" :class="selectedVax?.doseId === vax.doseId ? 'text-white/70' : 'text-slate-400'">{{ formatDisplayDate(vax.scheduledDate) }}</p>
+                          <span class="shrink-0 px-2 py-0.5 rounded-full text-[8px] font-black uppercase" :class="STATUS[ev.type].pill">{{ STATUS[ev.type].short }}</span>
+                        </div>
+                        <div class="mt-1.5 text-[10px] text-slate-500 space-y-0.5">
+                          <template v-if="ev.type === 'vaccinated'">
+                            <p v-if="ev.vax.administeredByName">Vaccinated by <span class="font-bold text-slate-700">{{ ev.vax.administeredByName }}</span></p>
+                            <p v-if="ev.vax.injectionSite">Injection site: <span class="font-bold text-slate-700">{{ ev.vax.injectionSite }}</span></p>
+                            <p v-if="ev.vax.wasLate" class="text-amber-700 font-bold">Was due {{ formatDisplayDate(ev.vax.originalDueDate) }} ({{ ev.vax.daysLate }} {{ ev.vax.daysLate === 1 ? 'day' : 'days' }} late)</p>
+                          </template>
+                          <p v-else-if="ev.type === 'late'" class="text-amber-700 font-bold">Missed this date · vaccinated {{ formatDisplayDate(ev.vax.administeredDate) }}</p>
+                          <p v-else-if="ev.type === 'overdue'" class="text-red-700 font-bold">Not yet vaccinated. Please come on the next vaccination day{{ clinic?.nextOpenDay ? ` (${clinic.nextOpenDay})` : '' }}.</p>
+                          <p v-else>If you miss this day, come on any vaccination day until <span class="font-bold text-slate-700">{{ formatDisplayDate(addDays(ev.vax.scheduledDate, 14)) }}</span>.</p>
                         </div>
                       </div>
-                      <span v-if="selectedVax?.doseId === vax.doseId" class="text-[9px] font-bold text-white/80 uppercase tracking-wide shrink-0">Viewing →</span>
-                      <span v-else-if="vax.isCompleted" class="text-[9px] font-bold text-emerald-600 uppercase shrink-0">✓ Done</span>
-                    </button>
-                  </template>
+
+                      <div v-if="!monthEvents.length" class="text-xs text-slate-500 bg-white rounded-xl border border-dashed border-slate-300 p-4">
+                        <p class="font-bold text-slate-700">No vaccines for {{ selectedChild.firstName }} in {{ calendarMonthLabel }}.</p>
+                        <p v-if="nextAfterMonth" class="mt-1">
+                          Next dose: <span class="font-bold text-slate-700">{{ nextAfterMonth.vax.name }} · Dose {{ nextAfterMonth.vax.doseNumber }}</span>
+                          on {{ formatDisplayDate(nextAfterMonth.date) }}.
+                          <button @click="goToDate(nextAfterMonth.date)" class="block mt-2 text-[10px] font-bold text-emerald-700 uppercase tracking-wide hover:underline">Go to {{ format(nextAfterMonth.date, 'MMMM') }} →</button>
+                        </p>
+                        <p v-else-if="computedVaccineList.length && vaccinatedCount === computedVaccineList.length" class="mt-1 text-emerald-700 font-bold">All doses are complete.</p>
+                      </div>
+                      <p v-else-if="!activeCell?.events.length" class="text-xs text-slate-400 bg-white rounded-xl border border-dashed border-slate-200 p-4">
+                        No vaccine for {{ selectedChild.firstName }} on this day.
+                        <span class="block mt-1 text-slate-500">Tap a coloured day to see its vaccine details.</span>
+                      </p>
+                    </div>
+
+                    <!-- This month at a glance -->
+                    <div v-if="monthEvents.length" class="mt-6">
+                      <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2">This Month</p>
+                      <div class="space-y-1.5">
+                        <button v-for="ev in monthEvents" :key="'m-' + ev.type + ev.vax.doseId" @click="selectedKey = ev.key"
+                          class="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-white border border-slate-100 hover:border-slate-300 text-left transition-colors">
+                          <span class="w-2.5 h-2.5 rounded-full shrink-0" :class="STATUS[ev.type].dot"></span>
+                          <span class="text-[11px] font-bold text-slate-700 flex-1 truncate">{{ ev.vax.name }} · Dose {{ ev.vax.doseNumber }}</span>
+                          <span class="text-[10px] text-slate-400 shrink-0">{{ format(ev.date, 'MMM d') }}</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  </div>
                 </div>
               </div>
-              <div class="w-full lg:flex-1 flex flex-col gap-4 lg:sticky lg:top-22">
-                <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-7">
-                  <div v-if="selectedVax" class="flex items-center gap-3 mb-6 pb-5 border-b border-slate-50">
-                    <div class="w-9 h-9 bg-emerald-600 rounded-xl flex items-center justify-center text-white text-sm">💉</div>
-                    <div>
-                      <p class="text-sm font-bold text-slate-800 leading-tight">{{ selectedVax.name }}</p>
-                      <p class="text-[10px] text-emerald-500 font-bold uppercase">Dose {{ selectedVax.doseNumber }}</p>
-                    </div>
-                    <span class="ml-auto text-[10px] font-bold text-emerald-600 bg-emerald-600/10 px-3 py-1.5 rounded-full uppercase">
-                      {{ selectedVax.isCompleted ? formatDisplayDate(selectedVax.administeredDate) : formatDisplayDate(selectedVax.scheduledDate) }}
-                    </span>
-                  </div>
-                  <div class="flex items-center justify-between mb-5">
-                    <button @click="prevMonth" class="w-8 h-8 rounded-xl bg-slate-50 hover:bg-slate-100 flex items-center justify-center text-slate-500 font-bold transition-all text-sm">‹</button>
-                    <h3 class="font-bold text-base text-slate-800">{{ calendarMonthLabel }}</h3>
-                    <button @click="nextMonth" class="w-8 h-8 rounded-xl bg-slate-50 hover:bg-slate-100 flex items-center justify-center text-slate-500 font-bold transition-all text-sm">›</button>
-                  </div>
-                  <div class="grid grid-cols-7 gap-1 mb-2">
-                    <div v-for="(label, i) in ['S','M','T','W','T','F','S']" :key="i" class="text-center text-[9px] font-bold text-slate-300 uppercase py-1">{{ label }}</div>
-                  </div>
-                  <div class="grid grid-cols-7 gap-1">
-                    <div v-for="n in calendarOffset" :key="'sp-' + n" class="aspect-square"></div>
-                    <div v-for="day in calendarDaysInMonth" :key="day" :class="getDayClass(day)" class="aspect-square flex items-center justify-center rounded-xl text-[11px] font-bold transition-all">{{ day }}</div>
-                  </div>
-                  <div class="mt-5 flex flex-wrap items-center justify-center gap-4 border-t border-slate-50 pt-5">
-                    <div class="flex items-center gap-1.5"><div class="w-2.5 h-2.5 rounded-full bg-emerald-600"></div><span class="text-[9px] text-slate-400 font-bold uppercase">Scheduled</span></div>
-                    <div class="flex items-center gap-1.5"><div class="w-2.5 h-2.5 rounded-full bg-emerald-500"></div><span class="text-[9px] text-slate-400 font-bold uppercase">Given</span></div>
-                    <div class="flex items-center gap-1.5"><div class="w-2.5 h-2.5 rounded-full bg-red-400"></div><span class="text-[9px] text-slate-400 font-bold uppercase">Missed Due Date</span></div>
-                    <div class="flex items-center gap-1.5"><div class="w-2.5 h-2.5 rounded-full bg-emerald-500/40 border border-emerald-500/40"></div><span class="text-[9px] text-slate-400 font-bold uppercase">Catch-up Window</span></div>
-                    <div class="flex items-center gap-1.5"><div class="w-2.5 h-2.5 rounded-full bg-slate-100"></div><span class="text-[9px] text-slate-400 font-bold uppercase">Vaccination Day</span></div>
-                  </div>
-                </div>
-                <div class="space-y-2">
-                  <ClinicHoursNote :clinic="clinic" />
-                  <div class="bg-red-50 border-l-4 border-red-500 px-4 py-3 rounded-r-lg flex items-center gap-2">
-                    <span class="text-[9px] font-bold text-red-700 uppercase">⚠ Stocks may change without notice</span>
-                  </div>
-                  <div v-if="selectedVax && !selectedVax.isCompleted" class="bg-emerald-50 border-l-4 border-emerald-500 px-4 py-3 rounded-r-lg">
-                    <p class="text-[10px] text-emerald-600 font-bold uppercase mb-0.5">Catch-up Window</p>
-                    <p class="text-[10px] text-slate-500">{{ formatDisplayDate(selectedVax.scheduledDate) }} <span class="text-slate-300 mx-1">→</span> {{ formatDisplayDate(windowEndDate) }}</p>
-                  </div>
+
+              <div class="space-y-2">
+                <ClinicHoursNote :clinic="clinic" />
+                <div class="bg-red-50 border-l-4 border-red-500 px-4 py-3 rounded-r-lg flex items-center gap-2">
+                  <span class="text-[9px] font-bold text-red-700 uppercase">⚠ Stocks may change without notice</span>
                 </div>
               </div>
             </div>
@@ -152,24 +207,124 @@ function formatDisplayDate(date) {
 
 const computedVaccineList = computed(() => buildSchedule(scheduleTimeline.value, completedRecords.value))
 
-const groupedVaccineList = computed(() => {
-  const map = new Map()
+// ── Calendar ───────────────────────────────────────────────────────────────
+// Health-center palette: green / yellow / red on white, vaccination days
+// outlined in black. Scheduled stays blue (panel request) so it can't be
+// mistaken for vaccinated green.
+const STATUS = {
+  overdue:    { label: 'Overdue',         dot: 'bg-red-500',     cell: 'bg-red-500 text-white hover:bg-red-600',         pill: 'bg-red-100 text-red-700',         accent: 'border-l-red-500' },
+  scheduled:  { label: 'Scheduled',       dot: 'bg-blue-600',    cell: 'bg-blue-600 text-white hover:bg-blue-700',       pill: 'bg-blue-100 text-blue-700',       accent: 'border-l-blue-600' },
+  vaccinated: { label: 'Vaccinated',      dot: 'bg-emerald-500', cell: 'bg-emerald-500 text-white hover:bg-emerald-600', pill: 'bg-emerald-100 text-emerald-700', accent: 'border-l-emerald-500' },
+  late:       { label: 'Missed due date', dot: 'bg-amber-400',   cell: 'bg-amber-100 text-amber-900 border-2 border-amber-400 hover:bg-amber-200', pill: 'bg-amber-100 text-amber-800', accent: 'border-l-amber-400' },
+}
+for (const s of Object.values(STATUS)) s.short = s.label
+const STATUS_ORDER = ['overdue', 'scheduled', 'vaccinated', 'late']
+
+const legend = [
+  { label: 'Scheduled',                    swatch: 'bg-blue-600' },
+  { label: 'Vaccinated',                   swatch: 'bg-emerald-500' },
+  { label: 'Overdue (not yet vaccinated)', swatch: 'bg-red-500' },
+  { label: 'Missed due date',              swatch: 'bg-amber-100 border-2 border-amber-400' },
+  { label: 'Vaccination day',              swatch: 'bg-white border-2 border-slate-800' },
+  { label: 'Today',                        swatch: 'bg-white border-2 border-dashed border-amber-500' },
+]
+
+const dayKey = d => format(new Date(d), 'yyyy-MM-dd')
+const today = new Date(); today.setHours(0, 0, 0, 0)
+
+const vaccinatedCount = computed(() => computedVaccineList.value.filter(v => v.isCompleted).length)
+const nextDose = computed(() => computedVaccineList.value.find(v => !v.isCompleted) ?? null)
+
+// Every calendar mark of the child's schedule: { key, date, type, vax }
+const allEvents = computed(() => {
+  const events = []
   for (const vax of computedVaccineList.value) {
-    if (!map.has(vax.name)) map.set(vax.name, { name: vax.name, doses: [] })
-    map.get(vax.name).doses.push(vax)
+    if (vax.isCompleted) {
+      events.push({ type: 'vaccinated', date: vax.scheduledDate, vax })
+      if (vax.wasLate) events.push({ type: 'late', date: vax.originalDueDate, vax })
+    } else {
+      events.push({ type: vax.scheduledDate < today ? 'overdue' : 'scheduled', date: vax.scheduledDate, vax })
+    }
   }
-  return Array.from(map.values())
+  return events
+    .map(e => ({ ...e, key: dayKey(e.date) }))
+    .sort((a, b) => a.date - b.date || STATUS_ORDER.indexOf(a.type) - STATUS_ORDER.indexOf(b.type))
 })
 
-// ── Calendar ───────────────────────────────────────────────────────────────
-const selectedVax = ref(null)
-const calYear     = ref(new Date().getFullYear())
-const calMonth    = ref(new Date().getMonth())
+const eventsByDay = computed(() => {
+  const map = new Map()
+  for (const e of allEvents.value) {
+    if (!map.has(e.key)) map.set(e.key, [])
+    map.get(e.key).push(e)
+  }
+  return map
+})
 
-const calendarMonthLabel  = computed(() => format(new Date(calYear.value, calMonth.value, 1), 'MMMM yyyy'))
-const calendarDaysInMonth = computed(() => getDaysInMonth(new Date(calYear.value, calMonth.value, 1)))
-const calendarOffset      = computed(() => startOfMonth(new Date(calYear.value, calMonth.value, 1)).getDay())
-const windowEndDate       = computed(() => selectedVax.value ? addDays(selectedVax.value.scheduledDate, 14) : null)
+const calYear  = ref(today.getFullYear())
+const calMonth = ref(today.getMonth())
+const selectedKey = ref(dayKey(today))
+const hoveredKey  = ref(null)
+// Hovering previews a day on a computer; tapping (or clicking) keeps it.
+const activeKey = computed(() => hoveredKey.value ?? selectedKey.value)
+
+const calendarMonthLabel = computed(() => format(new Date(calYear.value, calMonth.value, 1), 'MMMM yyyy'))
+const calendarOffset     = computed(() => startOfMonth(new Date(calYear.value, calMonth.value, 1)).getDay())
+
+function describeDay(date) {
+  const key = dayKey(date)
+  const exception = (clinic.value?.exceptions || []).find(e => e.date === key)
+  const events = eventsByDay.value.get(key) || []
+  return {
+    key,
+    date,
+    day: date.getDate(),
+    events,
+    types: STATUS_ORDER.filter(t => events.some(e => e.type === t)),
+    isToday: key === dayKey(today),
+    isClinicDay: isClinicDay(date),
+    closedReason: exception && !exception.isOpen,
+  }
+}
+
+const calendarCells = computed(() => {
+  const days = getDaysInMonth(new Date(calYear.value, calMonth.value, 1))
+  return Array.from({ length: days }, (_, i) => {
+    const cell = describeDay(new Date(calYear.value, calMonth.value, i + 1))
+    const what = cell.events.map(e => `${STATUS[e.type].label}: ${e.vax.name} dose ${e.vax.doseNumber}`).join('; ')
+    cell.ariaLabel = `${format(cell.date, 'MMMM d')}${what ? ` — ${what}` : cell.isClinicDay ? ' — vaccination day' : ''}`
+    return cell
+  })
+})
+
+// The day shown in the details panel (it may be in another month after
+// "This month" / "Next dose" jumps, so it's described on its own).
+const activeCell = computed(() => {
+  const [y, m, d] = activeKey.value.split('-').map(Number)
+  return describeDay(new Date(y, m - 1, d))
+})
+const activeDayLabel = computed(() => format(activeCell.value.date, 'EEEE, MMMM d, yyyy'))
+// A month with no vaccines shows a month summary until a day is hovered/tapped
+const showMonthSummary = computed(() => !monthEvents.value.length && !hoveredKey.value &&
+  selectedKey.value === dayKey(new Date(calYear.value, calMonth.value, 1)))
+
+const monthEvents = computed(() =>
+  allEvents.value.filter(e => e.date.getFullYear() === calYear.value && e.date.getMonth() === calMonth.value))
+
+function cellClass(cell) {
+  const top = cell.types[0]
+  if (top) return STATUS[top].cell + ' shadow-sm cursor-pointer'
+  if (cell.closedReason) return 'bg-slate-50 text-slate-300 line-through cursor-pointer'
+  if (cell.isClinicDay) return 'bg-white text-slate-900 border-2 border-slate-800 hover:bg-slate-50 cursor-pointer'
+  return 'text-slate-300 hover:bg-slate-50 cursor-pointer'
+}
+
+function goToDate(date) {
+  const d = new Date(date)
+  calYear.value = d.getFullYear()
+  calMonth.value = d.getMonth()
+  selectedKey.value = dayKey(d)
+}
+function goToToday() { goToDate(today) }
 
 // Clinic (vaccination) days come from the admin's Operating Hours: the open
 // weekdays, with holidays / special openings taking priority.
@@ -192,41 +347,29 @@ async function fetchClinicHours() {
   }
 }
 
-function prevMonth() { calMonth.value === 0 ? (calMonth.value = 11, calYear.value--) : calMonth.value-- }
-function nextMonth() { calMonth.value === 11 ? (calMonth.value = 0, calYear.value++) : calMonth.value++ }
-
-function getDayClass(day) {
-  if (!selectedVax.value) return 'text-slate-200'
-  const date      = new Date(calYear.value, calMonth.value, day)
-  const scheduled = selectedVax.value.scheduledDate
-  const winEnd    = windowEndDate.value
-  const clinicDay = isClinicDay(date)
-  const sameDay   = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
-
-  if (selectedVax.value.wasLate && selectedVax.value.originalDueDate && sameDay(date, selectedVax.value.originalDueDate))
-    return 'bg-red-400 text-white shadow-lg scale-110 font-bold z-10 cursor-default'
-  if (selectedVax.value.isCompleted && selectedVax.value.administeredDate && sameDay(date, selectedVax.value.administeredDate))
-    return 'bg-emerald-500 text-white shadow-lg scale-110 font-bold z-10 cursor-default'
-  if (!selectedVax.value.isCompleted && sameDay(date, scheduled))
-    return 'bg-emerald-600 text-white shadow-lg scale-110 font-bold z-10 cursor-default'
-  if (!selectedVax.value.isCompleted && clinicDay && winEnd && date > scheduled && date <= winEnd)
-    return 'bg-emerald-500/30 text-slate-700 border-b-2 border-emerald-500 cursor-pointer'
-  if (clinicDay) return 'bg-slate-100 text-slate-400 cursor-pointer'
-  return 'text-slate-300 pointer-events-none'
+// Moving to another month opens that month's vaccines right away: the first
+// dose still to come (or the first dose of the month), else the 1st, where
+// the panel says the month has none and when the next one is.
+function showMonth() {
+  hoveredKey.value = null
+  const first = monthEvents.value.find(e => e.type === 'scheduled' || e.type === 'overdue') ?? monthEvents.value[0]
+  selectedKey.value = first ? first.key : dayKey(new Date(calYear.value, calMonth.value, 1))
 }
+function prevMonth() { calMonth.value === 0 ? (calMonth.value = 11, calYear.value--) : calMonth.value--; showMonth() }
+function nextMonth() { calMonth.value === 11 ? (calMonth.value = 0, calYear.value++) : calMonth.value++; showMonth() }
+
+// For a month without vaccines: the next dose after it (if any)
+const nextAfterMonth = computed(() => {
+  const end = new Date(calYear.value, calMonth.value + 1, 1)
+  return allEvents.value.find(e => e.date >= end && (e.type === 'scheduled' || e.type === 'overdue')) ?? null
+})
 
 // ── Watchers ───────────────────────────────────────────────────────────────
-watch(computedVaccineList, (list) => {
-  if (list.length && (!selectedVax.value || !list.find(v => v.doseId === selectedVax.value?.doseId)))
-    selectedVax.value = list[0]
-}, { immediate: true })
-
-watch(selectedVax, (vax) => {
-  if (vax?.scheduledDate) {
-    calYear.value  = new Date(vax.scheduledDate).getFullYear()
-    calMonth.value = new Date(vax.scheduledDate).getMonth()
-  }
-}, { immediate: true })
+// When a child's schedule loads, open the calendar on their next dose
+// (or today, once every dose is done).
+watch(scheduleTimeline, () => {
+  goToDate(nextDose.value?.scheduledDate ?? today)
+})
 
 // ── Actions ────────────────────────────────────────────────────────────────
 function handleLogout() {
@@ -244,11 +387,12 @@ async function fetchRecords(childId) {
   if (!childId) return
   try {
     const { timeline, records } = await fetchChildSchedule(childId)
-    scheduleTimeline.value = timeline
     completedRecords.value = records
+    scheduleTimeline.value = timeline   // last: its watcher reads the finished schedule
   } catch (err) {
     console.error('fetchRecords error:', err)
     completedRecords.value = []
+    scheduleTimeline.value = []
   }
 }
 

@@ -73,6 +73,8 @@ namespace AndroidWebAPI.Controllers
                 closesAt = Time(closes),
                 checkInUntil = Time(cutoff),
                 checkInOpenNow = open && DateTime.Now.TimeOfDay >= opens && DateTime.Now.TimeOfDay <= cutoff,
+                // Early morning of a vaccination day: today is still the next vaccination day
+                checkInNotYetOpen = open && DateTime.Now.TimeOfDay < opens,
                 reason = exception?.Reason,
                 nextOpenDay = nextOpen.ToString("dddd, MMMM d"),
                 openDays,

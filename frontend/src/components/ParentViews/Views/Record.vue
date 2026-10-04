@@ -18,21 +18,27 @@
 
         <main class="col-span-12 lg:col-span-9">
           <div class="space-y-5 animate-in fade-in slide-in-from-right-4 duration-500">
-            <div class="grid grid-cols-3 gap-4">
-              <div class="bg-emerald-600 p-6 rounded-xl text-center text-white shadow-sm"><h3 class="text-4xl font-black">{{ recordStats.completed }}</h3><p class="text-[9px] uppercase font-bold opacity-70 mt-1 tracking-widest">Completed</p></div>
-              <div class="bg-blue-600 p-6 rounded-xl text-center text-white shadow-sm"><h3 class="text-4xl font-black">{{ recordStats.scheduled }}</h3><p class="text-[9px] uppercase font-bold opacity-70 mt-1 tracking-widest">Scheduled</p></div>
-              <div class="bg-red-500 p-6 rounded-xl text-center text-white shadow-sm"><h3 class="text-4xl font-black">{{ recordStats.overdue }}</h3><p class="text-[9px] uppercase font-bold opacity-70 mt-1 tracking-widest">Overdue</p></div>
-            </div>
             <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
               <div class="px-8 py-6 border-b border-slate-50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                  <h2 class="text-base font-bold text-slate-800">Vaccination History</h2>
-                  <p class="text-[10px] text-slate-400 mt-0.5">{{ selectedChild?.firstName }} {{ selectedChild?.lastName }} <span class="text-slate-200 mx-1">·</span> {{ vaccinationHistory.length }} record{{ vaccinationHistory.length !== 1 ? 's' : '' }}</p>
+                <div class="flex items-center gap-4">
+                  <div v-if="selectedChild" class="w-12 h-12 shrink-0 rounded-xl bg-emerald-50 border border-emerald-500/20 flex items-center justify-center text-2xl">{{ selectedChild.sex === 'Female' ? '👧' : '👶' }}</div>
+                  <div>
+                    <p class="text-[10px] font-bold text-emerald-600 uppercase tracking-[0.2em]">Vaccination History</p>
+                    <h2 class="text-2xl font-black text-slate-800 leading-tight">{{ selectedChild?.firstName }} {{ selectedChild?.lastName }}</h2>
+                    <p class="text-[11px] font-bold text-slate-400 mt-0.5">{{ vaccinationHistory.length }} record{{ vaccinationHistory.length !== 1 ? 's' : '' }}</p>
+                  </div>
                 </div>
-                <div class="flex gap-1 bg-slate-50 p-1 rounded-xl">
+                <div class="flex flex-wrap gap-1 bg-slate-50 p-1 rounded-xl">
                   <button v-for="f in ['All', 'Completed', 'Scheduled', 'Overdue']" :key="f" @click="recordFilter = f"
-                          :class="recordFilter === f ? 'bg-white shadow-sm text-emerald-600 font-bold' : 'text-slate-400 hover:text-slate-600'"
-                          class="px-3 py-1.5 rounded-lg text-[9px] uppercase font-bold transition-all">{{ f }}</button>
+                          :class="recordFilter === f ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-700'"
+                          class="px-3 py-1.5 rounded-lg text-[10px] uppercase font-bold transition-all flex items-center gap-1.5">
+                    {{ f }}
+                    <span v-if="f !== 'All'" class="min-w-5 h-5 px-1.5 rounded-full text-[11px] font-black leading-5 text-center"
+                          :class="recordStats[f.toLowerCase()] === 0 ? 'bg-slate-200 text-slate-500'
+                                : f === 'Completed' ? 'bg-emerald-500 text-white'
+                                : f === 'Scheduled' ? 'bg-blue-600 text-white'
+                                : 'bg-red-500 text-white'">{{ recordStats[f.toLowerCase()] }}</span>
+                  </button>
                 </div>
               </div>
               <div v-if="recordsLoading" class="py-16 text-center text-slate-400"><p class="text-2xl mb-2 animate-pulse">💉</p><p class="text-xs font-bold">Loading records...</p></div>
@@ -45,7 +51,7 @@
                     <th class="px-6 py-3">Dose</th>
                     <th class="px-6 py-3">Status</th>
                     <th class="px-6 py-3">Site</th>
-                    <th class="px-6 py-3">Given By</th>
+                    <th class="px-6 py-3">Vaccinated By</th>
                     <th class="px-6 py-3">Lot #</th>
                   </tr></thead>
                   <tbody>
