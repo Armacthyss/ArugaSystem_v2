@@ -41,12 +41,15 @@ namespace AndroidWebAPI.Services
         private static DateTime _smsCountDay = DateTime.Today;
         private static int _smsCountToday;
 
-        public MessageSender(IConfiguration config, IHttpClientFactory httpFactory, ILogger<MessageSender> logger, IHostEnvironment env)
+        private readonly SurveyMode _survey;
+
+        public MessageSender(IConfiguration config, IHttpClientFactory httpFactory, ILogger<MessageSender> logger, IHostEnvironment env, SurveyMode survey)
         {
             _config = config;
             _httpFactory = httpFactory;
             _logger = logger;
             _isDevelopment = env.IsDevelopment();
+            _survey = survey;
         }
 
         public bool EmailEnabled =>
@@ -115,6 +118,13 @@ namespace AndroidWebAPI.Services
             // sending to them would only fill the clinic inbox with bounces.
             bool testAddress = IsTestAddress(to);
 
+            // Survey mode: public testers must not email real people
+            if (!_survey.MessagesAllowed)
+            {
+                _logger.LogWarning("[Email not sent: survey mode] To: {To} | {Subject}\n{Body}", to, subject, body);
+                return true;
+            }
+
             if (!EmailEnabled || testAddress)
             {
                 _logger.LogWarning("[{Reason}] To: {To} | {Subject}\n{Body}",
@@ -162,8 +172,11 @@ namespace AndroidWebAPI.Services
         // Super Admin "Send a test message": sends right away and returns why it
         // failed (null = sent), so a setup problem shows on screen, not only in
         // the server log. A test text uses one of the day's SMS allowance.
+        public const string SurveyModeNoMessages = "Messages are switched off while this test copy is used for the survey.";
+
         public async Task<string?> TestEmailAsync(string to)
         {
+            if (!_survey.MessagesAllowed) return SurveyModeNoMessages;
             if (!EmailEnabled) return "Email is not set up on this server (Email:Host, Email:Username and Email:Password in appsettings.json).";
             try
             {
@@ -180,6 +193,7 @@ namespace AndroidWebAPI.Services
 
         public async Task<string?> TestSmsAsync(string number)
         {
+            if (!_survey.MessagesAllowed) return SurveyModeNoMessages;
             if (!SmsEnabled) return "SMS is not set up on this server (Sms:TextBeeApiKey in appsettings.json).";
             var normalized = NormalizePhNumber(number);
             if (normalized == null) return "Please enter a Philippine mobile number, e.g. 0917 123 4567.";
@@ -193,6 +207,13 @@ namespace AndroidWebAPI.Services
         {
             var normalized = NormalizePhNumber(number);
             if (normalized == null) return false;
+
+            // Survey mode: public testers must not text real people (or use up the load)
+            if (!_survey.MessagesAllowed)
+            {
+                _logger.LogWarning("[SMS not sent: survey mode] To: {Number}\n{Text}", normalized, text);
+                return true;
+            }
 
             if (!SmsEnabled || demoRecipient)
             {

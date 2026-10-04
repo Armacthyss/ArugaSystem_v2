@@ -540,6 +540,7 @@ namespace AndroidWebAPI.Controllers
             account.LastLogin = DateTime.Now;
 
             await _context.SaveChangesAsync();
+            HttpContext.RequestServices.GetRequiredService<AndroidWebAPI.Services.SurveyMode>().SignedIn();
 
             await LogLoginAsync(account, identifier, "Success", "Signed in successfully.");
 
@@ -719,6 +720,28 @@ if (account.AccountType == "SystemAdmin")
                 message = "Unsupported account type."
             });
         }
+
+        // =========================================================
+        // SURVEY MODE (public test copy, off unless survey-mode.ps1 -On)
+        // POST /api/auth/logout  -> this browser has left (the test data
+        //                          resets once every tester has)
+        // GET  /api/auth/survey  -> { enabled } for the note on Sign In
+        // =========================================================
+
+        [Authorize]
+        [HttpPost("logout")]
+        public IActionResult Logout([FromServices] AndroidWebAPI.Services.SurveyMode survey)
+        {
+            var auth = Request.Headers.Authorization.ToString();
+            if (survey.Enabled && auth.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+                survey.LoggedOut(AndroidWebAPI.Services.SurveyMode.KeyFor(auth[7..].Trim()));
+            return Ok();
+        }
+
+        [AllowAnonymous]
+        [HttpGet("survey")]
+        public IActionResult SurveyStatus([FromServices] AndroidWebAPI.Services.SurveyMode survey) =>
+            Ok(new { enabled = survey.Enabled });
 
         private static string RoleForPosition(string? position) =>
             AndroidWebAPI.Services.Roles.ForPosition(position);
