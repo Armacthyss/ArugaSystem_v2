@@ -23,6 +23,39 @@
             </div>
           </div>
 
+          <!-- SURVEY MODE ONLY: send this account's reminder to the tester's own email/phone -->
+          <div v-if="surveyMode && children.length" class="rounded-xl border border-amber-300 bg-amber-50 p-5">
+            <p class="text-sm font-bold text-amber-900">📨 Try the notifications on your own phone and email</p>
+            <p class="text-[11px] text-amber-900/80 mt-1">
+              Type your email and/or mobile number. You'll get {{ notifyChildName }}'s next vaccine reminder by
+              <b>email</b>, <b>text message</b> and here in the <b>app (🔔)</b>. Your details are used once and are not saved.
+            </p>
+            <div class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <input v-model="notify.email" type="email" placeholder="Your email (optional)"
+                class="w-full px-3 py-2.5 text-sm bg-white border border-amber-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400" />
+              <input v-model="notify.phone" type="tel" placeholder="Your mobile no., e.g. 0917 123 4567"
+                class="w-full px-3 py-2.5 text-sm bg-white border border-amber-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400" />
+            </div>
+            <select v-if="children.length > 1" v-model="notify.childId"
+              class="mt-3 w-full px-3 py-2.5 text-sm bg-white border border-amber-200 rounded-lg">
+              <option v-for="c in children" :key="c.childID" :value="c.childID">Reminder for {{ c.firstName }} {{ c.lastName }}</option>
+            </select>
+            <button @click="sendNotifyMe" :disabled="notify.loading || (!notify.email.trim() && !notify.phone.trim())"
+              class="mt-3 w-full py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-bold transition-colors">
+              {{ notify.loading ? 'Sending…' : 'Send the reminder to me' }}
+            </button>
+            <p v-if="notify.error" class="text-xs text-red-600 font-bold mt-2">⚠ {{ notify.error }}</p>
+            <ul v-if="notify.result" class="mt-2 text-xs font-bold space-y-0.5">
+              <li class="text-emerald-700">✓ In the app: check the 🔔 bell</li>
+              <li v-if="notify.result.email" :class="notify.result.email === 'sent' ? 'text-emerald-700' : 'text-red-600'">
+                {{ notify.result.email === 'sent' ? '✓ Email sent: check your inbox (and Spam)' : '✗ Email: ' + notify.result.email }}
+              </li>
+              <li v-if="notify.result.sms" :class="notify.result.sms === 'sent' ? 'text-emerald-700' : 'text-red-600'">
+                {{ notify.result.sms === 'sent' ? '✓ Text sent: it may take a minute to arrive' : '✗ Text: ' + notify.result.sms }}
+              </li>
+            </ul>
+          </div>
+
           <!-- CHANGE PASSWORD -->
           <div>
             <button @click="showChangePw = !showChangePw"
@@ -181,6 +214,36 @@ function calculateAge(birthDate) {
   if (years === 0) return s(months, 'month')
   if (months === 0) return s(years, 'year')
   return `${s(years, 'year')} ${s(months, 'month')}`
+}
+
+// ── Survey mode only: "Send the reminder to me" ─────────────────────────
+// (POST /api/survey/notify-me; the box is hidden when survey mode is off)
+const surveyMode = ref(false)
+axios.get(`${API_BASE_URL}/api/auth/survey`).then(r => { surveyMode.value = !!r.data?.enabled }).catch(() => {})
+
+const notify = ref({ email: '', phone: '', childId: props.children[0]?.childID ?? null, loading: false, error: '', result: null })
+const notifyChildName = computed(() => {
+  const c = props.children.find(x => x.childID === notify.value.childId) ?? props.children[0]
+  return c ? c.firstName : 'your child'
+})
+
+async function sendNotifyMe() {
+  const n = notify.value
+  n.error = ''
+  n.result = null
+  n.loading = true
+  try {
+    const token = localStorage.getItem('authToken')
+    n.result = (await axios.post(`${API_BASE_URL}/api/survey/notify-me`, {
+      childId: n.childId ?? props.children[0]?.childID,
+      email: n.email.trim() || null,
+      phone: n.phone.trim() || null,
+    }, { headers: token ? { Authorization: `Bearer ${token}` } : {} })).data
+  } catch (err) {
+    n.error = err.response?.data?.message || 'Could not send. Please try again.'
+  } finally {
+    n.loading = false
+  }
 }
 
 // ── Children accordion ──────────────────────────────────────────────────

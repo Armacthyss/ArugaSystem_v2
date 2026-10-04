@@ -251,6 +251,7 @@ axios.get(`${API_BASE_URL}/survey`).then(r => { surveyMode.value = !!r.data?.ena
         <div v-if="surveyMode" class="mb-6 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-900">
           <p class="font-bold">Test copy for our survey</p>
           <p class="mt-0.5">Feel free to try anything. Please <b>log out</b> when you're done: everything resets for the next person a few minutes after everyone has logged out.</p>
+          <p class="mt-1.5">Parents: open <b>View Profile</b> to receive a test reminder on your own email and phone.</p>
         </div>
 
         <!-- USERNAME / EMAIL -->
