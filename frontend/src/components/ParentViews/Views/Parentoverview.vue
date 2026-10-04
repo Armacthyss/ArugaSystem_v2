@@ -55,7 +55,8 @@
                     <router-link to="/ParentCheckin" class="text-emerald-600 underline">Check-in</router-link>
                     and scan the QR code at the entrance.
                   </p>
-                  <p v-else-if="clinic" class="text-sm font-bold text-slate-500 mt-1">Check-in for vaccinations today is from {{ clinic.opensAt }} until {{ clinic.checkInUntil }}. The next vaccination day is {{ clinic.nextOpenDay }}.</p>
+                  <p v-else-if="clinic?.checkInNotYetOpen" class="text-sm font-bold text-slate-500 mt-1">Today is a vaccination day. Check-in opens at {{ clinic.opensAt }} and runs until {{ clinic.checkInUntil }}.</p>
+                  <p v-else-if="clinic" class="text-sm font-bold text-slate-500 mt-1">Check-in for vaccinations today closed at {{ clinic.checkInUntil }}. The next vaccination day is {{ clinic.nextOpenDay }}.</p>
                 </template>
               </div>
               <div v-if="showNowServing" class="bg-emerald-50 px-10 py-6 rounded-xl border border-emerald-500/20 text-center min-w-45">
@@ -65,27 +66,64 @@
               </div>
             </div>
 
-            <div v-if="selectedChild" class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-              <div class="bg-emerald-600 px-8 py-5 flex items-center gap-5">
-                <div class="w-14 h-14 rounded-xl bg-white/20 flex items-center justify-center text-3xl shadow">{{ selectedChild.sex === 'Female' ? '👧' : '👶' }}</div>
-                <div>
-                  <p class="text-white font-bold text-lg leading-tight">{{ selectedChild.firstName }} {{ selectedChild.lastName }}</p>
-                  <p class="text-emerald-200 text-[10px] font-bold uppercase mt-0.5">{{ selectedChild.healthCenter || 'Leveriza Health Center' }}</p>
+            <div v-if="selectedChild" class="grid grid-cols-1 md:grid-cols-5 gap-5">
+
+              <!-- Child profile (compact) -->
+              <div class="md:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="bg-emerald-600 px-5 py-4 flex items-center gap-3">
+                  <div class="w-11 h-11 shrink-0 rounded-xl bg-white/20 flex items-center justify-center text-2xl shadow">{{ selectedChild.sex === 'Female' ? '👧' : '👶' }}</div>
+                  <div class="min-w-0">
+                    <p class="text-white font-bold text-base leading-tight truncate">{{ selectedChild.firstName }} {{ selectedChild.lastName }}</p>
+                    <p class="text-emerald-200 text-[9px] font-bold uppercase mt-0.5 truncate">{{ selectedChild.healthCenter || 'Leveriza Health Center' }}</p>
+                    <p v-if="selectedChild.familyNo" class="text-white/80 font-mono text-[10px] font-bold mt-0.5">{{ selectedChild.familyNo }}</p>
+                  </div>
                 </div>
-                <div v-if="selectedChild.familyNo" class="ml-auto text-right hidden sm:block">
-                  <p class="text-[10px] text-white/60 font-black uppercase">Family No.</p>
-                  <p class="text-white font-mono text-xs font-bold">{{ selectedChild.familyNo }}</p>
-                </div>
+                <dl class="grid grid-cols-2 gap-x-4 gap-y-3 px-5 py-4">
+                  <div><dt class="text-[9px] font-semibold text-slate-400 uppercase tracking-wide">Date of Birth</dt><dd class="text-xs font-bold text-slate-800">{{ formatDisplayDate(new Date(selectedChild.birthDate)) }}</dd></div>
+                  <div><dt class="text-[9px] font-semibold text-slate-400 uppercase tracking-wide">Age</dt><dd class="text-xs font-bold text-slate-800">{{ childAge }}</dd></div>
+                  <div><dt class="text-[9px] font-semibold text-slate-400 uppercase tracking-wide">Sex</dt><dd class="text-xs font-bold text-slate-800">{{ selectedChild.sex || '—' }}</dd></div>
+                  <div><dt class="text-[9px] font-semibold text-slate-400 uppercase tracking-wide">Barangay</dt><dd class="text-xs font-bold text-slate-800">{{ selectedChild.barangay || selectedChild.barangayNo || selectedChild.Barangay || '—' }}</dd></div>
+                  <div><dt class="text-[9px] font-semibold text-slate-400 uppercase tracking-wide">Birth Weight</dt><dd class="text-xs font-bold text-slate-800">{{ selectedChild.birthWeight ? Number(selectedChild.birthWeight) + ' kg' : 'Not recorded' }}</dd></div>
+                  <div><dt class="text-[9px] font-semibold text-slate-400 uppercase tracking-wide">Birth Height</dt><dd class="text-xs font-bold text-slate-800">{{ selectedChild.birthHeight ? Number(selectedChild.birthHeight) + ' cm' : 'Not recorded' }}</dd></div>
+                </dl>
               </div>
-              <div class="grid grid-cols-2 sm:grid-cols-3 divide-x divide-y divide-slate-50">
-                <div class="px-6 py-5"><p class="text-[9px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Date of Birth</p><p class="text-sm font-bold text-slate-800">{{ formatDisplayDate(new Date(selectedChild.birthDate)) }}</p></div>
-                <div class="px-6 py-5"><p class="text-[9px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Age</p><p class="text-sm font-bold text-slate-800">{{ childAge }}</p></div>
-                <div class="px-6 py-5"><p class="text-[9px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Sex</p><p class="text-sm font-bold text-slate-800">{{ selectedChild.sex || '—' }}</p></div>
-                <div class="px-6 py-5"><p class="text-[9px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Birth Weight</p><p class="text-sm font-bold text-slate-800">{{ selectedChild.birthWeight ? Number(selectedChild.birthWeight) + ' kg' : 'Not recorded' }}</p></div>
-                <div class="px-6 py-5"><p class="text-[9px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Birth Height</p><p class="text-sm font-bold text-slate-800">{{ selectedChild.birthHeight ? Number(selectedChild.birthHeight) + ' cm' : 'Not recorded' }}</p></div>
-                <div class="px-6 py-5">
-                  <p class="text-[9px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Barangay</p>
-                  <p class="text-sm font-bold text-slate-800">{{ selectedChild.barangay || selectedChild.barangayNo || selectedChild.Barangay || '—' }}</p>
+
+              <!-- Vaccination progress -->
+              <div class="md:col-span-3 bg-white rounded-xl border border-slate-200 shadow-sm p-6 flex flex-col">
+                <div class="flex justify-between items-start gap-4">
+                  <div>
+                    <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Vaccination Progress</p>
+                    <p class="mt-1 text-4xl font-black text-slate-800 leading-none">
+                      {{ completedCount }}<span class="text-xl text-slate-400">/{{ totalDoses }}</span>
+                    </p>
+                    <p class="text-[11px] font-bold text-slate-500 mt-1">doses vaccinated</p>
+                  </div>
+                  <span class="px-3 py-1 bg-emerald-50 rounded-lg text-xs font-black text-emerald-600 border border-emerald-500/20">{{ progressPercent }}%</span>
+                </div>
+                <div class="mt-4 h-2.5 w-full rounded-full bg-slate-100 overflow-hidden">
+                  <div class="h-full rounded-full bg-emerald-500 transition-all duration-500" :style="{ width: progressPercent + '%' }"></div>
+                </div>
+
+                <div class="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div class="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                    <p class="text-[9px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Latest Vaccine</p>
+                    <template v-if="latestDose">
+                      <p class="text-xs font-bold text-slate-800">{{ latestDose.name }} · Dose {{ latestDose.doseNumber }}</p>
+                      <p class="text-[10px] text-slate-400 mt-0.5">Vaccinated {{ formatDisplayDate(latestDose.administeredDate ?? latestDose.scheduledDate) }}</p>
+                    </template>
+                    <p v-else class="text-xs font-bold text-slate-400">No doses recorded yet</p>
+                  </div>
+                  <div class="p-4 rounded-xl border" :class="nextDose && isOverdue(nextDose) ? 'bg-red-50 border-red-200' : 'bg-emerald-50 border-emerald-500/20'">
+                    <p class="text-[9px] font-semibold uppercase tracking-wide mb-1" :class="nextDose && isOverdue(nextDose) ? 'text-red-600' : 'text-emerald-600'">
+                      {{ nextDose && isOverdue(nextDose) ? 'Next Vaccine · Overdue' : 'Next Vaccine' }}
+                    </p>
+                    <template v-if="nextDose">
+                      <p class="text-xs font-bold text-slate-800">{{ nextDose.name }} · Dose {{ nextDose.doseNumber }}</p>
+                      <p class="text-[10px] text-slate-500 mt-0.5">{{ isOverdue(nextDose) ? 'Was due' : 'Due' }} {{ formatDisplayDate(nextDose.scheduledDate) }}</p>
+                    </template>
+                    <p v-else-if="totalDoses > 0" class="text-xs font-bold text-emerald-700">All doses complete 🎉</p>
+                    <p v-else class="text-xs font-bold text-slate-400">No schedule on file</p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -318,6 +356,19 @@ const upcomingDoses = computed(() => {
     .filter(item => !item.isCompleted)
     .sort((a, b) => a.scheduledDate - b.scheduledDate)
 })
+
+// Vaccination progress card: doses given out of the child's full schedule.
+const totalDoses = computed(() => computedVaccineList.value.length)
+const completedCount = computed(() => computedVaccineList.value.filter(v => v.isCompleted).length)
+const progressPercent = computed(() =>
+  totalDoses.value ? Math.round((completedCount.value / totalDoses.value) * 100) : 0)
+
+const latestDose = computed(() => {
+  const given = computedVaccineList.value.filter(v => v.isCompleted)
+  return given.length ? given[given.length - 1] : null
+})
+
+const nextDose = computed(() => upcomingDoses.value[0] ?? null)
 
 
 // =====================================================

@@ -33,7 +33,8 @@ const dayOnly = d => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x }
 
 // One row per scheduled dose:
 //   { doseId, vaccineId, name, doseNumber, scheduledDate, originalDueDate,
-//     isCompleted, administeredDate, wasLate, daysLate }
+//     isCompleted, administeredDate, wasLate, daysLate,
+//     administeredByName, injectionSite }
 // scheduledDate is the administration date for doses already given,
 // otherwise the (possibly recalculated) date the child is due.
 export function buildSchedule(timeline, records) {
@@ -62,6 +63,8 @@ export function buildSchedule(timeline, records) {
         administeredDate,
         wasLate,
         daysLate,
+        administeredByName: record?.administeredByName ?? record?.AdministeredByName ?? null,
+        injectionSite: record?.injectionSite ?? record?.InjectionSite ?? null,
       }
     })
     .sort((a, b) => a.scheduledDate - b.scheduledDate || a.name.localeCompare(b.name))
