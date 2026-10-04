@@ -172,16 +172,18 @@ namespace AndroidWebAPI.Services
         // Super Admin "Send a test message": sends right away and returns why it
         // failed (null = sent), so a setup problem shows on screen, not only in
         // the server log. A test text uses one of the day's SMS allowance.
-        public const string SurveyModeNoMessages = "Messages are switched off while this test copy is used for the survey.";
-
-        public async Task<string?> TestEmailAsync(string to)
+        //
+        // Survey mode also uses these for the parent's "Send my notifications
+        // to me" (subject/body/text given): like the Super Admin test, they
+        // only ever go to an address the tester typed in, never to one stored
+        // in the database, so they work while other messages are off.
+        public async Task<string?> TestEmailAsync(string to, string? subject = null, string? body = null)
         {
-            if (!_survey.MessagesAllowed) return SurveyModeNoMessages;
             if (!EmailEnabled) return "Email is not set up on this server (Email:Host, Email:Username and Email:Password in appsettings.json).";
             try
             {
-                await DeliverEmailAsync(to, "Aruga test email",
-                    "This is a test email from Aruga. If you can read this, email notifications work on this server.");
+                await DeliverEmailAsync(to, subject ?? "Aruga test email",
+                    body ?? "This is a test email from Aruga. If you can read this, email notifications work on this server.");
                 return null;
             }
             catch (Exception ex)
@@ -191,14 +193,13 @@ namespace AndroidWebAPI.Services
             }
         }
 
-        public async Task<string?> TestSmsAsync(string number)
+        public async Task<string?> TestSmsAsync(string number, string? text = null)
         {
-            if (!_survey.MessagesAllowed) return SurveyModeNoMessages;
             if (!SmsEnabled) return "SMS is not set up on this server (Sms:TextBeeApiKey in appsettings.json).";
             var normalized = NormalizePhNumber(number);
             if (normalized == null) return "Please enter a Philippine mobile number, e.g. 0917 123 4567.";
             if (!TakeSmsAllowance()) return $"Today's limit of {SmsDailyLimit} texts has been reached.";
-            return await DeliverSmsAsync(normalized, "Aruga test text: SMS notifications work on this server.");
+            return await DeliverSmsAsync(normalized, text ?? "Aruga test text: SMS notifications work on this server.");
         }
 
         // demoRecipient: a demo account (DemoSeed.sql) whose made-up number could

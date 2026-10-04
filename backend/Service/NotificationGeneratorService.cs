@@ -344,6 +344,44 @@ public class NotificationGeneratorService : BackgroundService
         };
     }
 
+    // Survey mode "Send my notifications to me": the reminder the parent
+    // would get for this dose, in the same words as the daily reminders above
+    // (app/email title + message, and the text message).
+    internal static (string Type, string Title, string Message, string Sms) SampleReminder(
+        string vaccineName, string? abbreviation, int doseNumber, string childFirst, string childLast,
+        DateTime scheduled, DateTime today, string clinicHoursShort)
+    {
+        string childName = $"{childFirst} {childLast}";
+        string doseLabel = $"Dose {doseNumber}";
+        string dateLabel = scheduled.ToString("MMMM d, yyyy");
+        string clinicInfo = $"Leveriza Health Center (vaccinations: {clinicHoursShort})";
+        string shortName = $"{abbreviation ?? vaccineName} {doseNumber}";
+        int daysUntil = (scheduled.Date - today.Date).Days;
+
+        if (daysUntil >= 1)
+        {
+            int threshold = PreReminders.Where(d => d >= daysUntil).DefaultIfEmpty(PreReminders.Max()).Min();
+            string when = daysUntil == 1 ? "tomorrow" : $"in {daysUntil} days";
+            return (PreDueType(threshold), $"Vaccine due {when} — {childName}",
+                PreDueMessage(threshold, daysUntil, vaccineName, doseLabel, childName, dateLabel, clinicInfo),
+                $"Leveriza Health Center: {childFirst}'s vaccine ({shortName}) is due {when}, {scheduled:ddd, MMM d}. Vaccinations: {clinicHoursShort}.");
+        }
+        if (daysUntil == 0)
+        {
+            return ("ReminderDay", $"Vaccine due today — {childName}",
+                $"{vaccineName} ({doseLabel}) for {childName} is due today, {dateLabel}. Please visit {clinicInfo}.",
+                $"Leveriza Health Center: {childFirst}'s vaccine ({shortName}) is due today, {scheduled:ddd, MMM d}. Vaccinations: {clinicHoursShort}.");
+        }
+
+        int daysLate = -daysUntil;
+        int after = PostReminders.Where(d => d <= daysLate).DefaultIfEmpty(1).Max();
+        var (title, message) = OverdueText(after, daysLate, vaccineName, doseLabel, childName, childFirst, dateLabel, clinicInfo);
+        string sms = after == 1
+            ? $"Leveriza Health Center: {childFirst} missed {shortName} on {scheduled:ddd, MMM d}. Please come on the next vaccination day ({clinicHoursShort})."
+            : $"Leveriza Health Center: {childFirst}'s {shortName} is {daysLate} days overdue (due {scheduled:MMM d}). Please come on the next vaccination day ({clinicHoursShort}).";
+        return (OverdueType(after), title, message, sms);
+    }
+
     private static (string Title, string Message) OverdueText(
         int threshold, int daysLate, string vaccine, string dose,
         string childName, string firstName, string dateLabel, string clinicInfo)

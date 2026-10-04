@@ -124,6 +124,14 @@ namespace AndroidWebAPI.Services
             }
         }
 
+        // "Send my notifications to me": a few per signed-in browser, so one
+        // tester can't use up the day's texts
+        private readonly ConcurrentDictionary<string, int> _testerSends = new();
+        public const int TesterSendLimit = 3;
+
+        public bool TakeTesterSend(string key) =>
+            _testerSends.AddOrUpdate(key, 1, (_, n) => n + 1) <= TesterSendLimit;
+
         public void MarkReset()
         {
             lock (_lock)
