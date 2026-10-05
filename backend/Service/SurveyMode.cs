@@ -104,14 +104,17 @@ namespace AndroidWebAPI.Services
             }
         }
 
-        // True when something changed and every tester has logged out or left
+        // True when every tester has logged out or left and either something
+        // changed, or it's a new day (so each morning starts with that day's
+        // dates and queue, not yesterday's; also right after the API starts)
         public bool ShouldReset(out string why)
         {
             var now = DateTime.Now;
             lock (_lock)
             {
                 why = "";
-                if (!_dirty) return false;
+                bool newDay = LastResetAt == null || LastResetAt.Value.Date < now.Date;
+                if (!_dirty && !newDay) return false;
                 if (now - _lastActivity < Grace) return false;
 
                 int active = _sessions.Values.Count(s =>
@@ -119,7 +122,7 @@ namespace AndroidWebAPI.Services
                 if (active > 0) return false;
 
                 int loggedOut = _sessions.Values.Count(s => s.LoggedOut);
-                why = $"{loggedOut} logged out, {_sessions.Count - loggedOut} idle";
+                why = _dirty ? $"{loggedOut} logged out, {_sessions.Count - loggedOut} idle" : "daily refresh";
                 return true;
             }
         }
