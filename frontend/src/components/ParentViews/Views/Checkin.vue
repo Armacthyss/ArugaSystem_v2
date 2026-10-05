@@ -1,6 +1,5 @@
 <template>
-  <div class="w-full min-h-screen bg-slate-50 flex justify-center font-sans antialiased text-slate-900">
-    <div class="w-full max-w-312.5 px-6 py-6">
+  <ParentLayout>
 
       <HeaderNav
         :parent-data="parentData"
@@ -12,27 +11,25 @@
         @select-child="handleSelectChild"
       />
 
-      <div class="grid grid-cols-12 gap-8">
-
-        <ChildSidebar :children="children" :selected-child="selectedChild" @select-child="handleSelectChild" />
-
-        <main class="col-span-12 lg:col-span-9">
-          <div class="animate-in fade-in zoom-in-95 duration-500 space-y-4">
+        <!-- Check-in is for the whole family (children are picked in the next
+             step), so there is no child selector on this page -->
+        <main class="mx-auto w-full max-w-2xl">
+          <div class="space-y-4 sm:space-y-6">
 
             <!-- Children load error -->
-            <div v-if="childrenError" class="bg-red-50 border border-red-200 rounded-xl p-5 flex items-center gap-3">
+            <div v-if="childrenError" class="bg-red-50 border border-red-200 rounded-2xl p-4 sm:p-5 flex items-center gap-3">
               <span>⚠️</span>
               <p class="text-[11px] text-red-700 font-bold">{{ childrenError }}</p>
             </div>
 
             <!-- No linked children -->
-            <div v-else-if="!childrenLoading && children.length === 0" class="bg-amber-50 border border-amber-200 rounded-xl p-5 flex items-center gap-3">
+            <div v-else-if="!childrenLoading && children.length === 0" class="bg-amber-50 border border-amber-200 rounded-2xl p-4 sm:p-5 flex items-center gap-3">
               <span>⚠️</span>
               <p class="text-[11px] text-amber-700 font-bold">No children are linked to this account yet. Please contact the clinic to link a child before checking in.</p>
             </div>
 
             <!-- ═══════════════ TODAY'S TICKET ═══════════════ -->
-            <div v-if="myStatus?.checkedIn" class="bg-white rounded-xl border border-slate-200 shadow-sm p-8">
+            <div v-if="myStatus?.checkedIn" class="bg-white rounded-3xl border border-slate-100 shadow-sm p-6 sm:p-8">
               <div class="text-center mb-6">
                 <div class="w-16 h-16 rounded-full bg-emerald-50 flex items-center justify-center text-3xl mx-auto mb-3">
                   {{ ticketIcon }}
@@ -67,7 +64,7 @@
             </div>
 
             <!-- ═══════════════ CHECK IN ═══════════════ -->
-            <div v-else-if="!statusLoading" class="bg-slate-800 rounded-xl p-8 sm:p-10 text-center text-white relative overflow-hidden shadow-2xl">
+            <div v-else-if="!statusLoading" class="bg-slate-800 rounded-3xl p-6 sm:p-10 text-center text-white relative overflow-hidden shadow-2xl">
               <div class="absolute inset-0 opacity-5" style="background-image: radial-gradient(circle, #10b981 1px, transparent 1px); background-size: 24px 24px;"></div>
               <div class="relative max-w-md mx-auto">
                 <h2 class="text-2xl font-bold mb-2">Check In</h2>
@@ -104,14 +101,14 @@
                     v-if="!scanning"
                     @click="scanQr"
                     :disabled="childrenLoading || children.length === 0 || validating || readingPhoto"
-                    class="w-full px-10 py-3.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg font-medium text-sm transition-all shadow-lg"
+                    class="w-full px-6 py-3.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg font-medium text-sm transition-all shadow-lg"
                   >
                     {{ readingPhoto ? 'Reading the QR code…' : 'Scan the Clinic QR Code' }}
                   </button>
                   <button
                     v-else
                     @click="stopScanner"
-                    class="w-full px-10 py-3 bg-white/10 hover:bg-white/20 text-white rounded-lg font-medium text-sm transition-all"
+                    class="w-full px-6 py-3 bg-white/10 hover:bg-white/20 text-white rounded-lg font-medium text-sm transition-all"
                   >
                     Stop Camera
                   </button>
@@ -151,7 +148,7 @@
                   <button
                     @click="openChildSelection"
                     :disabled="childrenLoading || children.length === 0"
-                    class="px-10 py-3.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg font-medium text-sm transition-all shadow-lg"
+                    class="w-full sm:w-auto px-10 py-3.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg font-medium text-sm transition-all shadow-lg"
                   >
                     Check In Now
                   </button>
@@ -164,11 +161,10 @@
             <ClinicHoursNote :clinic="clinic" show-check-in />
           </div>
         </main>
-      </div>
 
       <!-- ═══════════════ CHILD SELECTION MODAL ═══════════════ -->
       <div v-if="showChildSelection" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-        <div class="bg-white rounded-xl w-full max-w-md p-6 shadow-2xl">
+        <div class="bg-white rounded-3xl w-full max-w-md p-5 sm:p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
           <h3 class="text-lg font-bold text-slate-800 mb-1">Who are you checking in for?</h3>
           <p class="text-xs text-slate-400 mb-5">Select one or more children linked to your account.</p>
 
@@ -229,8 +225,7 @@
       <ProfileModal v-if="showProfile" :parent-data="parentData" :children="children" @close="showProfile = false" />
       <NotificationPanel v-if="showNotifications" :parent-data="parentData" @close="showNotifications = false" />
 
-    </div>
-  </div>
+  </ParentLayout>
 </template>
 
 <script setup>
@@ -241,7 +236,7 @@ import { Html5Qrcode } from 'html5-qrcode'
 import { BrowserQRCodeReader } from '@zxing/browser'
 
 import HeaderNav from '../Components/Headernav.vue'
-import ChildSidebar from '../Components/Childsidebar.vue'
+import ParentLayout from '../Components/ParentLayout.vue'
 import ProfileModal from '../Components/Profilemodal.vue'
 import NotificationPanel from '../Components/Notificationpanel.vue'
 import ClinicHoursNote from '../Components/ClinicHoursNote.vue'

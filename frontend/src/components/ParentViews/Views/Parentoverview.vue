@@ -1,706 +1,247 @@
+<!--
+  Parent Overview: only what a parent needs today.
+    1. Today at the clinic (queue number / now serving / check-in hint)
+    2. The next vaccine, and progress
+    3. What's coming up after that
+  The child's details are behind "Health info" (ChildTabs.vue), not on the page.
+-->
 <template>
-  <div class="w-full min-h-screen bg-slate-50 flex justify-center font-sans antialiased text-slate-900">
-    <div class="w-full max-w-312.5 px-6 py-6">
+  <ParentLayout>
+    <HeaderNav
+      :parent-data="parentData"
+      :children="children"
+      :unread-count="unreadCount"
+      @open-profile="showProfile = true"
+      @open-notifications="showNotifications = true"
+      @logout="logout"
+      @select-child="selectChild"
+    />
 
-      <HeaderNav
-        :parent-data="parentData"
-        :children="children"
-        :unread-count="unreadCount"
-        @open-profile="showProfile = true"
-        @open-notifications="showNotifications = true"
-        @logout="handleLogout"
-        @select-child="handleSelectChild"
-      />
+    <ChildTabs :children="children" :selected-child="selectedChild" @select-child="selectChild" />
 
-      <div class="grid grid-cols-12 gap-8">
+    <main class="space-y-4 sm:space-y-6">
+      <!-- No child linked yet -->
+      <section v-if="childrenLoaded && !children.length" class="rounded-3xl border border-slate-100 bg-white p-6 shadow-sm sm:p-8">
+        <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Welcome to Aruga</p>
+        <h2 class="mt-2 text-2xl font-black text-slate-900">No children linked yet</h2>
+        <p class="mt-1 text-sm text-slate-500">{{ childrenError || 'Please ask the health center staff to link your child to this account.' }}</p>
+      </section>
 
-        <ChildSidebar :children="children" :selected-child="selectedChild" @select-child="handleSelectChild" />
+      <template v-else-if="children.length">
+        <!-- ═════════ 1. TODAY AT THE CLINIC ═════════ -->
+        <section class="flex flex-col gap-5 rounded-3xl border border-slate-100 bg-white p-6 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-8">
+          <div class="min-w-0">
+            <!-- Checked in today -->
+            <template v-if="queue.checkedIn">
+              <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                {{ queue.myStatus === 'Completed' ? 'Visit completed today' : 'Your queue number today' }}
+              </p>
+              <p class="mt-1 text-5xl font-black leading-none text-emerald-600 sm:text-6xl">#{{ pad(queue.myQueueNumber) }}</p>
+              <p class="mt-3 text-sm text-slate-600 sm:text-base">{{ ticketLine }}</p>
+            </template>
 
-        <main class="col-span-12 lg:col-span-9">
-          <div class="space-y-5 animate-in slide-in-from-bottom-4 duration-500">
-            <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-8 flex flex-col md:flex-row justify-between items-center gap-6">
-              <div>
-                <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Today's Priority Ticket</p>
-
-                <!-- Checked in today -->
-                <template v-if="queueStatus.checkedIn">
-                  <h2 v-if="queueStatus.myStatus === 'Completed'" class="text-2xl font-black text-slate-800">Visit completed <span class="text-emerald-500">#{{ String(queueStatus.myQueueNumber).padStart(3, '0') }}</span></h2>
-                  <h2 v-else class="text-4xl font-black text-slate-800">You are Queue <span class="text-emerald-500">#{{ String(queueStatus.myQueueNumber).padStart(3, '0') }}</span></h2>
-                  <p v-if="ticketChildNames" class="text-sm font-bold text-slate-500 mt-1">For {{ ticketChildNames }}</p>
-                </template>
-
-                <!-- Account with no child yet -->
-                <template v-else-if="childrenLoaded && children.length === 0">
-                  <h2 class="text-2xl font-black text-slate-800">No children linked yet</h2>
-                  <p class="text-sm font-bold text-slate-500 mt-1">Please ask the clinic staff to link your child to this account.</p>
-                </template>
-
-                <!-- Health center closed today (typhoon, holiday...) -->
-                <template v-else-if="clinic?.closedToday">
-                  <h2 class="text-2xl font-black text-slate-800">Health center closed today</h2>
-                  <p class="text-sm font-bold text-slate-500 mt-1">{{ clinic.reason ? `${clinic.reason}. ` : '' }}Next vaccination day: {{ clinic.nextOpenDay }}.</p>
-                </template>
-
-                <!-- Not a vaccination day -->
-                <template v-else-if="clinic && !clinic.openToday">
-                  <h2 class="text-2xl font-black text-slate-800">No vaccinations today</h2>
-                  <p class="text-sm font-bold text-slate-500 mt-1">Vaccinations are given {{ clinic.hoursText }}. Next vaccination day: {{ clinic.nextOpenDay }}.</p>
-                </template>
-
-                <!-- Clinic day, not checked in yet -->
-                <template v-else>
-                  <h2 class="text-2xl font-black text-slate-800">Not checked in today</h2>
-                  <p v-if="clinic?.checkInOpenNow" class="text-sm font-bold text-slate-500 mt-1">
-                    When you arrive at the clinic, open
-                    <router-link to="/ParentCheckin" class="text-emerald-600 underline">Check-in</router-link>
-                    and scan the QR code at the entrance.
-                  </p>
-                  <p v-else-if="clinic?.checkInNotYetOpen" class="text-sm font-bold text-slate-500 mt-1">Today is a vaccination day. Check-in opens at {{ clinic.opensAt }} and runs until {{ clinic.checkInUntil }}.</p>
-                  <p v-else-if="clinic" class="text-sm font-bold text-slate-500 mt-1">Check-in for vaccinations today closed at {{ clinic.checkInUntil }}. The next vaccination day is {{ clinic.nextOpenDay }}.</p>
-                </template>
-              </div>
-              <div v-if="showNowServing" class="bg-emerald-50 px-10 py-6 rounded-xl border border-emerald-500/20 text-center min-w-45">
-                <p class="text-[10px] font-black text-emerald-600 uppercase mb-1">{{ queueStatus.checkedIn ? 'Now Serving' : 'Now Serving at the Clinic' }}</p>
-                <p class="text-5xl font-black text-slate-800">{{ queueStatus.nowServingNumber ? '#' + String(queueStatus.nowServingNumber).padStart(3, '0') : '—' }}</p>
-                <p v-if="queueStatus.positionInLine" class="text-[10px] font-bold text-emerald-600 mt-2 uppercase">{{ queueStatus.positionInLine }}{{ queueStatus.positionInLine === 1 ? 'st' : queueStatus.positionInLine === 2 ? 'nd' : queueStatus.positionInLine === 3 ? 'rd' : 'th' }} in line</p>
-              </div>
-            </div>
-
-            <div v-if="selectedChild" class="grid grid-cols-1 md:grid-cols-5 gap-5">
-
-              <!-- Child profile (compact) -->
-              <div class="md:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                <div class="bg-emerald-600 px-5 py-4 flex items-center gap-3">
-                  <div class="w-11 h-11 shrink-0 rounded-xl bg-white/20 flex items-center justify-center text-2xl shadow">{{ selectedChild.sex === 'Female' ? '👧' : '👶' }}</div>
-                  <div class="min-w-0">
-                    <p class="text-white font-bold text-base leading-tight truncate">{{ selectedChild.firstName }} {{ selectedChild.lastName }}</p>
-                    <p class="text-emerald-200 text-[9px] font-bold uppercase mt-0.5 truncate">{{ selectedChild.healthCenter || 'Leveriza Health Center' }}</p>
-                    <p v-if="selectedChild.familyNo" class="text-white/80 font-mono text-[10px] font-bold mt-0.5">{{ selectedChild.familyNo }}</p>
-                  </div>
-                </div>
-                <dl class="grid grid-cols-2 gap-x-4 gap-y-3 px-5 py-4">
-                  <div><dt class="text-[9px] font-semibold text-slate-400 uppercase tracking-wide">Date of Birth</dt><dd class="text-xs font-bold text-slate-800">{{ formatDisplayDate(new Date(selectedChild.birthDate)) }}</dd></div>
-                  <div><dt class="text-[9px] font-semibold text-slate-400 uppercase tracking-wide">Age</dt><dd class="text-xs font-bold text-slate-800">{{ childAge }}</dd></div>
-                  <div><dt class="text-[9px] font-semibold text-slate-400 uppercase tracking-wide">Sex</dt><dd class="text-xs font-bold text-slate-800">{{ selectedChild.sex || '—' }}</dd></div>
-                  <div><dt class="text-[9px] font-semibold text-slate-400 uppercase tracking-wide">Barangay</dt><dd class="text-xs font-bold text-slate-800">{{ selectedChild.barangay || selectedChild.barangayNo || selectedChild.Barangay || '—' }}</dd></div>
-                  <div><dt class="text-[9px] font-semibold text-slate-400 uppercase tracking-wide">Birth Weight</dt><dd class="text-xs font-bold text-slate-800">{{ selectedChild.birthWeight ? Number(selectedChild.birthWeight) + ' kg' : 'Not recorded' }}</dd></div>
-                  <div><dt class="text-[9px] font-semibold text-slate-400 uppercase tracking-wide">Birth Height</dt><dd class="text-xs font-bold text-slate-800">{{ selectedChild.birthHeight ? Number(selectedChild.birthHeight) + ' cm' : 'Not recorded' }}</dd></div>
-                </dl>
-              </div>
-
-              <!-- Vaccination progress -->
-              <div class="md:col-span-3 bg-white rounded-xl border border-slate-200 shadow-sm p-6 flex flex-col">
-                <div class="flex justify-between items-start gap-4">
-                  <div>
-                    <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Vaccination Progress</p>
-                    <p class="mt-1 text-4xl font-black text-slate-800 leading-none">
-                      {{ completedCount }}<span class="text-xl text-slate-400">/{{ totalDoses }}</span>
-                    </p>
-                    <p class="text-[11px] font-bold text-slate-500 mt-1">doses vaccinated</p>
-                  </div>
-                  <span class="px-3 py-1 bg-emerald-50 rounded-lg text-xs font-black text-emerald-600 border border-emerald-500/20">{{ progressPercent }}%</span>
-                </div>
-                <div class="mt-4 h-2.5 w-full rounded-full bg-slate-100 overflow-hidden">
-                  <div class="h-full rounded-full bg-emerald-500 transition-all duration-500" :style="{ width: progressPercent + '%' }"></div>
-                </div>
-
-                <div class="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div class="p-4 bg-slate-50 rounded-xl border border-slate-100">
-                    <p class="text-[9px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Latest Vaccine</p>
-                    <template v-if="latestDose">
-                      <p class="text-xs font-bold text-slate-800">{{ latestDose.name }} · Dose {{ latestDose.doseNumber }}</p>
-                      <p class="text-[10px] text-slate-400 mt-0.5">Vaccinated {{ formatDisplayDate(latestDose.administeredDate ?? latestDose.scheduledDate) }}</p>
-                    </template>
-                    <p v-else class="text-xs font-bold text-slate-400">No doses recorded yet</p>
-                  </div>
-                  <div class="p-4 rounded-xl border" :class="nextDose && isOverdue(nextDose) ? 'bg-red-50 border-red-200' : 'bg-emerald-50 border-emerald-500/20'">
-                    <p class="text-[9px] font-semibold uppercase tracking-wide mb-1" :class="nextDose && isOverdue(nextDose) ? 'text-red-600' : 'text-emerald-600'">
-                      {{ nextDose && isOverdue(nextDose) ? 'Next Vaccine · Overdue' : 'Next Vaccine' }}
-                    </p>
-                    <template v-if="nextDose">
-                      <p class="text-xs font-bold text-slate-800">{{ nextDose.name }} · Dose {{ nextDose.doseNumber }}</p>
-                      <p class="text-[10px] text-slate-500 mt-0.5">{{ isOverdue(nextDose) ? 'Was due' : 'Due' }} {{ formatDisplayDate(nextDose.scheduledDate) }}</p>
-                    </template>
-                    <p v-else-if="totalDoses > 0" class="text-xs font-bold text-emerald-700">All doses complete 🎉</p>
-                    <p v-else class="text-xs font-bold text-slate-400">No schedule on file</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div class="bg-white rounded-xl border border-slate-200 p-7 shadow-sm">
-              <div class="flex justify-between items-center mb-5">
-                <h3 class="text-base font-bold text-slate-800">Upcoming Doses</h3>
-                <router-link to="/ParentSchedule" class="text-[10px] font-semibold text-emerald-600 uppercase tracking-wide hover:text-emerald-600 transition-colors">View Schedule →</router-link>
-              </div>
-              <div class="space-y-3">
-                <div v-for="vax in upcomingDoses.slice(0, 3)" :key="vax.doseId"
-                    class="p-4 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between">
-                  <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 bg-emerald-600 rounded-xl flex items-center justify-center text-white text-sm">💉</div>
-                    <div>
-                      <p class="text-xs font-bold text-slate-800">{{ vax.name }} · Dose {{ vax.doseNumber }}</p>
-                      <p class="text-[10px] text-slate-400 mt-0.5">{{ formatDisplayDate(vax.scheduledDate) }}</p>
-                    </div>
-                  </div>
-                  <span v-if="isOverdue(vax)" class="px-3 py-1 bg-red-50 rounded-lg text-[9px] font-black text-red-600 border border-red-200 uppercase">Overdue</span>
-                  <span v-else class="px-3 py-1 bg-white rounded-lg text-[9px] font-black text-emerald-600 border border-slate-200 uppercase">Scheduled</span>
-                </div>
-                <p v-if="upcomingDoses.length > 3" class="text-center text-[10px] text-slate-400 font-bold pt-1">
-                  +{{ upcomingDoses.length - 3 }} more doses to go
-                </p>
-                <p v-if="!timelineLoading && upcomingDoses.length === 0" class="text-xs text-slate-400">
-                  {{ children.length === 0 ? 'Doses will appear here once your child is linked to this account.' : 'No upcoming doses on file.' }}
-                </p>
-              </div>
-            </div>
+            <!-- Not checked in -->
+            <template v-else>
+              <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Today at the clinic</p>
+              <h2 class="mt-1 text-2xl font-black text-slate-900 sm:text-3xl">{{ todayTitle }}</h2>
+              <p class="mt-2 text-sm text-slate-600 sm:text-base">
+                {{ todayText }}
+                <router-link v-if="clinic?.checkInOpenNow" to="/ParentCheckin" class="font-semibold text-emerald-700 underline">Open Check-in</router-link>
+              </p>
+            </template>
           </div>
-        </main>
-      </div>
 
-      <ProfileModal v-if="showProfile" :parent-data="parentData" :children="children" @close="showProfile = false" />
-      <NotificationPanel v-if="showNotifications" :parent-data="parentData" @close="showNotifications = false" />
+          <div v-if="showNowServing" class="shrink-0 rounded-2xl bg-emerald-50 px-6 py-4 text-center sm:min-w-52 sm:px-8 sm:py-5">
+            <p class="text-xs font-bold uppercase tracking-wider text-emerald-700">Now serving</p>
+            <p class="mt-1 text-4xl font-black text-slate-900 sm:text-5xl">{{ queue.nowServingNumber ? '#' + pad(queue.nowServingNumber) : '—' }}</p>
+            <p v-if="servingNote" class="mt-1 text-sm font-semibold text-emerald-700">{{ servingNote }}</p>
+          </div>
+        </section>
 
-    </div>
-  </div>
+        <!-- ═════════ 2. NEXT VACCINE + PROGRESS ═════════ -->
+        <div class="grid grid-cols-1 gap-4 sm:gap-6 md:grid-cols-2">
+          <section class="rounded-3xl border border-slate-100 bg-white p-6 shadow-sm sm:p-8">
+            <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Next vaccine</p>
+
+            <p v-if="scheduleLoading && !schedule.length" class="mt-3 text-sm text-slate-400">Loading…</p>
+
+            <template v-else-if="visit">
+              <h2 class="mt-2 text-2xl font-black text-slate-900 sm:text-3xl">{{ visit.doses[0].name }} · Dose {{ visit.doses[0].doseNumber }}</h2>
+              <p v-if="visit.doses.length > 1" class="mt-1 text-sm text-slate-600 sm:text-base">Plus {{ alsoDue }}</p>
+              <span class="mt-4 inline-block rounded-2xl px-4 py-2 text-sm font-semibold" :class="visit.overdue ? 'bg-amber-50 text-amber-800' : 'bg-emerald-50 text-emerald-800'">
+                {{ dueBadge }}
+              </span>
+            </template>
+
+            <template v-else-if="schedule.length">
+              <h2 class="mt-2 text-2xl font-black text-slate-900">All vaccines done 🎉</h2>
+              <p class="mt-1 text-sm text-slate-600">{{ selectedChild?.firstName }} has every scheduled vaccine.</p>
+            </template>
+
+            <p v-else class="mt-3 text-sm text-slate-500">No vaccination schedule on file yet.</p>
+          </section>
+
+          <section class="rounded-3xl border border-slate-100 bg-white p-6 shadow-sm sm:p-8">
+            <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Progress</p>
+            <p class="mt-2 text-5xl font-black leading-none text-slate-900">
+              {{ completedCount }}<span class="text-2xl font-bold text-slate-400"> / {{ schedule.length }}</span>
+            </p>
+            <div class="mt-5 h-2.5 w-full overflow-hidden rounded-full bg-slate-100" role="progressbar" :aria-valuenow="completedCount" :aria-valuemax="schedule.length">
+              <div class="h-full rounded-full bg-emerald-500 transition-all duration-500" :style="{ width: progressPercent + '%' }"></div>
+            </div>
+            <p class="mt-3 text-sm text-slate-600 sm:text-base">doses completed</p>
+          </section>
+        </div>
+
+        <!-- ═════════ 3. COMING UP ═════════ -->
+        <section class="rounded-3xl border border-slate-100 bg-white p-6 shadow-sm sm:p-8">
+          <div class="flex items-center justify-between gap-3">
+            <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Coming up</p>
+            <router-link to="/ParentSchedule" class="shrink-0 text-sm font-semibold text-emerald-700 hover:underline">See schedule →</router-link>
+          </div>
+          <ul v-if="comingUp.length" class="mt-3 divide-y divide-slate-100 border-t border-slate-100">
+            <li v-for="dose in comingUp" :key="dose.doseId" class="flex items-center justify-between gap-4 py-3.5">
+              <span class="min-w-0 text-sm font-semibold text-slate-800 sm:text-base">{{ dose.name }} · Dose {{ dose.doseNumber }}</span>
+              <span class="shrink-0 text-sm text-slate-500">{{ formatDate(dose.scheduledDate) }}</span>
+            </li>
+          </ul>
+          <p v-else-if="!scheduleLoading" class="mt-3 border-t border-slate-100 pt-3 text-sm text-slate-500">
+            {{ visit ? 'Nothing else is scheduled after the next vaccine.' : 'Nothing scheduled.' }}
+          </p>
+        </section>
+      </template>
+    </main>
+
+    <ProfileModal v-if="showProfile" :parent-data="parentData" :children="children" @close="showProfile = false" />
+    <NotificationPanel v-if="showNotifications" :parent-data="parentData" @close="showNotifications = false" />
+  </ParentLayout>
 </template>
+
 <script setup>
-import { ageParts } from '@/utils/format'
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
-import { addDays, isMonday, isWednesday, isFriday } from 'date-fns'
+import { format } from 'date-fns'
 
 import HeaderNav from '../Components/Headernav.vue'
-import ChildSidebar from '../Components/Childsidebar.vue'
+import ParentLayout from '../Components/ParentLayout.vue'
+import ChildTabs from '../Components/ChildTabs.vue'
 import ProfileModal from '../Components/Profilemodal.vue'
 import NotificationPanel from '../Components/Notificationpanel.vue'
 
-import { getAccount, logout as authLogout } from '@/utils/auth'
 import api from '../Composables/api.js'
-import { fetchChildSchedule, buildSchedule } from '../Composables/childSchedule.js'
+import { useParentPortal } from '../Composables/useParentPortal.js'
+import { planNextVisit, relativeDay, ordinal, dayOnly } from '../Composables/visitPlan.js'
 
-const router = useRouter()
-
-// =====================================================
-// SESSION
-// =====================================================
-
-const account = ref(null)
-const parentData = ref(null)
-
-
-// =====================================================
-// PARENT / CHILDREN
-// =====================================================
-
-const children = ref([])
-const childrenLoaded = ref(false)
-const selectedChild = ref(null)
-
-
-// =====================================================
-// VACCINATION SCHEDULE (shared with Schedule / Records /
-// Check-in via Composables/childSchedule.js, so
-// "upcoming doses" always means the same thing everywhere)
-// =====================================================
-
-const completedRecords = ref([])
-const timelineLoading = ref(false)
-
-// Schedule comes from the backend timeline (see Composables/childSchedule.js).
-const scheduleTimeline = ref([])
-
-const computedVaccineList = computed(() => buildSchedule(scheduleTimeline.value, completedRecords.value))
-
-async function fetchCompletedRecords(childId) {
-  if (!childId) { completedRecords.value = []; scheduleTimeline.value = []; return }
-  timelineLoading.value = true
-  try {
-    const { timeline, records } = await fetchChildSchedule(childId)
-    scheduleTimeline.value = timeline
-    completedRecords.value = records
-  } catch (error) {
-    console.error('Failed to load vaccination schedule:', error)
-    completedRecords.value = []
-    scheduleTimeline.value = []
-  } finally {
-    timelineLoading.value = false
-  }
-}
-
-// =====================================================
-// QUEUE TICKET (Today's Priority Ticket card)
-// =====================================================
-
-const queueStatus = ref({ checkedIn: false, myQueueNumber: null, myStatus: null, nowServingNumber: null, positionInLine: null, childIDs: [] })
-let queuePollHandle = null
-
-// Clinic hours for today (GET /ClinicOperatingSchedule/today): on a closed
-// day there is no queue to show.
-const clinic = ref(null)
-
-async function fetchClinicToday() {
-  try {
-    clinic.value = (await api.get('/ClinicOperatingSchedule/today')).data
-  } catch (error) {
-    console.error('Failed to load clinic hours:', error)
-  }
-}
-
-// "Now serving" only means something on a clinic day (or once checked in).
-const showNowServing = computed(() =>
-  queueStatus.value.checkedIn ||
-  (!!queueStatus.value.nowServingNumber && children.value.length > 0 && clinic.value?.openToday !== false))
-
-const ticketChildNames = computed(() =>
-  (queueStatus.value.childIDs || [])
-    .map(id => children.value.find(c => String(c.childID).toLowerCase() === String(id).toLowerCase()))
-    .filter(Boolean)
-    .map(c => c.firstName)
-    .join(', '))
-
-async function fetchQueueStatus() {
-  if (!parentData.value?.parentID) return
-  try {
-    const response = await api.get(`/Queue/my-status/${parentData.value.parentID}`)
-    queueStatus.value = {
-      checkedIn: response.data.checkedIn ?? response.data.CheckedIn,
-      myQueueNumber: response.data.myQueueNumber ?? response.data.MyQueueNumber,
-      myStatus: response.data.myStatus ?? response.data.MyStatus,
-      nowServingNumber: response.data.nowServingNumber ?? response.data.NowServingNumber,
-      positionInLine: response.data.positionInLine ?? response.data.PositionInLine,
-      childIDs: response.data.childIDs ?? response.data.ChildIDs ?? [],
-    }
-  } catch (error) {
-    console.error('Failed to load queue status:', error)
-  }
-}
-
-
-// =====================================================
-// NOTIFICATIONS
-// =====================================================
-
-const unreadCount = ref(0)
-
-
-// =====================================================
-// UI
-// =====================================================
+const {
+  parentData, children, childrenLoaded, childrenError, selectedChild,
+  unreadCount, clinic, schedule, scheduleLoading,
+  init, selectChild, logout,
+} = useParentPortal()
 
 const showProfile = ref(false)
 const showNotifications = ref(false)
 
+const pad = n => String(n ?? '').padStart(3, '0')
+const formatDate = d => format(new Date(d), 'MMM d, yyyy')
 
-// =====================================================
-// SELECTED CHILD
-// =====================================================
+// ── Next vaccine, progress, coming up ──────────────────────────────────
+const visit = computed(() => planNextVisit(schedule.value, clinic.value))
 
-const selectedChildStorageKey = 'selectedParentChild'
-
-
-// =====================================================
-// HELPERS
-// =====================================================
-
-function formatDisplayDate(date) {
-  if (!date) return '—'
-
-  const parsed = new Date(date)
-
-  if (Number.isNaN(parsed.getTime())) {
-    return '—'
-  }
-
-  return parsed.toLocaleDateString('en-PH', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric'
-  })
-}
-
-
-function calculateAge(birthDate) {
-  // A month only counts once its day is reached (see ageParts in utils/format)
-  const a = ageParts(birthDate)
-  if (!a) return '—'
-  const { years, months, days } = a
-  const s = (n, w) => `${n} ${w}${n !== 1 ? 's' : ''}`
-  if (years === 0 && months === 0) return s(days, 'day')
-  if (years === 0) return s(months, 'month')
-  if (months === 0) return s(years, 'year')
-  return `${s(years, 'year')} ${s(months, 'month')}`
-}
-
-
-// =====================================================
-// COMPUTED
-// =====================================================
-
-const childAge = computed(() => {
-  return calculateAge(
-    selectedChild.value?.birthDate
-  )
+const alsoDue = computed(() => {
+  const rest = visit.value.doses.slice(1).map(d => `${d.name} · Dose ${d.doseNumber}`)
+  return rest.length > 1 ? `${rest.slice(0, -1).join(', ')} and ${rest[rest.length - 1]}` : rest[0]
 })
 
-
-// Same rule as the Records page: a dose not given by its date is overdue.
-function isOverdue(vax) {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  return !vax.isCompleted && vax.scheduledDate < today
-}
-
-const upcomingDoses = computed(() => {
-  return computedVaccineList.value
-    .filter(item => !item.isCompleted)
-    .sort((a, b) => a.scheduledDate - b.scheduledDate)
+const dueBadge = computed(() => {
+  const v = visit.value
+  if (v.overdue) return `Due ${format(v.firstDue, 'MMM d')} · come on the next vaccination day`
+  const isToday = dayOnly(v.date).getTime() === dayOnly(new Date()).getTime()
+  if (isToday) return clinic.value?.checkInUntil ? `Due today · check in by ${clinic.value.checkInUntil}` : 'Due today'
+  return `Due ${format(v.date, 'EEE, MMM d')} · ${relativeDay(v.date)}`
 })
 
-// Vaccination progress card: doses given out of the child's full schedule.
-const totalDoses = computed(() => computedVaccineList.value.length)
-const completedCount = computed(() => computedVaccineList.value.filter(v => v.isCompleted).length)
+const completedCount = computed(() => schedule.value.filter(v => v.isCompleted).length)
 const progressPercent = computed(() =>
-  totalDoses.value ? Math.round((completedCount.value / totalDoses.value) * 100) : 0)
+  schedule.value.length ? Math.round((completedCount.value / schedule.value.length) * 100) : 0)
 
-const latestDose = computed(() => {
-  const given = computedVaccineList.value.filter(v => v.isCompleted)
-  return given.length ? given[given.length - 1] : null
+const comingUp = computed(() => (visit.value?.later ?? []).slice(0, 3))
+
+// ── Today at the clinic (queue ticket) ─────────────────────────────────
+const queue = ref({ checkedIn: false, myQueueNumber: null, myStatus: null, nowServingNumber: null, positionInLine: null, childIDs: [] })
+let pollHandle = null
+
+async function loadQueue() {
+  if (!parentData.value?.parentID) return
+  try {
+    const d = (await api.get(`/Queue/my-status/${parentData.value.parentID}`)).data
+    queue.value = {
+      checkedIn: d.checkedIn ?? d.CheckedIn,
+      myQueueNumber: d.myQueueNumber ?? d.MyQueueNumber,
+      myStatus: d.myStatus ?? d.MyStatus,
+      nowServingNumber: d.nowServingNumber ?? d.NowServingNumber,
+      positionInLine: d.positionInLine ?? d.PositionInLine,
+      childIDs: d.childIDs ?? d.ChildIDs ?? [],
+    }
+  } catch (err) {
+    console.error('Could not load the queue status:', err)
+  }
+}
+
+const inRoom = computed(() => /inprogress/i.test(String(queue.value.myStatus || '').replace(/\s+/g, '')))
+
+const ticketNames = computed(() => {
+  const ids = (queue.value.childIDs || []).map(id => String(id).toLowerCase())
+  const names = children.value.filter(c => ids.includes(String(c.childID).toLowerCase())).map(c => c.firstName)
+  return names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0] || ''
 })
 
-const nextDose = computed(() => upcomingDoses.value[0] ?? null)
-
-
-// =====================================================
-// LOAD LOGGED-IN PARENT
-// =====================================================
-
-function loadParentSession() {
-  const savedAccount = getAccount()
-
-  if (!savedAccount) {
-    router.push('/')
-    return false
-  }
-
-  account.value = savedAccount
-
-  // Support both possible backend response structures
-  const rawUser = savedAccount.user ?? savedAccount
-
-  // Backend now returns PascalCase (ParentID, FirstName, LastName, Email, ...).
-  // Normalize to the camelCase shape every Parent component (Headernav,
-  // ChildSidebar, ProfileModal, etc.) already expects, same ?? pattern used
-  // for the children map below.
-  parentData.value = {
-    ...rawUser,
-    parentID: rawUser.parentID ?? rawUser.ParentID,
-    firstName: rawUser.firstName ?? rawUser.FirstName,
-    middleName: rawUser.middleName ?? rawUser.MiddleName,
-    lastName: rawUser.lastName ?? rawUser.LastName,
-    email: rawUser.email ?? rawUser.Email,
-    contactNo: rawUser.contactNo ?? rawUser.ContactNo,
-    barangayNo: rawUser.barangayNo ?? rawUser.BarangayNo,
-    address: rawUser.address ?? rawUser.Address,
-  }
-
-  if (!parentData.value?.parentID) {
-    console.error(
-      'Invalid parent session:',
-      savedAccount
-    )
-
-    router.push('/')
-    return false
-  }
-
-  return true
-}
-
-// =====================================================
-// LOAD CHILDREN
-// =====================================================
-
-async function fetchChildren() {
-
-  if (!parentData.value?.parentID) {
-    console.error('No ParentID available')
-    return
-  }
-
-  try {
-
-    console.log(
-      'Fetching children for ParentID:',
-      parentData.value.parentID
-    )
-
-    const response = await api.get(
-      `/Parents/dashboard/${parentData.value.parentID}`
-    )
-
-    console.log(
-      'Parent dashboard response:',
-      response.data
-    )
-
-    children.value =
-      (response.data ?? []).map(child => {
-        const relationshipType =
-          child.relationshipType ??
-          child.RelationshipType
-
-        const relatedParentName =
-          child.parentFullName ??
-          child.ParentFullName
-
-        return {
-          childID:
-            child.childID ??
-            child.ChildID,
-
-          firstName:
-            child.firstName ??
-            child.FirstName,
-
-          middleName:
-            child.middleName ??
-            child.MiddleName,
-
-          lastName:
-            child.lastName ??
-            child.LastName,
-
-          birthDate:
-            child.birthDate ??
-            child.BirthDate,
-
-          placeOfBirth:
-            child.placeOfBirth ??
-            child.PlaceOfBirth,
-
-          sex:
-            child.sex ??
-            child.Sex,
-
-          barangay:
-            child.barangay ??
-            child.Barangay,
-
-          familyNo:
-            child.familyNo ??
-            child.FamilyNo,
-
-          address:
-            child.address ??
-            child.Address,
-
-          healthCenter:
-            child.healthCenter ??
-            child.HealthCenter,
-
-          birthWeight:
-            child.birthWeight ??
-            child.BirthWeight,
-
-          birthHeight:
-            child.birthHeight ??
-            child.BirthHeight,
-
-          relationshipType,
-
-          isPrimaryContact:
-            child.isPrimaryContact ??
-            child.IsPrimaryContact,
-
-          canReceiveNotifications:
-            child.canReceiveNotifications ??
-            child.CanReceiveNotifications,
-
-          // Everyone linked to the child: "Maria Santos (Mother); Rosario Santos (Grandmother)"
-          guardians:
-            child.guardians ??
-            child.Guardians,
-
-          // The dashboard endpoint only returns the relationship for the
-          // currently logged-in parent (Maria), so we can only fill in
-          // whichever one of these matches her own RelationshipType —
-          // co-parents/guardians linked by someone else aren't in this
-          // response and would need a separate lookup to display.
-          motherName:   relationshipType === 'Mother'   ? relatedParentName : undefined,
-          fatherName:   relationshipType === 'Father'   ? relatedParentName : undefined,
-          guardianName: relationshipType === 'Guardian' ? relatedParentName : undefined,
-        }
-      })
-
-    console.log(
-      'Loaded children:',
-      children.value
-    )
-
-  } catch (error) {
-
-    console.error(
-      'Failed to load parent children:',
-      error
-    )
-
-    children.value = []
-  }
-}
-// =====================================================
-// RESTORE SELECTED CHILD
-// =====================================================
-
-function restoreSelectedChild() {
-
-  if (children.value.length === 0) {
-    selectedChild.value = null
-    return
-  }
-
-  const saved =
-    localStorage.getItem(
-      selectedChildStorageKey
-    )
-
-  if (!saved) {
-    selectedChild.value =
-      children.value[0]
-
-    return
-  }
-
-  try {
-
-    const savedChild =
-      JSON.parse(saved)
-
-    selectedChild.value =
-      children.value.find(
-        child =>
-          child.childID ===
-          savedChild.childID
-      ) ??
-      children.value[0]
-
-  } catch {
-
-    selectedChild.value =
-      children.value[0]
-  }
-}
-
-
-// =====================================================
-// SELECT CHILD
-// =====================================================
-
-async function handleSelectChild(child) {
-
-  selectedChild.value = child
-
-  localStorage.setItem(
-    selectedChildStorageKey,
-    JSON.stringify(child)
-  )
-
-  await fetchCompletedRecords(
-    child.childID
-  )
-}
-
-
-// =====================================================
-// LOAD UNREAD NOTIFICATION COUNT
-// =====================================================
-
-async function fetchUnreadCount() {
-
-  if (!parentData.value?.parentID) {
-    return
-  }
-
-  try {
-
-    const response = await api.get(
-      `/Notifications/parent/${parentData.value.parentID}`
-    )
-
-    unreadCount.value =
-      (response.data ?? [])
-        .filter(notification =>
-          !notification.isRead
-        )
-        .length
-
-  } catch (error) {
-
-    console.error(
-      'Failed to load notification count:',
-      error
-    )
-
-    unreadCount.value = 0
-  }
-}
-
-
-// =====================================================
-// LOGOUT
-// =====================================================
-
-function handleLogout() {
-
-  authLogout()
-
-  router.push('/')
-}
-
-
-// =====================================================
-// INITIAL LOAD
-// =====================================================
+const ticketLine = computed(() => {
+  const q = queue.value
+  const forWho = ticketNames.value ? `For ${ticketNames.value}` : ''
+  let where
+  if (q.myStatus === 'Completed') where = 'See Records for today’s vaccines'
+  else if (inRoom.value) where = 'It’s your turn: please go inside the vaccination room'
+  else if (q.positionInLine === 1) where = 'You’re next'
+  else if (q.positionInLine) where = `${ordinal(q.positionInLine)} in line`
+  else where = 'Please wait to be called'
+  return [forWho, where].filter(Boolean).join(' · ')
+})
+
+// Only on a clinic day (or once checked in) does "now serving" mean anything
+const showNowServing = computed(() => {
+  const q = queue.value
+  if (q.checkedIn) return q.myStatus !== 'Completed'
+  return !!q.nowServingNumber && clinic.value?.openToday !== false
+})
+
+const servingNote = computed(() => {
+  const q = queue.value
+  if (!q.checkedIn) return ''
+  if (inRoom.value) return 'That’s you!'
+  return 'Please stay nearby'
+})
+
+const todayTitle = computed(() => {
+  const c = clinic.value
+  if (c?.closedToday) return 'Health center closed today'
+  if (c && !c.openToday) return 'No vaccinations today'
+  return 'Not checked in today'
+})
+
+const todayText = computed(() => {
+  const c = clinic.value
+  if (!c) return ''
+  if (c.closedToday) return `${c.reason ? c.reason + '. ' : ''}Next vaccination day: ${c.nextOpenDay}.`
+  if (!c.openToday) return `Next vaccination day: ${c.nextOpenDay}.`
+  if (c.checkInOpenNow) return 'When you arrive, scan the QR code at the entrance.'
+  if (c.checkInNotYetOpen) return `Check-in opens at ${c.opensAt} and runs until ${c.checkInUntil}.`
+  return `Check-in closed at ${c.checkInUntil}. Next vaccination day: ${c.nextOpenDay}.`
+})
 
 onMounted(async () => {
-
-  // 1. Identify currently logged-in parent
-  const validSession =
-    loadParentSession()
-
-  if (!validSession) {
-    return
-  }
-
-
-  // 2. Load all children (and today's clinic hours alongside)
-  fetchClinicToday()
-  await fetchChildren()
-  childrenLoaded.value = true
-
-
-  // 3. Restore selected child
-  restoreSelectedChild()
-
-
-  // 4. Load vaccination records for the selected child
-  if (selectedChild.value) {
-
-    await fetchCompletedRecords(
-      selectedChild.value.childID
-    )
-  }
-
-
-  // 5. Load unread notifications
-  await fetchUnreadCount()
-
-  // 6. Load queue ticket status, then poll so "Now Serving" stays live
-  await fetchQueueStatus()
-  queuePollHandle = setInterval(fetchQueueStatus, 5000)
+  if (!(await init())) return
+  await loadQueue()
+  pollHandle = setInterval(loadQueue, 5000)   // keeps "now serving" live
 })
 
-onUnmounted(() => {
-  if (queuePollHandle) clearInterval(queuePollHandle)
-})
+onUnmounted(() => clearInterval(pollHandle))
 </script>
