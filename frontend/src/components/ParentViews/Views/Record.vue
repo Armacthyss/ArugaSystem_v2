@@ -1,100 +1,109 @@
 <template>
-  <div class="w-full min-h-screen bg-slate-50 flex justify-center font-sans antialiased text-slate-900">
-    <div class="w-full max-w-312.5 px-6 py-6">
+  <ParentLayout>
+    <HeaderNav
+      :parent-data="parentData"
+      :children="children"
+      :unread-count="unreadCount"
+      @open-profile="showProfile = true"
+      @open-notifications="showNotifications = true"
+      @logout="handleLogout"
+      @select-child="handleSelectChild"
+    />
 
-      <HeaderNav
-        :parent-data="parentData"
-        :children="children"
-        :unread-count="unreadCount"
-        @open-profile="showProfile = true"
-        @open-notifications="showNotifications = true"
-        @logout="handleLogout"
-        @select-child="handleSelectChild"
-      />
+    <ChildTabs :children="children" :selected-child="selectedChild" @select-child="handleSelectChild" />
 
-      <div class="grid grid-cols-12 gap-8">
-
-        <ChildSidebar :children="children" :selected-child="selectedChild" @select-child="handleSelectChild" />
-
-        <main class="col-span-12 lg:col-span-9">
-          <div class="space-y-5 animate-in fade-in slide-in-from-right-4 duration-500">
-            <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-              <div class="px-8 py-6 border-b border-slate-50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div class="flex items-center gap-4">
-                  <div v-if="selectedChild" class="w-12 h-12 shrink-0 rounded-xl bg-emerald-50 border border-emerald-500/20 flex items-center justify-center text-2xl">{{ selectedChild.sex === 'Female' ? '👧' : '👶' }}</div>
-                  <div>
-                    <p class="text-[10px] font-bold text-emerald-600 uppercase tracking-[0.2em]">Vaccination History</p>
-                    <h2 class="text-2xl font-black text-slate-800 leading-tight">{{ selectedChild?.firstName }} {{ selectedChild?.lastName }}</h2>
-                    <p class="text-[11px] font-bold text-slate-400 mt-0.5">{{ vaccinationHistory.length }} record{{ vaccinationHistory.length !== 1 ? 's' : '' }}</p>
-                  </div>
-                </div>
-                <div class="flex flex-wrap gap-1 bg-slate-50 p-1 rounded-xl">
-                  <button v-for="f in ['All', 'Completed', 'Scheduled', 'Overdue']" :key="f" @click="recordFilter = f"
-                          :class="recordFilter === f ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-700'"
-                          class="px-3 py-1.5 rounded-lg text-[10px] uppercase font-bold transition-all flex items-center gap-1.5">
-                    {{ f }}
-                    <span v-if="f !== 'All'" class="min-w-5 h-5 px-1.5 rounded-full text-[11px] font-black leading-5 text-center"
-                          :class="recordStats[f.toLowerCase()] === 0 ? 'bg-slate-200 text-slate-500'
-                                : f === 'Completed' ? 'bg-emerald-500 text-white'
-                                : f === 'Scheduled' ? 'bg-blue-600 text-white'
-                                : 'bg-red-500 text-white'">{{ recordStats[f.toLowerCase()] }}</span>
-                  </button>
-                </div>
-              </div>
-              <div v-if="recordsLoading" class="py-16 text-center text-slate-400"><p class="text-2xl mb-2 animate-pulse">💉</p><p class="text-xs font-bold">Loading records...</p></div>
-              <div v-else-if="filteredRecords.length === 0" class="py-16 text-center text-slate-400"><p class="text-2xl mb-2">📋</p><p class="text-xs font-bold">No {{ recordFilter === 'All' ? '' : recordFilter.toLowerCase() + ' ' }}vaccination records found.</p></div>
-              <div v-else class="overflow-x-auto">
-                <table class="w-full text-left text-[11px] border-collapse">
-                  <thead><tr class="bg-slate-50 text-slate-400 font-medium uppercase tracking-wide text-[9px]">
-                    <th class="px-6 py-3">Date</th>
-                    <th class="px-6 py-3">Vaccine</th>
-                    <th class="px-6 py-3">Dose</th>
-                    <th class="px-6 py-3">Status</th>
-                    <th class="px-6 py-3">Site</th>
-                    <th class="px-6 py-3">Vaccinated By</th>
-                    <th class="px-6 py-3">Lot #</th>
-                  </tr></thead>
-                  <tbody>
-                    <tr v-for="(rec, i) in filteredRecords" :key="i" class="border-t border-slate-50 hover:bg-slate-50 transition-colors">
-                      <td class="px-6 py-4 whitespace-nowrap text-slate-500">
-                        {{ rec.dateAdministered
-                            ? formatDisplayDate(new Date(rec.dateAdministered))
-                            : rec.scheduledDate
-                              ? formatDisplayDate(new Date(rec.scheduledDate)) + ' (scheduled)'
-                              : '—' }}
-                      </td>
-                      <td class="px-6 py-4 font-bold text-slate-800">{{ rec.vaccineName }}</td>
-                      <td class="px-6 py-4 text-slate-500">Dose {{ rec.doseNumber }}</td>
-                      <td class="px-6 py-4"><span :class="getStatusClass(rec.status)" class="px-3 py-1 rounded-full text-[9px] font-bold uppercase">{{ rec.status }}</span></td>
-                      <td class="px-6 py-4 text-slate-600 whitespace-nowrap">{{ rec.injectionSite || '—' }}</td>
-                      <td class="px-6 py-4 text-slate-500 italic">{{ rec.administeredByName || '—' }}</td>
-                      <td class="px-6 py-4 font-mono text-[10px] text-slate-400">{{ rec.lotNumber || '—' }}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-              <div class="px-8 py-5 bg-slate-50 border-t border-slate-100 flex justify-between items-center">
-                <p class="text-[10px] text-slate-400 font-medium">Print or save the full immunization record as a PDF</p>
-                <button @click="downloadRecord" :disabled="!selectedChild" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50">Download PDF</button>
-              </div>
-            </div>
+    <main>
+      <section class="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm">
+        <!-- Title + filters -->
+        <div class="flex flex-col gap-4 border-b border-slate-100 p-5 sm:p-8 lg:flex-row lg:items-center lg:justify-between">
+          <div class="min-w-0">
+            <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Vaccination history</p>
+            <h2 class="mt-1 truncate text-2xl font-black text-slate-900">{{ selectedChild?.firstName }} {{ selectedChild?.lastName }}</h2>
+            <p class="text-sm text-slate-500">{{ vaccinationHistory.length }} record{{ vaccinationHistory.length !== 1 ? 's' : '' }}</p>
           </div>
-        </main>
-      </div>
+          <div class="grid grid-cols-2 gap-1 rounded-2xl bg-slate-50 p-1 sm:flex sm:flex-wrap">
+            <button v-for="f in ['All', 'Completed', 'Scheduled', 'Overdue']" :key="f" @click="recordFilter = f"
+                    :class="recordFilter === f ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'"
+                    class="flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold uppercase transition-all">
+              {{ f }}
+              <span v-if="f !== 'All'" class="h-5 min-w-5 rounded-full px-1.5 text-center text-[11px] font-black leading-5"
+                    :class="recordStats[f.toLowerCase()] === 0 ? 'bg-slate-200 text-slate-500'
+                          : f === 'Completed' ? 'bg-emerald-500 text-white'
+                          : f === 'Scheduled' ? 'bg-blue-600 text-white'
+                          : 'bg-red-500 text-white'">{{ recordStats[f.toLowerCase()] }}</span>
+            </button>
+          </div>
+        </div>
 
-      <ProfileModal v-if="showProfile" :parent-data="parentData" :children="children" @close="showProfile = false" />
-      <NotificationPanel v-if="showNotifications" :parent-data="parentData" @close="showNotifications = false" />
+        <div v-if="recordsLoading" class="py-16 text-center text-slate-400"><p class="mb-2 animate-pulse text-2xl">💉</p><p class="text-sm font-bold">Loading records…</p></div>
+        <div v-else-if="filteredRecords.length === 0" class="py-16 text-center text-slate-400"><p class="mb-2 text-2xl">📋</p><p class="text-sm font-bold">No {{ recordFilter === 'All' ? '' : recordFilter.toLowerCase() + ' ' }}vaccination records found.</p></div>
 
-    </div>
-  </div>
+        <template v-else>
+          <!-- Phone: one card per dose -->
+          <ul class="divide-y divide-slate-100 sm:hidden">
+            <li v-for="(rec, i) in filteredRecords" :key="'m' + i" class="px-5 py-4">
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                  <p class="font-bold text-slate-900">{{ rec.vaccineName }} · Dose {{ rec.doseNumber }}</p>
+                  <p class="mt-0.5 text-sm text-slate-500">{{ recordDate(rec) }}</p>
+                </div>
+                <span :class="getStatusClass(rec.status)" class="shrink-0 rounded-full px-3 py-1 text-[10px] font-bold uppercase">{{ rec.status }}</span>
+              </div>
+              <p v-if="rec.dateAdministered" class="mt-2 text-xs text-slate-500">
+                <span v-if="rec.injectionSite">{{ rec.injectionSite }} · </span>
+                <span v-if="rec.administeredByName">By {{ rec.administeredByName }}</span>
+                <span v-if="rec.lotNumber"> · Lot {{ rec.lotNumber }}</span>
+              </p>
+            </li>
+          </ul>
+
+          <!-- Tablet and computer: table -->
+          <div class="hidden overflow-x-auto sm:block">
+            <table class="w-full border-collapse text-left text-sm">
+              <thead><tr class="bg-slate-50 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                <th class="px-6 py-3">Date</th>
+                <th class="px-6 py-3">Vaccine</th>
+                <th class="px-6 py-3">Dose</th>
+                <th class="px-6 py-3">Status</th>
+                <th class="px-6 py-3">Site</th>
+                <th class="px-6 py-3">Vaccinated by</th>
+                <th class="px-6 py-3">Lot #</th>
+              </tr></thead>
+              <tbody>
+                <tr v-for="(rec, i) in filteredRecords" :key="i" class="border-t border-slate-100 transition-colors hover:bg-slate-50">
+                  <td class="whitespace-nowrap px-6 py-4 text-slate-500">{{ recordDate(rec) }}</td>
+                  <td class="px-6 py-4 font-bold text-slate-900">{{ rec.vaccineName }}</td>
+                  <td class="whitespace-nowrap px-6 py-4 text-slate-500">Dose {{ rec.doseNumber }}</td>
+                  <td class="px-6 py-4"><span :class="getStatusClass(rec.status)" class="rounded-full px-3 py-1 text-[10px] font-bold uppercase">{{ rec.status }}</span></td>
+                  <td class="whitespace-nowrap px-6 py-4 text-slate-600">{{ rec.injectionSite || '—' }}</td>
+                  <td class="px-6 py-4 text-slate-500">{{ rec.administeredByName || '—' }}</td>
+                  <td class="px-6 py-4 font-mono text-xs text-slate-400">{{ rec.lotNumber || '—' }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </template>
+
+        <div class="flex flex-col gap-3 border-t border-slate-100 bg-slate-50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8 sm:py-5">
+          <p class="text-sm text-slate-500">Print or save the full immunization record as a PDF</p>
+          <button @click="downloadRecord" :disabled="!selectedChild" class="w-full rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:opacity-50 sm:w-auto">Download PDF</button>
+        </div>
+      </section>
+    </main>
+
+    <ProfileModal v-if="showProfile" :parent-data="parentData" :children="children" @close="showProfile = false" />
+    <NotificationPanel v-if="showNotifications" :parent-data="parentData" @close="showNotifications = false" />
+  </ParentLayout>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { addDays, format, isMonday, isWednesday, isFriday } from 'date-fns'
+import { format } from 'date-fns'
 import HeaderNav from '../Components/Headernav.vue'
-import ChildSidebar from '../Components/Childsidebar.vue'
+import ParentLayout from '../Components/ParentLayout.vue'
+import ChildTabs from '../Components/ChildTabs.vue'
+import { mapChild } from '../Composables/useParentPortal.js'
 import ProfileModal from '../Components/Profilemodal.vue'
 import NotificationPanel from '../Components/Notificationpanel.vue'
 import { getAccount, logout as authLogout } from '@/utils/auth'
@@ -134,6 +143,12 @@ const scheduleTimeline = ref([])
 function formatDisplayDate(date) {
   if (!date) return '—'
   try { return format(new Date(date), 'MMM d, yyyy') } catch { return '—' }
+}
+// A given dose shows its date; a planned one its due date
+function recordDate(rec) {
+  if (rec.dateAdministered) return formatDisplayDate(new Date(rec.dateAdministered))
+  if (rec.scheduledDate) return 'Due ' + formatDisplayDate(new Date(rec.scheduledDate))
+  return '—'
 }
 function getStatusClass(status) {
   if (status === 'Completed') return 'bg-emerald-100 text-emerald-700'
@@ -245,36 +260,7 @@ onMounted(async () => {
 
   try {
     const res = await api.get(`/Parents/dashboard/${parentData.value.parentID}`)
-    children.value = res.data.map(child => {
-      const relationshipType = child.relationshipType ?? child.RelationshipType
-      const relatedParentName = child.parentFullName ?? child.ParentFullName
-
-      return {
-        childID: child.ChildID ?? child.childID,
-        firstName: child.FirstName ?? child.firstName,
-        middleName: child.MiddleName ?? child.middleName,
-        lastName: child.LastName ?? child.lastName,
-        birthDate: child.BirthDate ?? child.birthDate,
-        placeOfBirth: child.PlaceOfBirth ?? child.placeOfBirth,
-        sex: child.Sex ?? child.sex,
-        barangay: child.Barangay ?? child.barangay,
-        familyNo: child.FamilyNo ?? child.familyNo,
-        address: child.Address ?? child.address,
-        healthCenter: child.HealthCenter ?? child.healthCenter,
-        relationshipType,
-        isPrimaryContact: child.IsPrimaryContact ?? child.isPrimaryContact,
-        canReceiveNotifications: child.CanReceiveNotifications ?? child.canReceiveNotifications,
-        // Everyone linked to the child: "Maria Santos (Mother); Rosario Santos (Grandmother)"
-        guardians: child.Guardians ?? child.guardians,
-
-        // The dashboard endpoint doesn't return MotherName/FatherName/GuardianName
-        // fields directly — it only returns relationshipType + parentFullName for
-        // the currently logged-in parent, so derive which of the three this is.
-        motherName: relationshipType === 'Mother' ? relatedParentName : undefined,
-        fatherName: relationshipType === 'Father' ? relatedParentName : undefined,
-        guardianName: relationshipType === 'Guardian' ? relatedParentName : undefined,
-      }
-    })
+    children.value = (res.data ?? []).map(mapChild)
   } catch (err) {
     console.error('Error fetching parent dashboard:', err)
     children.value = []
