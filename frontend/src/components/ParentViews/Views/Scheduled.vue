@@ -136,12 +136,26 @@
             <span v-if="hasOverdue" class="flex items-center gap-2"><span class="h-2 w-2 rounded-full bg-red-500"></span>Missed</span>
           </div>
 
-          <p class="mt-4 px-1 text-center text-sm text-slate-500">
-            <span v-if="clinic?.clinicHoursText">Clinic open {{ compactHours(clinic.clinicHoursText) }} · </span>
-            <span v-if="clinic?.hoursText">Vaccinations {{ compactHours(clinic.hoursText) }} · </span>
-            <router-link to="/ParentRecords" class="font-semibold text-emerald-700 hover:underline">See full history</router-link>
-          </p>
-          <p class="mt-1 text-center text-xs text-slate-400">Vaccine stock may change without notice.</p>
+          <!-- Clinic hours, vaccination hours and the check-in cutoff -->
+          <dl class="mt-5 space-y-1.5 rounded-2xl bg-slate-50 px-4 py-3 text-sm sm:px-5">
+            <div v-if="clinic?.clinicHoursText" class="flex flex-wrap gap-x-2">
+              <dt class="font-semibold text-slate-700">Clinic hours:</dt>
+              <dd class="text-slate-600">{{ niceHours(clinic.clinicHoursText) }}</dd>
+            </div>
+            <div v-if="clinic?.hoursText" class="flex flex-wrap gap-x-2">
+              <dt class="font-semibold text-slate-700">Vaccination hours:</dt>
+              <dd class="text-slate-600">{{ niceHours(clinic.hoursText) }}</dd>
+            </div>
+            <div v-if="checkInCutoff" class="flex flex-wrap gap-x-2">
+              <dt class="font-semibold text-slate-700">Check-in closes:</dt>
+              <dd class="text-slate-600">{{ checkInCutoff }} on vaccination days</dd>
+            </div>
+          </dl>
+
+          <div class="mt-3 flex flex-wrap items-center justify-between gap-2 px-1">
+            <p class="text-xs text-slate-400">Vaccine stock may change without notice.</p>
+            <router-link to="/ParentRecords" class="text-sm font-semibold text-emerald-700 hover:underline">See full history →</router-link>
+          </div>
         </section>
       </div>
     </main>
@@ -162,6 +176,7 @@ import ProfileModal from '../Components/Profilemodal.vue'
 import NotificationPanel from '../Components/Notificationpanel.vue'
 
 import { useParentPortal } from '../Composables/useParentPortal.js'
+import api from '../Composables/api.js'
 import {
   planNextVisit, visitHours, isClinicDay, isClosedException, dayOnly, downloadVisitReminder,
 } from '../Composables/visitPlan.js'
@@ -183,9 +198,25 @@ const completedCount = computed(() => schedule.value.filter(v => v.isCompleted).
 const progressPercent = computed(() =>
   schedule.value.length ? Math.round((completedCount.value / schedule.value.length) * 100) : 0)
 
-// "Mon–Fri · 8:00 AM – 5:00 PM" -> "Mon–Fri 8–5"
-const compactHours = text => String(text)
-  .replace(/\s*·\s*/g, ' ').replace(/:00/g, '').replace(/\s*(AM|PM)/gi, '').replace(/\s*–\s*/g, '–')
+// "Mon–Fri · 8:00 AM – 5:00 PM" -> "Mon–Fri, 8:00 AM – 5:00 PM"
+const niceHours = text => String(text).replace(/\s*·\s*/, ', ')
+
+// Check-in cutoff from Operating Hours (the latest one among the open days,
+// e.g. "11:00 AM"); today's own cutoff wins when today is a vaccination day
+const weeklyHours = ref([])
+api.get('/ClinicOperatingSchedule').then(r => { weeklyHours.value = r.data ?? [] }).catch(() => {})
+
+const checkInCutoff = computed(() => {
+  if (clinic.value?.checkInUntil) return clinic.value.checkInUntil
+  const times = weeklyHours.value
+    .filter(s => (s.isOpen ?? s.IsOpen) && (s.queueCutoffTime ?? s.QueueCutoffTime))
+    .map(s => String(s.queueCutoffTime ?? s.QueueCutoffTime))
+    .sort()
+  const latest = times[times.length - 1]
+  if (!latest) return ''
+  const [h, m] = latest.split(':').map(Number)
+  return format(new Date(2000, 0, 1, h, m), 'h:mm a')
+})
 
 function addReminder() {
   if (visit.value && selectedChild.value) {
