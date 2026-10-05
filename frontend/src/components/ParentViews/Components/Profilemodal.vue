@@ -1,18 +1,18 @@
 <template>
   <Transition name="modal-fade" appear>
     <div class="fixed inset-0 z-300 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" @click.self="$emit('close')">
-      <div class="relative w-full max-w-2xl bg-white rounded-xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
-        <div class="bg-emerald-600 px-8 py-7 flex items-center gap-5 shrink-0">
-          <div class="w-16 h-16 rounded-xl bg-white/20 flex items-center justify-center text-4xl shadow-lg shrink-0">👤</div>
+      <div class="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+        <div class="bg-emerald-600 px-5 py-5 sm:px-8 sm:py-7 flex items-center gap-4 sm:gap-5 shrink-0">
+          <div class="w-12 h-12 sm:w-16 sm:h-16 rounded-xl bg-white/20 flex items-center justify-center text-3xl sm:text-4xl shadow-lg shrink-0">👤</div>
           <div class="flex-1 min-w-0">
-            <p class="text-white font-bold text-xl leading-tight">
+            <p class="text-white font-bold text-lg sm:text-xl leading-tight break-words">
               {{ info?.firstName }} {{ info?.middleName ? info.middleName + ' ' : '' }}{{ info?.lastName }}
             </p>
             <p class="text-emerald-100 text-xs font-medium mt-1">Parent/Guardian Account · Aruga Pediatric Portal</p>
           </div>
           <button @click="$emit('close')" class="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/25 flex items-center justify-center text-white text-lg transition-all shrink-0">✕</button>
         </div>
-        <div class="overflow-y-auto flex-1 p-8 space-y-8">
+        <div class="overflow-y-auto flex-1 p-5 sm:p-8 space-y-6 sm:space-y-8">
           <div>
             <p class="text-[10px] font-semibold text-emerald-600 uppercase tracking-wide mb-4">Your Information</p>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -123,9 +123,9 @@
             </div>
           </div>
         </div>
-        <div class="shrink-0 px-8 py-5 border-t border-slate-100 bg-slate-50 flex items-center justify-between gap-4">
+        <div class="shrink-0 px-5 py-4 sm:px-8 sm:py-5 border-t border-slate-100 bg-slate-50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
           <p class="text-[10px] text-slate-400 font-bold">To update your information, please contact the clinic staff.</p>
-          <button @click="$emit('close')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-lg text-sm font-medium transition-colors shrink-0">Close</button>
+          <button @click="$emit('close')" class="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-lg text-sm font-medium transition-colors shrink-0">Close</button>
         </div>
       </div>
     </div>
