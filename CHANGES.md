@@ -6,6 +6,37 @@ the beneficiary revision below is on `Aruga-Revision`.
 
 ---
 
+## Queue Management is now the daily queue record (Oct 9, 2026)
+
+The page used to list every queue entry ever, oldest first, with a status dropdown and a delete button on each. It now shows **one day at a time** as a read-only record. Today's queue is still run from the Dashboard.
+
+- Opens on **today**. The arrows jump to the previous or next day that had check-ins (closed days are skipped), and a date picker and a **Today** button are there too.
+- Each day shows **Families** (and children), **Served**, **Still in queue** (today) or **Not served** (past days), and **Brought by someone else**.
+- The table lists Queue No., Child(ren), **Brought by**, **Checked in** time and Status. The eye button lists who brought each child, the parent on file and the barangay.
+- **Not served:** an entry from a past day that never finished (the family left or wasn't called before closing) shows "Not served" instead of staying "Waiting" forever. It no longer inflates the counts.
+- **Past days can't be changed:** no status dropdown or delete button. The server also refuses status changes and deletion for past days. Removing someone is still done on the Dashboard, for today's queue only.
+- The page loads only the day shown, not the whole history.
+- **Barangay always reads "Barangay 21"** everywhere it's shown: here, Patient Records, the Admin's Patients page and reports (including the CSV export), the vaccination card and the parent portal. Before, some screens showed a bare number ("719"), "Brgy 21", or "Barangay Barangay 2" for older records that already included the word.
+- Storage: one queue entry is a small row (about 2 MB a year at a busy pace), so the history is kept. The Admin's Daily Queue Summary report and the "brought by" record depend on it.
+
+---
+
+## Someone else brings the child (Oct 9, 2026)
+
+Suggested by the panelists: when a parent sends someone else (e.g. an older sibling) to bring a registered child, staff no longer have to register that person as a guardian first. They may only come once, so a record for them would just take up space.
+
+- **Check-In Patient** (Staff dashboard) now searches by the **child's** or the parent's name. Searching a child's name ticks that child.
+- New question: **Who brought the child?** Choose the parent on file, or **Someone else** and type their full name and relationship (Sibling, Grandparent, Aunt / Uncle, Cousin, Other relative, Neighbor / family friend, or Other).
+- No phone number is asked: they wait right by the desk, and Call Next still alerts the parent on file.
+- Their name is saved with that day's visit only, per child, with no account and no link to the child. Today's Queue, Queue Management and the Vaccination Visit show "Ana Castillo (Sibling)". The **Audit Log** records "Brought in by Ana Castillo (Sibling) on behalf of Kristel Castillo."
+- **A second child from the same family later that day** (e.g. a sibling brought Ella, an aunt brings Liam):
+  - Family still **waiting**: the child joins that queue number, and they go in together.
+  - Family's visit already **called or finished** (the aunt came late): the child gets a **new number** at the end of the line. The parent's Check-in page follows the new number.
+  - A child already in today's queue is greyed out ("Already checked in today (Q-006)").
+- Database: two new optional columns on `QueueChildren` (`BroughtByName`, `BroughtByRelationship`). The API adds them by itself to an older database when it starts.
+
+---
+
 ## Super Admin level (Sep 30, 2026)
 
 Asked for by the technical adviser: a Super Admin for the development team, with the audit logs on that level.

@@ -18,7 +18,7 @@
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div class="bg-slate-50 rounded-xl px-5 py-4"><p class="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Email Address</p><p class="text-sm font-bold text-slate-800 break-all">{{ info?.email || '—' }}</p></div>
               <div class="bg-slate-50 rounded-xl px-5 py-4"><p class="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Contact Number</p><p class="text-sm font-bold text-slate-800">{{ info?.contactNo || info?.contactNumber || '—' }}</p></div>
-              <div class="bg-slate-50 rounded-xl px-5 py-4"><p class="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Barangay</p><p class="text-sm font-bold text-slate-800">{{ info?.barangayNo || info?.barangay || '—' }}</p></div>
+              <div class="bg-slate-50 rounded-xl px-5 py-4"><p class="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Barangay</p><p class="text-sm font-bold text-slate-800">{{ barangayLabel(info?.barangayNo || info?.barangay) }}</p></div>
               <div class="bg-slate-50 rounded-xl px-5 py-4"><p class="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Address</p><p class="text-sm font-bold text-slate-800">{{ info?.address || '—' }}</p></div>
             </div>
           </div>
@@ -116,7 +116,7 @@
                   <div class="bg-slate-50 rounded-xl px-4 py-3 sm:col-span-2"><p class="text-[9px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Parents / Guardians</p><p class="text-sm font-bold text-slate-700">{{ child.guardians ? child.guardians.split('; ').join(', ') : '—' }}</p></div>
                   <div class="bg-slate-50 rounded-xl px-4 py-3"><p class="text-[9px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Place of Birth</p><p class="text-sm font-bold text-slate-700">{{ child.placeOfBirth || '—' }}</p></div>
                   <div class="bg-slate-50 rounded-xl px-4 py-3"><p class="text-[9px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Health Center</p><p class="text-sm font-bold text-slate-700">{{ child.healthCenter || '—' }}</p></div>
-                  <div class="bg-slate-50 rounded-xl px-4 py-3"><p class="text-[9px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Barangay</p><p class="text-sm font-bold text-slate-700">{{ child.barangay || '—' }}</p></div>
+                  <div class="bg-slate-50 rounded-xl px-4 py-3"><p class="text-[9px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Barangay</p><p class="text-sm font-bold text-slate-700">{{ barangayLabel(child.barangay) }}</p></div>
                   <div class="bg-slate-50 rounded-xl px-4 py-3"><p class="text-[9px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Age</p><p class="text-sm font-bold text-slate-700">{{ calculateAge(child.birthDate) }}</p></div>
                 </div>
               </div>
@@ -134,6 +134,7 @@
 
 <script setup>
 import { ageParts } from '@/utils/format'
+import { barangayLabel } from '@/utils/barangays'
 import { API_ORIGIN } from '@/utils/apiBase'
 import { ref, computed, onMounted } from 'vue'
 import axios from 'axios'

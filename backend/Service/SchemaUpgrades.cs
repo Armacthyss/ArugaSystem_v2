@@ -32,6 +32,19 @@ IF OBJECT_ID(N'dbo.UQ_Parents_Email', N'UQ') IS NOT NULL
     ALTER TABLE dbo.Parents DROP CONSTRAINT UQ_Parents_Email;
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_Parents_Email' AND object_id = OBJECT_ID(N'dbo.Parents'))
     CREATE UNIQUE INDEX UX_Parents_Email ON dbo.Parents (Email) WHERE Email IS NOT NULL;");
+
+            // Oct 2026: who brought each child, when not the parent (see
+            // QueueChild.cs). A first test version kept it on Queues; those
+            // two columns are removed again.
+            await context.Database.ExecuteSqlRawAsync(@"
+IF COL_LENGTH('dbo.QueueChildren', 'BroughtByName') IS NULL
+    ALTER TABLE dbo.QueueChildren ADD BroughtByName NVARCHAR(100) NULL;
+IF COL_LENGTH('dbo.QueueChildren', 'BroughtByRelationship') IS NULL
+    ALTER TABLE dbo.QueueChildren ADD BroughtByRelationship NVARCHAR(50) NULL;
+IF COL_LENGTH('dbo.Queues', 'BroughtByName') IS NOT NULL
+    ALTER TABLE dbo.Queues DROP COLUMN BroughtByName;
+IF COL_LENGTH('dbo.Queues', 'BroughtByRelationship') IS NOT NULL
+    ALTER TABLE dbo.Queues DROP COLUMN BroughtByRelationship;");
         }
     }
 }

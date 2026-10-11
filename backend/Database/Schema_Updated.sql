@@ -372,6 +372,8 @@ CREATE TABLE dbo.QueueChildren (
     QueueChildID uniqueidentifier NOT NULL,
     QueueID      uniqueidentifier NOT NULL,
     ChildID      uniqueidentifier NOT NULL,
+    BroughtByName         nvarchar(100) NULL,   -- who brought the child when not the parent (e.g. an older sibling)
+    BroughtByRelationship nvarchar(50)  NULL,
     CreatedAt    datetime         NOT NULL CONSTRAINT DF_QueueChildren_CreatedAt DEFAULT (GETDATE()),
     CONSTRAINT PK_QueueChildren PRIMARY KEY (QueueChildID),
     CONSTRAINT FK_QueueChildren_Queues FOREIGN KEY (QueueID) REFERENCES dbo.Queues (QueueID) ON DELETE CASCADE,

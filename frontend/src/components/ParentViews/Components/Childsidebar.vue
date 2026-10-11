@@ -14,7 +14,7 @@
           <p class="text-xs font-bold text-slate-800 leading-tight truncate">{{ child.firstName }} {{ child.lastName }}</p>
           <!-- Leveriza knows families by Family No. and Barangay, not a system ID -->
           <p v-if="child.familyNo || child.barangay" class="text-[9px] text-slate-400 font-medium mt-0.5">
-            <span v-if="child.familyNo">Family No. {{ child.familyNo }}</span><span v-if="child.familyNo && child.barangay"> · </span><span v-if="child.barangay">Brgy. {{ child.barangay }}</span>
+            <span v-if="child.familyNo">Family No. {{ child.familyNo }}</span><span v-if="child.familyNo && child.barangay"> · </span><span v-if="child.barangay">{{ barangayLabel(child.barangay) }}</span>
           </p>
         </div>
       </button>
@@ -23,6 +23,8 @@
 </template>
 
 <script setup>
+import { barangayLabel } from '@/utils/barangays'
+
 // children and selectedChild are fetched/owned by whichever page renders
 // this component (see HARD RULE 3) and passed down as props. This
 // component only renders the list and emits the selection up — the page

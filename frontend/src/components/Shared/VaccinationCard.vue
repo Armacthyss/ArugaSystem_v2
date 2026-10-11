@@ -49,7 +49,7 @@
         <!-- Child details -->
         <div class="grid grid-cols-3 gap-x-6 gap-y-3 text-sm mb-6">
           <div class="col-span-2"><p class="text-[10px] uppercase tracking-wide text-slate-500">Name of Child</p><p class="font-semibold text-slate-900">{{ fullName }}</p></div>
-          <div><p class="text-[10px] uppercase tracking-wide text-slate-500">Family No. / Barangay</p><p class="text-slate-900">{{ child.familyNo || '—' }} / {{ child.barangay ?? '—' }}</p></div>
+          <div><p class="text-[10px] uppercase tracking-wide text-slate-500">Family No. / Barangay</p><p class="text-slate-900">{{ child.familyNo || '—' }} / {{ barangayLabel(child.barangay) }}</p></div>
           <div><p class="text-[10px] uppercase tracking-wide text-slate-500">Date of Birth</p><p class="text-slate-900">{{ formatDate(child.birthDate) }}</p></div>
           <div><p class="text-[10px] uppercase tracking-wide text-slate-500">Sex</p><p class="text-slate-900">{{ child.sex || '—' }}</p></div>
           <div><p class="text-[10px] uppercase tracking-wide text-slate-500">Place of Birth</p><p class="text-slate-900">{{ child.placeOfBirth || '—' }}</p></div>
@@ -125,6 +125,7 @@ import { useRoute, useRouter } from 'vue-router'
 import axios from 'axios'
 import logoIcon from '@/assets/logo-icon.svg'
 import { API_BASE, formatDate, toISODate, withRelationship, guardiansOf } from '@/utils/format'
+import { barangayLabel } from '@/utils/barangays'
 import { showAlert } from '@/utils/dialog'
 
 const route = useRoute()

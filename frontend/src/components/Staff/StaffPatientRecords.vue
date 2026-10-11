@@ -13,7 +13,7 @@ import axios from "axios";
 import StaffSidebar from "./StaffSidebar.vue";
 import StaffTopbar from "./StaffTopbar.vue";
 import PrivacyConsentCheckbox from "@/components/Shared/PrivacyConsentCheckbox.vue";
-import { barangayChoices, isServedBarangay, BARANGAY_HINT } from "@/utils/barangays";
+import { barangayChoices, barangayLabel, isServedBarangay, BARANGAY_HINT } from "@/utils/barangays";
 import { toISODate, ageParts } from "@/utils/format";
 import { showAlert } from "@/utils/dialog";
 import { phMobileError } from "@/utils/phone";
@@ -392,7 +392,7 @@ function goToPage(n) {
 ========================================================================= */
 const parentColumns = [
   { key:"avatar", badge:"avatar" },
-  { key:"barangay", label:"Barangay No.", muted:true, value:(p)=>p.barangay || "—" },
+  { key:"barangay", label:"Barangay", muted:true, value:(p)=>barangayLabel(p.barangay) },
   { key:"name", label:"Full Name" },
   { key:"relationship", label:"Relationship", muted:true },
   { key:"contact", label:"Contact Number", muted:true },
@@ -1452,7 +1452,7 @@ async function submitChildRegister() {
           </div>
           <div class="grid grid-cols-2 gap-3">
             <div class="rounded-xl bg-stone-50 p-3"><p class="text-[10.5px] uppercase tracking-wide text-stone-500">Family No.</p><p class="text-[13px] font-medium mt-0.5">{{ selectedChild.familyNo || "—" }}</p></div>
-            <div class="rounded-xl bg-stone-50 p-3"><p class="text-[10.5px] uppercase tracking-wide text-stone-500">Barangay</p><p class="text-[13px] font-medium mt-0.5">{{ selectedChild.barangay }}</p></div>
+            <div class="rounded-xl bg-stone-50 p-3"><p class="text-[10.5px] uppercase tracking-wide text-stone-500">Barangay</p><p class="text-[13px] font-medium mt-0.5">{{ barangayLabel(selectedChild.barangay) }}</p></div>
             <div class="rounded-xl bg-stone-50 p-3"><p class="text-[10.5px] uppercase tracking-wide text-stone-500">Birth Date</p><p class="text-[13px] font-medium mt-0.5">{{ selectedChild.birthDate }}</p></div>
             <div class="rounded-xl bg-stone-50 p-3"><p class="text-[10.5px] uppercase tracking-wide text-stone-500">Birth Place</p><p class="text-[13px] font-medium mt-0.5">{{ selectedChild.birthPlace }}</p></div>
             <div class="rounded-xl bg-stone-50 p-3"><p class="text-[10.5px] uppercase tracking-wide text-stone-500">Birth Height</p><p class="text-[13px] font-medium mt-0.5">{{ selectedChild.height }}</p></div>
@@ -1560,7 +1560,7 @@ async function submitChildRegister() {
           <button v-for="item in pickerResults" :key="item.id" @click="picker.selected = item" class="flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-colors" :class="picker.selected?.id === item.id ? 'border-emerald-500 bg-emerald-50' : 'border-stone-200 hover:bg-stone-50'">
             <div v-if="picker.mode === 'linkChild'" class="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 shrink-0"><Baby :size="17" class="text-emerald-700" /></div>
             <Avatar v-else :text="item.initials" size="md" />
-            <div class="flex-1 min-w-0"><p class="text-[12.5px] font-semibold">{{ item.name }}</p><p class="text-[11px] text-stone-500"><template v-if="picker.mode === 'linkChild'">Family No. {{ item.familyNo || "—" }} · Born {{ item.birthDate }}</template><template v-else>Brgy {{ item.barangay || "—" }} · {{ item.contact }}</template></p></div>
+            <div class="flex-1 min-w-0"><p class="text-[12.5px] font-semibold">{{ item.name }}</p><p class="text-[11px] text-stone-500"><template v-if="picker.mode === 'linkChild'">Family No. {{ item.familyNo || "—" }} · Born {{ item.birthDate }}</template><template v-else>{{ barangayLabel(item.barangay) }} · {{ item.contact }}</template></p></div>
             <Check v-if="picker.selected?.id === item.id" :size="17" class="text-emerald-700 shrink-0" />
           </button>
           <p v-if="pickerResults.length === 0" class="text-[12.5px] text-stone-500 py-4 text-center">No matches found.</p>
@@ -1682,7 +1682,7 @@ async function submitChildRegister() {
                 <div v-if="regChildSearch && regFilteredChildrenForLink.length > 0" class="absolute left-0 right-0 z-10 bg-white border border-stone-200 shadow-xl rounded-xl mt-1 overflow-hidden max-h-48 overflow-y-auto">
                   <div v-for="c in regFilteredChildrenForLink" :key="c.id" @click="regAddLinkedChild(c)" class="px-4 py-2.5 hover:bg-emerald-50 cursor-pointer border-b border-stone-50 last:border-none">
                     <p class="text-sm font-bold text-stone-700">{{ c.name }}</p>
-                    <p class="text-[10px] text-stone-400">Brgy {{ c.barangay ?? 'N/A' }}</p>
+                    <p class="text-[10px] text-stone-400">{{ barangayLabel(c.barangay, 'No barangay') }}</p>
                   </div>
                 </div>
               </div>
