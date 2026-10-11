@@ -109,7 +109,8 @@ const quickActions = [
   // For an already-registered patient who walks in without their parent's
   // login (no QR, no parent account access) — this opens a modal to look
   // up the parent/child and add them straight to today's queue, instead of
-  // routing to registration (which is for brand-new patients).
+  // routing to registration (which is for brand-new patients). If someone
+  // else brought the child, staff type their name and relationship there.
   { icon: ClipboardCheck, label: "Check-In Patient", action: () => openCheckInModal() },
   { icon: UserPlus, label: "Add Walk-in Patient", action: () => router.push("/staff/patient-records?tab=children&openRegister=1&walkin=1") },
   { icon: Search, label: "Search Patient", action: () => router.push("/staff/patient-records?tab=parents") },
@@ -277,6 +278,10 @@ const openCheckInModal = async () => {
   selectedParent.value = null;
   selectedChildIds.value = [];
   parentSearch.value = "";
+  broughtBy.value = "parent";
+  broughtByName.value = "";
+  broughtByRelationship.value = "";
+  broughtByOther.value = "";
 
   if (parentsList.value.length && childrenList.value.length) return; // already loaded this session
 
@@ -318,25 +323,63 @@ const closeCheckInModal = () => {
   checkInModalOpen.value = false;
 };
 
+// Search by the parent's OR the child's name: when a relative brings the
+// child, staff usually only know the child. Each result is a parent with
+// the children that matched (pre-ticked when picked).
 const filteredParents = computed(() => {
   const term = parentSearch.value.trim().toLowerCase();
   if (!term) return [];
   return parentsList.value
-    .filter((p) => getParentName(p).toLowerCase().includes(term))
+    .map((p) => {
+      const kids = childrenList.value.filter((c) => childBelongsToParent(c, getParentId(p)));
+      const matchedKids = kids.filter((c) => getChildName(c).toLowerCase().includes(term));
+      const parentMatches = getParentName(p).toLowerCase().includes(term);
+      return { parent: p, kids, matchedKids, show: parentMatches || matchedKids.length > 0 };
+    })
+    .filter((r) => r.show)
     .slice(0, 8);
 });
 
-const pickParent = (p) => {
-  selectedParent.value = p;
-  selectedChildIds.value = [];
+const pickParent = (result) => {
+  selectedParent.value = result.parent;
+  selectedChildIds.value = result.matchedKids.map(getChildId).filter((id) => !queuedToday.value[id]);
   parentSearch.value = "";
 };
+
+// Who brought the child: the parent on file, or someone else typed in by
+// hand (e.g. an older sibling the parent sent). Someone else is NOT
+// registered; their name stays with today's visit and the Audit Log.
+const RELATIONSHIPS = ["Sibling", "Grandparent", "Aunt / Uncle", "Cousin", "Other relative", "Neighbor / family friend", "Other"];
+const broughtBy = ref("parent"); // "parent" | "other"
+const broughtByName = ref("");
+const broughtByRelationship = ref("");
+const broughtByOther = ref(""); // when the relationship is "Other"
+
+const broughtByRelationshipText = computed(() =>
+  broughtByRelationship.value === "Other" ? broughtByOther.value.trim() : broughtByRelationship.value);
+
+const canSubmitCheckIn = computed(() =>
+  !!selectedParent.value && selectedChildIds.value.length > 0 && !submittingCheckIn.value &&
+  (broughtBy.value === "parent" || (broughtByName.value.trim() && broughtByRelationshipText.value)));
 
 const childrenForSelectedParent = computed(() => {
   if (!selectedParent.value) return [];
   const parentId = getParentId(selectedParent.value);
   return childrenList.value.filter((c) => childBelongsToParent(c, parentId));
 });
+
+// Children already in today's queue can't be checked in again
+const queuedToday = computed(() => {
+  const map = {};
+  for (const q of queue.value) for (const id of q.childIDs || []) map[id] = q.no;
+  return map;
+});
+
+const checkInNotice = ref("");
+const flashCheckIn = (msg) => {
+  checkInNotice.value = msg;
+  setTimeout(() => { if (checkInNotice.value === msg) checkInNotice.value = ""; }, 8000);
+};
 
 const toggleChildSelection = (childId) => {
   const idx = selectedChildIds.value.indexOf(childId);
@@ -345,9 +388,10 @@ const toggleChildSelection = (childId) => {
 };
 
 const submitCheckIn = async () => {
-  if (!selectedParent.value || selectedChildIds.value.length === 0) return;
+  if (!canSubmitCheckIn.value) return;
   submittingCheckIn.value = true;
   checkInError.value = null;
+  const someoneElse = broughtBy.value === "other";
   try {
     const response = await fetch(`${API_BASE}/Queue`, {
       method: "POST",
@@ -355,16 +399,30 @@ const submitCheckIn = async () => {
       body: JSON.stringify({
         ParentID: getParentId(selectedParent.value),
         ChildIDs: selectedChildIds.value,
+        BroughtByName: someoneElse ? broughtByName.value.trim() : null,
+        BroughtByRelationship: someoneElse ? broughtByRelationshipText.value : null,
       }),
     });
 
-    if (response.status === 409) {
-      checkInError.value = "This patient is already checked in today.";
+    if (response.status === 409 || response.status === 400) {
+      const body = await response.json().catch(() => ({}));
+      checkInError.value = body.message || "Please check the details and try again.";
       return;
     }
     if (!response.ok) {
       throw new Error(`Failed to check in. Status: ${response.status}`);
     }
+
+    // 200 = added to the family's visit that is still waiting;
+    // 201 = a new number (no visit yet, or it was already called)
+    const saved = await response.json().catch(() => null);
+    const names = childrenForSelectedParent.value
+      .filter((c) => selectedChildIds.value.includes(getChildId(c)))
+      .map(getChildName).join(", ");
+    const no = saved ? `Q-${String(saved.queueNumber).padStart(3, "0")}` : "the queue";
+    flashCheckIn(response.status === 200
+      ? `${names} added to ${no}, the family's visit that is still waiting.`
+      : `${names} checked in as ${no}.`);
 
     checkInModalOpen.value = false;
     await loadQueue();
@@ -774,6 +832,7 @@ onUnmounted(() => {
     <span class="text-[12px] text-stone-500">
       {{ visibleQueue.length }} {{ visibleQueue.length === 1 ? 'family' : 'families' }} in queue
     </span>
+    <p v-if="checkInNotice" class="mt-1 text-[12px] font-medium text-emerald-700">{{ checkInNotice }}</p>
   </div>
 
   <button
@@ -1086,26 +1145,29 @@ onUnmounted(() => {
           <p v-if="loadingCheckInData" class="text-[12.5px] text-stone-400">Loading parent/child records…</p>
 
           <template v-if="!loadingCheckInData">
-            <!-- Step 1: find the parent -->
+            <!-- Step 1: find the family by the child's or parent's name -->
             <div v-if="!selectedParent">
-              <label class="block text-[12px] font-medium text-stone-600 mb-1">Search parent by name</label>
+              <label class="block text-[12px] font-medium text-stone-600 mb-1">Search child or parent name</label>
               <input
                 v-model="parentSearch"
                 type="text"
-                placeholder="e.g. Mark Reyes"
+                placeholder="e.g. Isabela Cruz or Mark Reyes"
                 class="w-full rounded-xl border border-stone-200 px-3 py-2.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-emerald-600/30 focus:border-emerald-600"
               />
               <div v-if="parentSearch.trim()" class="mt-2 rounded-xl border border-stone-200 divide-y divide-stone-100 overflow-hidden">
                 <button
-                  v-for="p in filteredParents"
-                  :key="getParentId(p)"
-                  @click="pickParent(p)"
-                  class="flex w-full items-center justify-between px-3 py-2.5 text-left text-[13px] hover:bg-stone-50"
+                  v-for="r in filteredParents"
+                  :key="getParentId(r.parent)"
+                  @click="pickParent(r)"
+                  class="block w-full px-3 py-2.5 text-left hover:bg-stone-50"
                 >
-                  {{ getParentName(p) }}
+                  <span class="block text-[13px] font-medium">{{ getParentName(r.parent) }}</span>
+                  <span v-if="r.kids.length" class="block text-[11.5px] text-stone-500">
+                    Children: {{ r.kids.map(getChildName).join(", ") }}
+                  </span>
                 </button>
                 <p v-if="filteredParents.length === 0" class="px-3 py-2.5 text-[12.5px] text-stone-400">
-                  No matching parent found.
+                  No registered child or parent found. A new patient is added with Add Walk-in Patient.
                 </p>
               </div>
             </div>
@@ -1124,19 +1186,55 @@ onUnmounted(() => {
                 <label
                   v-for="c in childrenForSelectedParent"
                   :key="getChildId(c)"
-                  class="flex items-center gap-2.5 rounded-xl border border-stone-200 px-3 py-2.5 text-[13px] cursor-pointer hover:bg-stone-50"
+                  class="flex items-center gap-2.5 rounded-xl border border-stone-200 px-3 py-2.5 text-[13px]"
+                  :class="queuedToday[getChildId(c)] ? 'bg-stone-50 text-stone-400' : 'cursor-pointer hover:bg-stone-50'"
                 >
                   <input
                     type="checkbox"
                     :checked="selectedChildIds.includes(getChildId(c))"
+                    :disabled="!!queuedToday[getChildId(c)]"
                     @change="toggleChildSelection(getChildId(c))"
                     class="rounded border-stone-300 text-emerald-700 focus:ring-emerald-600/30"
                   />
                   {{ getChildName(c) }}
+                  <span v-if="queuedToday[getChildId(c)]" class="ml-auto text-[11.5px]">Already checked in today ({{ queuedToday[getChildId(c)] }})</span>
                 </label>
                 <p v-if="childrenForSelectedParent.length === 0" class="text-[12.5px] text-stone-400">
                   No children on file for this parent.
                 </p>
+              </div>
+
+              <!-- Who brought the child in -->
+              <p class="text-[12px] font-medium text-stone-600 mt-4 mb-2">Who brought the child?</p>
+              <div class="space-y-1.5">
+                <label class="flex items-start gap-2.5 rounded-xl border px-3 py-2.5 text-[13px] cursor-pointer"
+                  :class="broughtBy === 'parent' ? 'border-emerald-600 bg-emerald-50/50' : 'border-stone-200 hover:bg-stone-50'">
+                  <input type="radio" value="parent" v-model="broughtBy" class="mt-0.5 text-emerald-700 focus:ring-emerald-600/30" />
+                  <span>{{ getParentName(selectedParent) }} <span class="text-stone-500">(parent / guardian on file)</span></span>
+                </label>
+                <label class="flex items-start gap-2.5 rounded-xl border px-3 py-2.5 text-[13px] cursor-pointer"
+                  :class="broughtBy === 'other' ? 'border-emerald-600 bg-emerald-50/50' : 'border-stone-200 hover:bg-stone-50'">
+                  <input type="radio" value="other" v-model="broughtBy" class="mt-0.5 text-emerald-700 focus:ring-emerald-600/30" />
+                  <span>Someone else <span class="block text-[11.5px] text-stone-500">e.g. a sibling or relative the parent sent</span></span>
+                </label>
+              </div>
+
+              <div v-if="broughtBy === 'other'" class="mt-3 space-y-2.5">
+                <div>
+                  <label class="block text-[12px] font-medium text-stone-600 mb-1">Their full name</label>
+                  <input v-model="broughtByName" type="text" maxlength="100" placeholder="e.g. Ana Cruz"
+                    class="w-full rounded-xl border border-stone-200 px-3 py-2.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-emerald-600/30 focus:border-emerald-600" />
+                </div>
+                <div>
+                  <label class="block text-[12px] font-medium text-stone-600 mb-1">Relationship to the child</label>
+                  <select v-model="broughtByRelationship"
+                    class="w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-emerald-600/30 focus:border-emerald-600">
+                    <option value="" disabled>Choose…</option>
+                    <option v-for="r in RELATIONSHIPS" :key="r" :value="r">{{ r }}</option>
+                  </select>
+                  <input v-if="broughtByRelationship === 'Other'" v-model="broughtByOther" type="text" maxlength="50" placeholder="Specify, e.g. Nanny"
+                    class="mt-2 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-emerald-600/30 focus:border-emerald-600" />
+                </div>
               </div>
             </div>
 
@@ -1150,7 +1248,7 @@ onUnmounted(() => {
           </button>
           <button
             @click="submitCheckIn"
-            :disabled="!selectedParent || selectedChildIds.length === 0 || submittingCheckIn"
+            :disabled="!canSubmitCheckIn"
             class="rounded-xl bg-emerald-700 px-4 py-2.5 text-[13px] font-medium text-white hover:bg-emerald-800 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {{ submittingCheckIn ? "Checking in…" : "Check In" }}

@@ -73,6 +73,7 @@
 import { ref, computed, watch } from 'vue'
 import { format } from 'date-fns'
 import { ageParts } from '@/utils/format'
+import { barangayLabel } from '@/utils/barangays'
 import api from '../Composables/api'
 
 const props = defineProps({
@@ -128,7 +129,7 @@ const facts = computed(() => {
     { label: 'Birth date', value: birth },
     { label: 'Age', value: ageText.value || '—' },
     { label: 'Sex', value: c.sex || '—' },
-    { label: 'Barangay', value: c.barangay ? `Barangay ${c.barangay}` : '—' },
+    { label: 'Barangay', value: barangayLabel(c.barangay) },
     { label: 'Birth weight', value: c.birthWeight ? `${Number(c.birthWeight)} kg` : 'Not recorded' },
     { label: 'Birth height', value: c.birthHeight ? `${Number(c.birthHeight)} cm` : 'Not recorded' },
     { label: 'Place of birth', value: c.placeOfBirth || '—', wide: true },

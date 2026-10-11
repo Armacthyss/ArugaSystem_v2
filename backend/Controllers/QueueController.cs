@@ -34,6 +34,10 @@ namespace AndroidWebAPI.Controllers
         // completing marks every child in that visit as done together.
         // ============================================================
 
+        // Waiting, or called into the room and not finished yet
+        private static bool IsOpen(Queue q) =>
+            q.Status == "Waiting" || q.Status == "InProgress" || q.Status == "In Progress";
+
         private static DateTime TodayStart => DateTime.Today;
         private static DateTime TodayEnd => DateTime.Today.AddDays(1);
 
@@ -252,17 +256,10 @@ namespace AndroidWebAPI.Controllers
                 .Select(r => new { r.ParentID, r.ChildID, r.RelationshipType })
                 .ToListAsync();
 
-            string? RelationshipOf(Queue q)
-            {
-                var childIds = q.QueueChildren.Select(qc => qc.ChildID).ToHashSet();
-                var types = links
-                    .Where(l => l.ParentID == q.ParentID && childIds.Contains(l.ChildID))
-                    .Select(l => l.RelationshipType)
-                    .Where(t => !string.IsNullOrWhiteSpace(t))
-                    .Distinct()
-                    .ToList();
-                return types.Count == 0 ? null : string.Join(" / ", types);
-            }
+            string? ParentRelationshipTo(Guid parentId, Guid childId) => links
+                .Where(l => l.ParentID == parentId && l.ChildID == childId && !string.IsNullOrWhiteSpace(l.RelationshipType))
+                .Select(l => l.RelationshipType)
+                .FirstOrDefault();
 
             return list.Select(q =>
             {
@@ -271,13 +268,53 @@ namespace AndroidWebAPI.Controllers
                 User? worker = null;
                 if (room?.AssignedDoctorID != null) workers.TryGetValue(room.AssignedDoctorID.Value, out worker);
 
+                var parentName = $"{q.Parent?.FirstName} {q.Parent?.LastName}".Trim();
+
+                // Who brought each child: the person staff typed in (e.g. a
+                // sibling the parent sent), otherwise the parent on file.
+                var children = q.QueueChildren
+                    .Select(qc => new QueueChildResponseDto
+                    {
+                        ChildID = qc.ChildID,
+                        Name = $"{qc.Child?.FirstName} {qc.Child?.LastName}".Trim(),
+                        BroughtBy = !string.IsNullOrWhiteSpace(qc.BroughtByName) ? qc.BroughtByName : parentName,
+                        BroughtByRelationship = !string.IsNullOrWhiteSpace(qc.BroughtByName)
+                            ? qc.BroughtByRelationship
+                            : ParentRelationshipTo(q.ParentID, qc.ChildID),
+                    })
+                    .ToList();
+
+                // One person for the whole visit: "Ana Castillo" + "Sibling".
+                // Different people: "Ana Castillo (Sibling), Rosa Flores (Aunt)".
+                var people = children
+                    .GroupBy(c => c.BroughtBy)
+                    .Select(g => new
+                    {
+                        Name = g.Key,
+                        Relationship = string.Join(" / ", g.Select(c => c.BroughtByRelationship)
+                            .Where(r => !string.IsNullOrWhiteSpace(r)).Distinct()),
+                    })
+                    .ToList();
+                string requestBy = parentName;
+                string? requestByRelationship = null;
+                if (people.Count == 1)
+                {
+                    requestBy = people[0].Name;
+                    requestByRelationship = people[0].Relationship == "" ? null : people[0].Relationship;
+                }
+                else if (people.Count > 1)
+                {
+                    requestBy = string.Join(", ", people.Select(p => p.Relationship == "" ? p.Name : $"{p.Name} ({p.Relationship})"));
+                }
+
                 return new QueueResponseDto
                 {
                     QueueID = q.QueueID,
                     QueueNumber = q.QueueNumber,
                     BarangayNo = q.Parent?.BarangayNo,
-                    RequestBy = $"{q.Parent?.FirstName} {q.Parent?.LastName}".Trim(),
-                    RequestByRelationship = RelationshipOf(q),
+                    RequestBy = requestBy,
+                    RequestByRelationship = requestByRelationship,
+                    ParentName = parentName,
                     Status = q.Status,
                     QueueDate = q.QueueDate,
                     CheckedInAt = q.CreatedAt,
@@ -285,13 +322,7 @@ namespace AndroidWebAPI.Controllers
                     StationName = room?.RoomNumber,
                     AssignedWorkerID = worker?.UserID,
                     AssignedWorkerName = worker != null ? $"{worker.FirstName} {worker.LastName}".Trim() : null,
-                    Children = q.QueueChildren
-                        .Select(qc => new QueueChildResponseDto
-                        {
-                            ChildID = qc.ChildID,
-                            Name = $"{qc.Child?.FirstName} {qc.Child?.LastName}".Trim()
-                        })
-                        .ToList()
+                    Children = children
                 };
             }).ToList();
         }
@@ -300,8 +331,8 @@ namespace AndroidWebAPI.Controllers
         // Same response shape as GetAll (grouped-by-visit, with children),
         // but filtered to today server-side instead of pulling every queue
         // entry the clinic has ever had. Use this for "today's queue" views
-        // (e.g. Staff Dashboard); use GetAll where full history is wanted
-        // (e.g. Queue Management, Reports).
+        // (e.g. Staff Dashboard); Queue Management uses GetDay, and GetAll
+        // is for the full history (Reports).
         [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.ClinicTeam)]
         [HttpGet("today")]
         public async Task<IActionResult> GetToday()
@@ -314,6 +345,38 @@ namespace AndroidWebAPI.Controllers
                 .ToListAsync();
 
             return Ok(await ToDtosAsync(queues));
+        }
+
+        // GET: api/Queue/day?date=2026-09-26
+        // Queue Management: the log of one day (who came, who brought each
+        // child, how it ended), and the nearest earlier/later days that had
+        // check-ins so the page's arrows skip days the clinic was closed.
+        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.ClinicTeam)]
+        [HttpGet("day")]
+        public async Task<IActionResult> GetDay([FromQuery] DateTime? date)
+        {
+            var day = (date ?? DateTime.Today).Date;
+            var next = day.AddDays(1);
+
+            var queues = await _context.Queues
+                .Include(q => q.Parent)
+                .Include(q => q.QueueChildren).ThenInclude(qc => qc.Child)
+                .Where(q => q.QueueDate >= day && q.QueueDate < next)
+                .OrderBy(q => q.QueueNumber)
+                .ToListAsync();
+
+            var previousDate = await _context.Queues.Where(q => q.QueueDate < day)
+                .Select(q => (DateTime?)q.QueueDate).MaxAsync();
+            var nextDate = await _context.Queues.Where(q => q.QueueDate >= next)
+                .Select(q => (DateTime?)q.QueueDate).MinAsync();
+
+            return Ok(new
+            {
+                date = day,
+                previousDate = previousDate?.Date,
+                nextDate = nextDate?.Date,
+                entries = await ToDtosAsync(queues),
+            });
         }
 
        // GET: api/Queue
@@ -353,7 +416,12 @@ public async Task<IActionResult> GetAll()
                 .OrderBy(q => q.QueueNumber)
                 .ToListAsync();
 
-            var mine = todays.FirstOrDefault(q => q.ParentID == parentId);
+            // A family can have a second entry today (a child brought in
+            // after their first visit was called): show the one still open.
+            var mine = todays.Where(q => q.ParentID == parentId)
+                .OrderBy(q => IsOpen(q) ? 0 : 1)
+                .ThenByDescending(q => q.QueueNumber)
+                .FirstOrDefault();
             var serving = todays.FirstOrDefault(q => q.Status == "InProgress" || q.Status == "In Progress");
 
             int? position = null;
@@ -410,7 +478,8 @@ public async Task<IActionResult> GetAll()
         public async Task<IActionResult> Create(
             [FromBody] CreateQueueRequest request,
             [FromServices] AndroidWebAPI.Services.IQueueQRCodeService qrService,
-            [FromServices] IQueueQRSettingRepository qrSettings)
+            [FromServices] IQueueQRSettingRepository qrSettings,
+            [FromServices] AndroidWebAPI.Services.AuditService audit)
         {
             if (!AndroidWebAPI.Services.AccessGuard.CanSeeParent(User, request.ParentID)) return Forbid();
             if (request.ChildIDs == null || request.ChildIDs.Count == 0)
@@ -442,17 +511,38 @@ public async Task<IActionResult> GetAll()
                 if (!ok) return BadRequest(new { message = error });
             }
 
-            var today = DateTime.Today;
-
-            // Prevent duplicate queue entry for the same parent today
-            var existingQueue =
-                await _queueRepository.GetParentQueueAsync(
-                    request.ParentID,
-                    today
-                );
-
-            if (existingQueue != null)
+            // Someone other than the parent brought the child: staff type
+            // their name and relationship here instead of registering them
+            // (they may never come back). Parents checking in themselves
+            // are always the one who brought the child.
+            string? broughtByName = isParent ? null : request.BroughtByName?.Trim();
+            string? broughtByRelationship = isParent ? null : request.BroughtByRelationship?.Trim();
+            if (string.IsNullOrEmpty(broughtByName))
             {
+                broughtByName = null;
+                broughtByRelationship = null;
+            }
+            else
+            {
+                if (string.IsNullOrEmpty(broughtByRelationship))
+                    return BadRequest(new { message = "Enter how the person who brought the child is related to them." });
+                if (broughtByName.Length > 100 || broughtByRelationship.Length > 50)
+                    return BadRequest(new { message = "The name or relationship is too long." });
+            }
+
+            var today = DateTime.Today;
+            var childIds = request.ChildIDs.Distinct().ToList();
+
+            var todays = await _context.Queues
+                .Include(q => q.QueueChildren).ThenInclude(qc => qc.Child)
+                .Where(q => q.ParentID == request.ParentID && q.QueueDate >= TodayStart && q.QueueDate < TodayEnd)
+                .OrderBy(q => q.QueueNumber)
+                .ToListAsync();
+
+            // A parent checking in from their phone: one entry a day
+            if (isParent && todays.Count > 0)
+            {
+                var existingQueue = todays.OrderBy(q => IsOpen(q) ? 0 : 1).ThenByDescending(q => q.QueueNumber).First();
                 return Conflict(new
                 {
                     message = "This parent already has a queue entry for today.",
@@ -461,45 +551,77 @@ public async Task<IActionResult> GetAll()
                 });
             }
 
-            var nextQueueNumber =
-                await _queueRepository.GetNextQueueNumberAsync(today);
-
-            var queue = new Queue
+            // Staff: a child can only be in today's queue once
+            var already = todays
+                .SelectMany(q => q.QueueChildren.Select(qc => new { q.QueueNumber, qc.ChildID, qc.Child }))
+                .FirstOrDefault(x => childIds.Contains(x.ChildID));
+            if (already != null)
             {
-                QueueID = Guid.NewGuid(),
-                ParentID = request.ParentID,
-                QueueNumber = nextQueueNumber,
-                QueueDate = today,
-                Status = "Waiting",
-                CreatedAt = DateTime.Now
-            };
+                return Conflict(new
+                {
+                    message = $"{already.Child?.FirstName} {already.Child?.LastName} is already in today's queue (Q-{already.QueueNumber:000}).".Trim()
+                });
+            }
 
-            foreach (var childId in request.ChildIDs.Distinct())
+            // The family is still waiting (e.g. a sibling brought one child,
+            // an aunt brings another later): add to that visit so they keep
+            // its place and go in together. If that visit was already called
+            // or finished, the child gets a new number at the end of the line.
+            var queue = todays.FirstOrDefault(q => q.Status == "Waiting");
+            bool joined = queue != null;
+            if (queue == null)
             {
-                queue.QueueChildren.Add(new QueueChild
+                queue = new Queue
+                {
+                    QueueID = Guid.NewGuid(),
+                    ParentID = request.ParentID,
+                    QueueNumber = await _queueRepository.GetNextQueueNumberAsync(today),
+                    QueueDate = today,
+                    Status = "Waiting",
+                    CreatedAt = DateTime.Now
+                };
+                _context.Queues.Add(queue);
+            }
+
+            foreach (var childId in childIds)
+            {
+                _context.QueueChildren.Add(new QueueChild
                 {
                     QueueChildID = Guid.NewGuid(),
                     QueueID = queue.QueueID,
                     ChildID = childId,
+                    BroughtByName = broughtByName,
+                    BroughtByRelationship = broughtByRelationship,
                     CreatedAt = DateTime.Now
                 });
             }
+            await _context.SaveChangesAsync();
 
-            var createdQueue =
-                await _queueRepository.CreateAsync(queue);
+            var saved = await _queueRepository.GetByIdAsync(queue.QueueID);
 
-            var saved =
-                await _queueRepository.GetByIdAsync(createdQueue.QueueID);
+            // Audit trail when someone other than the parent brought the
+            // child, or a child joined the family's waiting visit
+            if (saved != null && (broughtByName != null || joined))
+            {
+                var childNames = string.Join(", ", saved.QueueChildren
+                    .Where(qc => childIds.Contains(qc.ChildID))
+                    .Select(qc => $"{qc.Child?.FirstName} {qc.Child?.LastName}".Trim()));
+                var parentName = $"{saved.Parent?.FirstName} {saved.Parent?.LastName}".Trim();
+                var description = (joined ? $"Added to the family's waiting visit. " : "")
+                    + (broughtByName != null
+                        ? $"Brought in by {broughtByName} ({broughtByRelationship}) on behalf of {parentName}."
+                        : $"Brought in by {parentName}.");
+                await audit.LogAsync("Queue", "Check-in",
+                    $"Queue #{saved.QueueNumber} – {childNames}", description);
+            }
 
             // Return the same DTO as every other endpoint here. Returning the
             // raw entity serialized its navigation properties in a loop
             // (Queue -> QueueChildren -> Queue ...) and threw AFTER the row
             // was saved, so check-ins looked like they failed with a 500.
-            return CreatedAtAction(
-                nameof(GetById),
-                new { id = createdQueue.QueueID },
-                (await ToDtosAsync(new[] { saved! }))[0]
-            );
+            var dto = (await ToDtosAsync(new[] { saved! }))[0];
+            if (joined) return Ok(dto);
+            return CreatedAtAction(nameof(GetById), new { id = queue.QueueID }, dto);
         }
 
         // PUT: api/Queue/{id}/status
@@ -514,6 +636,10 @@ public async Task<IActionResult> GetAll()
 
             if (queue == null)
                 return NotFound();
+
+            // Past days are a record (Queue Management): kept as they ended
+            if (queue.QueueDate < TodayStart)
+                return BadRequest(new { message = "Entries from past days can't be changed." });
 
             bool finishing = request.Status == "Completed" && queue.Status != "Completed";
 
@@ -563,6 +689,11 @@ public async Task<IActionResult> GetAll()
             if (queue == null)
                 return NotFound();
 
+            // Only today's queue can be changed ("Remove from Queue" on the
+            // Dashboard); past days stay as the clinic's record of visits.
+            if (queue.QueueDate < TodayStart)
+                return BadRequest(new { message = "Entries from past days can't be removed." });
+
             if (queue.AssignedRoomID.HasValue && queue.Status == "InProgress")
             {
                 await FreeRoomAsync(queue.AssignedRoomID.Value);
@@ -598,6 +729,11 @@ public async Task<IActionResult> GetAll()
 
         // Today's check-in code from the clinic QR (parents only)
         public string? QrCode { get; set; }
+
+        // Staff only: the person who brought the child when it isn't the
+        // parent (name + relationship to the child). Leave empty otherwise.
+        public string? BroughtByName { get; set; }
+        public string? BroughtByRelationship { get; set; }
     }
 
     public class UpdateQueueStatusRequest

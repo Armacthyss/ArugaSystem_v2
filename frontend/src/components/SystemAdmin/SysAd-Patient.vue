@@ -5,7 +5,7 @@ import axios from 'axios'
 import AppHeader from './Components/AppHeader.vue'
 import AppSidebar from './Components/AppSidebar.vue'
 import { API_BASE, ageLabel, formatDate, isSameDay, toISODate, downloadCSV } from '@/utils/format'
-import { barangayChoices, BARANGAY_HINT } from '@/utils/barangays'
+import { barangayChoices, barangayLabel, BARANGAY_HINT } from '@/utils/barangays'
 import PrivacyConsentCheckbox from '@/components/Shared/PrivacyConsentCheckbox.vue'
 import { askConfirm } from '@/utils/dialog'
 import { phMobileError } from '@/utils/phone'
@@ -104,7 +104,7 @@ const exportPatients = () => {
   downloadCSV(`patients-${toISODate()}.csv`, [
     ['Family No.', 'Barangay', 'First Name', 'Middle Name', 'Last Name', 'Birth Date', 'Sex', 'Parent / Guardian', 'Contact', 'Vaccination Status', 'Doses Completed', 'Last Vaccination', 'Next Due', 'Next Due Date'],
     ...filteredPatients.value.map(p => [
-      p.familyNo || '', p.barangay ?? '', p.firstName, p.middleName, p.lastName, formatDate(p.birthDate), p.sex, p.parentName, p.parentContact,
+      p.familyNo || '', barangayLabel(p.barangay, ''), p.firstName, p.middleName, p.lastName, formatDate(p.birthDate), p.sex, p.parentName, p.parentContact,
       p.vaccinationStatus, `${p.completedDoses}/${p.totalDoses}`, p.lastVaccination, p.nextVaccine, p.nextDueDate ? formatDate(p.nextDueDate) : '',
     ]),
   ])
@@ -459,7 +459,7 @@ const saveLink = async () => {
               </thead>
               <tbody>
                 <tr v-for="patient in pagedPatients" :key="patient.id" class="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors">
-                  <td class="px-5 py-3 whitespace-nowrap"><p class="text-sm font-medium text-slate-800">{{ patient.familyNo || '—' }}</p><p class="text-[11px] text-slate-400">Brgy {{ patient.barangay ?? '—' }}</p></td>
+                  <td class="px-5 py-3 whitespace-nowrap"><p class="text-sm font-medium text-slate-800">{{ patient.familyNo || '—' }}</p><p class="text-[11px] text-slate-400">{{ barangayLabel(patient.barangay) }}</p></td>
                   <td class="px-3 py-3 whitespace-nowrap">
                     <button @click.stop="openDrawer(patient)" class="flex items-center gap-3 text-left">
                       <div class="w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-xs font-bold shrink-0">{{ initials(patient) }}</div>
@@ -550,7 +550,7 @@ const saveLink = async () => {
               <div class="w-16 h-16 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-lg font-bold shrink-0">{{ initials(selectedPatient) }}</div>
               <div class="min-w-0">
                 <p class="text-base font-bold text-slate-900 truncate">{{ selectedPatient.firstName }} {{ selectedPatient.middleName }} {{ selectedPatient.lastName }}</p>
-                <p class="text-xs text-slate-500">Family No. {{ selectedPatient.familyNo || '—' }} · Brgy {{ selectedPatient.barangay ?? '—' }}</p>
+                <p class="text-xs text-slate-500">Family No. {{ selectedPatient.familyNo || '—' }} · {{ barangayLabel(selectedPatient.barangay) }}</p>
               </div>
             </div>
             <h3 class="text-xs font-bold uppercase tracking-wide text-slate-500 mb-2">Child Information</h3>

@@ -10,6 +10,11 @@ namespace AndroidWebAPI.DTOs
         // How the person who checked in is related to the child(ren) in this
         // visit, e.g. "Grandmother", so staff know who brought the child.
         public string? RequestByRelationship { get; set; }
+
+        // The parent on file. Same as RequestBy unless someone else
+        // brought the child(ren); RequestBy then names who did (several
+        // names when different people brought different children).
+        public string ParentName { get; set; } = string.Empty;
         public string Status { get; set; } = string.Empty;
         public DateTime QueueDate { get; set; }
 
@@ -31,5 +36,10 @@ namespace AndroidWebAPI.DTOs
     {
         public Guid ChildID { get; set; }
         public string Name { get; set; } = string.Empty;
+
+        // Who brought this child, e.g. "Ana Castillo" / "Sibling".
+        // The parent on file when no one else was entered.
+        public string BroughtBy { get; set; } = string.Empty;
+        public string? BroughtByRelationship { get; set; }
     }
 }

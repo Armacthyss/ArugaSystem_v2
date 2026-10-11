@@ -66,8 +66,8 @@
                   <p class="text-sm text-slate-500">
                     {{ child.sex || '—' }} · {{ child.ageLabel }} · Born {{ formatDate(child.birthDate) }}
                   </p>
-                  <p v-if="visit?.requestBy" class="text-xs text-slate-500 mt-0.5">
-                    Checked in by: <span class="font-medium text-slate-700">{{ withRelationship(visit.requestBy, visit.requestByRelationship) }}</span>
+                  <p v-if="broughtBy" class="text-xs text-slate-500 mt-0.5">
+                    Brought in by: <span class="font-medium text-slate-700">{{ broughtBy }}</span>
                   </p>
                   <p class="text-xs text-slate-400 mt-0.5">
                     Parents / Guardians: {{ child.guardians?.length ? child.guardians.map(g => withRelationship(g.name, g.relationship)).join(', ') : (child.parentName || '—') }}
@@ -347,6 +347,13 @@ const givenThisVisit = ref([])
 const family = computed(() => visit.value?.children || [])
 const progress = ref({})
 const currentIndex = computed(() => family.value.findIndex(c => c.childID === childId.value))
+
+// Who brought this child: the parent, or e.g. "Ana Castillo (Sibling)"
+const broughtBy = computed(() => {
+  const c = family.value[currentIndex.value]
+  if (c?.broughtBy) return withRelationship(c.broughtBy, c.broughtByRelationship)
+  return visit.value?.requestBy ? withRelationship(visit.value.requestBy, visit.value.requestByRelationship) : ''
+})
 const nextChild = computed(() => {
   const list = family.value
   const i = currentIndex.value

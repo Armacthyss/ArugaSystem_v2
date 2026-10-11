@@ -37,13 +37,18 @@ namespace AndroidWebAPI.Repositories
             Guid parentId,
             DateTime queueDate)
         {
+            // A family can have two entries in a day (a child brought in
+            // after the first visit was called): prefer the one still open.
             return await _context.Queues
                 .Include(q => q.Parent)
                 .Include(q => q.QueueChildren)
                     .ThenInclude(qc => qc.Child)
-                .FirstOrDefaultAsync(q =>
+                .Where(q =>
                     q.ParentID == parentId &&
-                    q.QueueDate.Date == queueDate.Date);
+                    q.QueueDate.Date == queueDate.Date)
+                .OrderBy(q => q.Status == "Waiting" || q.Status == "InProgress" || q.Status == "In Progress" ? 0 : 1)
+                .ThenByDescending(q => q.QueueNumber)
+                .FirstOrDefaultAsync();
         }
 
         public async Task<int> GetNextQueueNumberAsync(DateTime queueDate)
