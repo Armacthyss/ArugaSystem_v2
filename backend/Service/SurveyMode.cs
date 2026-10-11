@@ -226,6 +226,14 @@ namespace AndroidWebAPI.Services
             // The API's pooled connections pointed at the old copy
             SqlConnection.ClearAllPools();
 
+            // The baseline may be older than this version of the API: add
+            // the columns it needs again (e.g. QueueChildren.BroughtByName),
+            // the same way the API does at startup (Program.cs).
+            using (var upgradeScope = _services.CreateScope())
+            {
+                await SchemaUpgrades.ApplyAsync(upgradeScope.ServiceProvider.GetRequiredService<AndroidWebAPI.Data.AppDbContext>());
+            }
+
             // 2. Demo families: ages, due dates and today's queue from today
             if (_survey.RunDemoSeed)
             {

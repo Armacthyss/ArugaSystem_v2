@@ -10,6 +10,15 @@ export function isServedBarangay(value) {
   return BARANGAYS.includes(Number(value))
 }
 
+// "Barangay 21" for display. Records store just the number (21), but some
+// older ones already say "Barangay 2" or "Brgy 2"; those aren't doubled.
+export function barangayLabel(value, empty = '—') {
+  if (value === '' || value == null) return empty
+  const text = String(value).trim()
+  const number = text.replace(/^(barangay|brgy\.?)\s*/i, '')
+  return number ? `Barangay ${number}` : empty
+}
+
 // Dropdown choices. An older record may still have a barangay from before
 // the jurisdiction check; it stays in the list (marked) so editing the
 // record doesn't silently change it.

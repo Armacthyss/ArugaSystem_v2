@@ -68,24 +68,32 @@ namespace AndroidWebAPI.Controllers
             var today = DateTime.Today;
             var tomorrow = today.AddDays(1);
 
-            var existingQueue = await _context.Queues
+            var todays = await _context.Queues
                 .Include(q => q.QueueChildren)
-                .FirstOrDefaultAsync(q => q.ParentID == relationship.ParentID
-                                          && q.QueueDate >= today && q.QueueDate < tomorrow);
+                .Where(q => q.ParentID == relationship.ParentID
+                            && q.QueueDate >= today && q.QueueDate < tomorrow)
+                .OrderBy(q => q.QueueNumber)
+                .ToListAsync();
+
+            // Already in today's queue: nothing to add
+            var withChild = todays.FirstOrDefault(q => q.QueueChildren.Any(qc => qc.ChildID == timeline.ChildID));
+            if (withChild != null)
+                return Ok(new { queueID = withChild.QueueID, queueNumber = withChild.QueueNumber });
+
+            // Join the family's visit only while it is still waiting; once
+            // it was called or finished, the child gets a new number.
+            var existingQueue = todays.FirstOrDefault(q => q.Status == "Waiting");
 
             if (existingQueue != null)
             {
-                if (!existingQueue.QueueChildren.Any(qc => qc.ChildID == timeline.ChildID))
+                existingQueue.QueueChildren.Add(new QueueChild
                 {
-                    existingQueue.QueueChildren.Add(new QueueChild
-                    {
-                        QueueChildID = Guid.NewGuid(),
-                        QueueID = existingQueue.QueueID,
-                        ChildID = timeline.ChildID,
-                        CreatedAt = DateTime.Now
-                    });
-                    await _context.SaveChangesAsync();
-                }
+                    QueueChildID = Guid.NewGuid(),
+                    QueueID = existingQueue.QueueID,
+                    ChildID = timeline.ChildID,
+                    CreatedAt = DateTime.Now
+                });
+                await _context.SaveChangesAsync();
                 return Ok(new { queueID = existingQueue.QueueID, queueNumber = existingQueue.QueueNumber });
             }
 

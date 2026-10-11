@@ -3,6 +3,7 @@ import { ref, computed, reactive, watch, onMounted } from 'vue'
 import axios from 'axios'
 import AppSidebar from './Components/AppSidebar.vue'
 import AppHeader from './Components/AppHeader.vue'
+import { barangayLabel } from '@/utils/barangays'
 import {
   API_BASE, ageLabel, formatDate, formatDateTime, toISODate, downloadCSV, summarizeStock, userLevel,
 } from '@/utils/format'
@@ -213,7 +214,7 @@ function buildReport(name, range) {
       const list = kids.filter(c => inPeriod(c.createdAt, range))
       return {
         columns: ['Patient ID', 'Child', 'Birth Date', 'Age', 'Sex', 'Barangay', 'Parent / Guardian', 'Registered'],
-        rows: list.map(c => [`PT-${c.childID.slice(-8).toUpperCase()}`, `${c.firstName} ${c.lastName}`, formatDate(c.birthDate), ageLabel(c.birthDate), c.sex || '—', c.barangay ?? '—', c.parentName || '—', formatDate(c.createdAt)]),
+        rows: list.map(c => [`PT-${c.childID.slice(-8).toUpperCase()}`, `${c.firstName} ${c.lastName}`, formatDate(c.birthDate), ageLabel(c.birthDate), c.sex || '—', barangayLabel(c.barangay), c.parentName || '—', formatDate(c.createdAt)]),
         chart: monthlyChart(kids.map(c => c.createdAt), 'Registrations per Month'),
       }
     }
@@ -498,7 +499,7 @@ const printReport = () => {
               <div>
                 <label class="block text-xs font-semibold text-slate-500 mb-1.5">Barangay <span class="text-slate-400 font-normal">(optional)</span></label>
                 <select v-model="filters.barangay" class="w-full text-sm rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                  <option v-for="b in barangayOptions" :key="b" :value="b">{{ b === 'All Barangays' ? b : `Barangay ${b}` }}</option>
+                  <option v-for="b in barangayOptions" :key="b" :value="b">{{ b === 'All Barangays' ? b : barangayLabel(b) }}</option>
                 </select>
               </div>
               <div>
