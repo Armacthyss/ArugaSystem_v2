@@ -45,6 +45,24 @@ IF COL_LENGTH('dbo.Queues', 'BroughtByName') IS NOT NULL
     ALTER TABLE dbo.Queues DROP COLUMN BroughtByName;
 IF COL_LENGTH('dbo.Queues', 'BroughtByRelationship') IS NOT NULL
     ALTER TABLE dbo.Queues DROP COLUMN BroughtByRelationship;");
+
+            // Oct 2026: broken/spoiled doses and recounts (see StockAdjustment.cs)
+            await context.Database.ExecuteSqlRawAsync(@"
+IF OBJECT_ID(N'dbo.StockAdjustments', N'U') IS NULL
+CREATE TABLE dbo.StockAdjustments (
+    AdjustmentID     int              IDENTITY(1,1) NOT NULL,
+    InventoryID      int              NOT NULL,
+    Change           int              NOT NULL,
+    QuantityBefore   int              NOT NULL,
+    QuantityAfter    int              NOT NULL,
+    Reason           nvarchar(50)     NOT NULL,
+    Note             nvarchar(255)    NULL,
+    AdjustedByUserID uniqueidentifier NULL,
+    AdjustedByName   nvarchar(150)    NULL,
+    AdjustedAt       datetime2        NOT NULL CONSTRAINT DF_StockAdjustments_AdjustedAt DEFAULT (GETDATE()),
+    CONSTRAINT PK_StockAdjustments PRIMARY KEY (AdjustmentID),
+    CONSTRAINT FK_StockAdjustments_VaccineInventory FOREIGN KEY (InventoryID) REFERENCES dbo.VaccineInventory (InventoryID) ON DELETE CASCADE
+);");
         }
     }
 }

@@ -245,6 +245,25 @@ CREATE TABLE dbo.VaccineInventory (
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_VaccineInventory_VaccineID')
     CREATE INDEX IX_VaccineInventory_VaccineID ON dbo.VaccineInventory (VaccineID);
 
+-- Doses taken off a batch without being given (broken vial, spoiled,
+-- expired and thrown away, lost) or a recount, with who did it and why.
+-- The API also adds this table by itself to an older database (SchemaUpgrades.cs).
+IF OBJECT_ID(N'dbo.StockAdjustments', N'U') IS NULL
+CREATE TABLE dbo.StockAdjustments (
+    AdjustmentID     int              IDENTITY(1,1) NOT NULL,
+    InventoryID      int              NOT NULL,
+    Change           int              NOT NULL,   -- doses added (+) or taken off (-)
+    QuantityBefore   int              NOT NULL,
+    QuantityAfter    int              NOT NULL,
+    Reason           nvarchar(50)     NOT NULL,
+    Note             nvarchar(255)    NULL,
+    AdjustedByUserID uniqueidentifier NULL,
+    AdjustedByName   nvarchar(150)    NULL,
+    AdjustedAt       datetime2        NOT NULL CONSTRAINT DF_StockAdjustments_AdjustedAt DEFAULT (GETDATE()),
+    CONSTRAINT PK_StockAdjustments PRIMARY KEY (AdjustmentID),
+    CONSTRAINT FK_StockAdjustments_VaccineInventory FOREIGN KEY (InventoryID) REFERENCES dbo.VaccineInventory (InventoryID) ON DELETE CASCADE
+);
+
 /* ---------------------------------------------------------------------
    EACH CHILD'S SCHEDULE AND GIVEN DOSES
    VaccinationTimeline: one row per dose the child should get, with the

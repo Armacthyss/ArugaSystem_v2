@@ -51,12 +51,12 @@
             <div class="bg-white border border-stone-200 rounded-2xl shadow-sm p-6">
               <h2 class="font-bold text-stone-800">How it works</h2>
               <ol class="mt-3 space-y-2 text-sm text-stone-600 list-decimal list-inside">
-                <li>Print this page or show it on a screen at the entrance.</li>
+                <li>Each vaccination morning, print this page and post it at the entrance.</li>
                 <li>Parents scan it with their phone camera, or with <b>Scan the Clinic QR Code</b> in Aruga's Check-in tab.</li>
                 <li>They pick which children they brought, and get a queue number.</li>
                 <li>They appear in <b>Today's Queue</b> on your dashboard.</li>
               </ol>
-              <p class="mt-3 text-xs text-stone-400">A new code is made every clinic day, so yesterday's code (or a photo of it) can't be used to queue from home.</p>
+              <p class="mt-3 text-xs text-stone-400">A new code is made every vaccination day, so print a fresh copy each morning. Yesterday's code (or a photo of it) can't be used to check in from home.</p>
 
               <div class="mt-5 flex gap-2">
                 <button @click="printPoster" :disabled="!qr" class="flex-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white text-sm font-semibold py-2.5">
@@ -94,7 +94,7 @@
                     {{ required
                       ? 'On: parents must scan this code (or type it) to check in from their phone.'
                       : 'Off: parents can check in from their phone without the code.' }}
-                    Walk-ins without a phone can always be added from the dashboard.
+                    Families without a phone can always be checked in from the Dashboard.
                   </p>
                 </div>
                 <button

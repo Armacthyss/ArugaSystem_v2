@@ -27,6 +27,7 @@ public DbSet<QueueChild> QueueChildren { get; set; }
         public DbSet<Vaccine> Vaccines { get; set; }
         public DbSet<VaccineDose> VaccineDoses { get; set; }
         public DbSet<VaccineInventory> VaccineInventory { get; set; }
+        public DbSet<StockAdjustment> StockAdjustments { get; set; }
         
         public DbSet<ChildParentRelationship> ChildParentRelationships { get; set; }
      public DbSet<ClinicOperatingSchedule> ClinicOperatingSchedules { get; set; }

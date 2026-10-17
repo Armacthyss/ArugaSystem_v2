@@ -45,6 +45,7 @@
             <th class="text-right font-semibold px-3 py-2.5">Minimum</th>
             <th class="text-right font-semibold px-3 py-2.5">Received</th>
             <th class="text-right font-semibold px-3 py-2.5">Used</th>
+            <th v-if="anyRemoved" class="text-right font-semibold px-3 py-2.5" title="Broken, spoiled, expired and thrown away, lost, or a lower recount">Removed</th>
             <th class="text-right font-semibold px-3 py-2.5">Expiring ≤30d</th>
             <th class="text-right font-semibold px-3 py-2.5">Expired</th>
             <th class="text-right font-semibold px-3 py-2.5" title="Average doses given per week over the last 8 weeks">Avg / Week</th>
@@ -62,6 +63,7 @@
             <td class="px-3 py-2.5 text-right text-slate-500">{{ l.minimumStock }}</td>
             <td class="px-3 py-2.5 text-right text-slate-600">{{ l.receivedInPeriod }}</td>
             <td class="px-3 py-2.5 text-right text-slate-600">{{ l.usedInPeriod }}</td>
+            <td v-if="anyRemoved" class="px-3 py-2.5 text-right" :class="l.removedInPeriod ? 'font-semibold text-rose-700' : 'text-slate-400'">{{ l.removedInPeriod }}</td>
             <td class="px-3 py-2.5 text-right" :class="l.expiringSoon ? 'font-semibold text-orange-700' : 'text-slate-400'">{{ l.expiringSoon }}</td>
             <td class="px-3 py-2.5 text-right" :class="l.expiredOnShelf ? 'font-semibold text-red-700' : 'text-slate-400'">{{ l.expiredOnShelf }}</td>
             <td class="px-3 py-2.5 text-right text-slate-600">{{ l.averageWeeklyUse }}</td>
@@ -73,13 +75,14 @@
             </td>
           </tr>
           <tr v-if="!loading && !lines.length">
-            <td colspan="10" class="px-5 py-8 text-center text-sm text-slate-400">No vaccines in stock yet.</td>
+            <td :colspan="anyRemoved ? 11 : 10" class="px-5 py-8 text-center text-sm text-slate-400">No vaccines in stock yet.</td>
           </tr>
         </tbody>
       </table>
     </div>
     <p class="px-5 py-2.5 text-[11px] text-slate-400 border-t border-slate-100">
       Received = doses in batches received in the period. Used = doses given from a clinic batch in the period.
+      <template v-if="anyRemoved">Removed = doses taken off with Adjust Stock (broken, spoiled, lost, recount).</template>
       Expired = doses in expired batches that haven't been deactivated yet.
     </p>
   </section>
@@ -145,6 +148,9 @@ const tiles = computed(() => [
   { label: 'Low / Out of Stock', value: totals.value.lowOrOut ?? 0, tone: totals.value.lowOrOut ? 'text-amber-700' : 'text-slate-900' },
 ])
 
+// The Removed column only shows when Adjust Stock was used in the period
+const anyRemoved = computed(() => lines.value.some(l => l.removedInPeriod > 0))
+
 const statusStyle = { Good: 'bg-emerald-50 text-emerald-700', 'Low Stock': 'bg-amber-50 text-amber-700', 'Out of Stock': 'bg-red-50 text-red-700' }
 const statusDot = { Good: 'bg-emerald-500', 'Low Stock': 'bg-amber-500', 'Out of Stock': 'bg-red-600' }
 
@@ -158,8 +164,8 @@ function lastsLabel(l) {
 function exportCsv() {
   downloadCSV(`inventory-summary-${toISODate()}.csv`, [
     ['Inventory Summary'], [`Period: ${periodLabel.value}`], [],
-    ['Vaccine', 'On Hand', 'Minimum', 'Received', 'Used', 'Expiring <=30 days', 'Expired on shelf', 'Avg per week', 'Lasts about', 'Next expiry', 'Status'],
-    ...lines.value.map(l => [l.vaccineName, l.onHand, l.minimumStock, l.receivedInPeriod, l.usedInPeriod, l.expiringSoon, l.expiredOnShelf, l.averageWeeklyUse, lastsLabel(l), l.nextExpiry ? formatDate(l.nextExpiry) : '', l.status]),
+    ['Vaccine', 'On Hand', 'Minimum', 'Received', 'Used', 'Removed', 'Expiring <=30 days', 'Expired on shelf', 'Avg per week', 'Lasts about', 'Next expiry', 'Status'],
+    ...lines.value.map(l => [l.vaccineName, l.onHand, l.minimumStock, l.receivedInPeriod, l.usedInPeriod, l.removedInPeriod ?? 0, l.expiringSoon, l.expiredOnShelf, l.averageWeeklyUse, lastsLabel(l), l.nextExpiry ? formatDate(l.nextExpiry) : '', l.status]),
   ])
 }
 </script>

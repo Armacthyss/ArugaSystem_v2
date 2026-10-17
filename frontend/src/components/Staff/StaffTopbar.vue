@@ -7,6 +7,9 @@
              from GET /api/Queue/today (same endpoint as the dashboard's queue
              table). The red dot shows when someone has waited 15+ minutes.
              Self-contained, so it works on every Staff*.vue page.
+  Help    -> shows / hides the page's "How to use this page" tips
+             (Shared/PageGuide.vue, drawn under the bar; text in
+             utils/pageGuides.js, which also gives the line under the title).
   Gear    -> routes to /staff/settings (StaffAccountSettings.vue).
   Avatar  -> identity-card dropdown only (name, role, signed-in status). No
              actions in here on purpose: logout already lives in
@@ -22,6 +25,7 @@
   avatar cluster, so each page can still have its own action button(s).
 -->
 <template>
+  <div>
   <header class="relative flex items-center justify-between gap-3 px-4 py-4 md:px-8 md:py-5 border-b border-stone-200 bg-white">
     <div class="flex items-center gap-3 min-w-0">
       <!-- Phones / small tablets: opens the sidebar menu -->
@@ -30,11 +34,25 @@
       </button>
       <div class="min-w-0">
         <h1 class="text-[18px] md:text-[22px] font-bold truncate">{{ title }}</h1>
-        <p v-if="breadcrumb" class="text-[12.5px] mt-0.5 text-stone-500 truncate">{{ breadcrumb }}</p>
+        <!-- What the page is for (utils/pageGuides.js), else the breadcrumb -->
+        <p v-if="subtitle" class="text-[12.5px] mt-0.5 text-stone-500 truncate" :title="subtitle">{{ subtitle }}</p>
       </div>
     </div>
     <div class="flex items-center gap-2 md:gap-3 shrink-0">
       <slot />
+
+      <!-- Help: shows or hides this page's "How to use this page" tips -->
+      <button
+        v-if="guide?.steps"
+        @click="setGuideHidden(route.path, !guideHidden)"
+        class="flex h-9 items-center gap-1.5 rounded-full px-2.5 text-[12.5px] font-medium hover:bg-stone-100"
+        :class="guideHidden ? 'bg-stone-50 text-stone-600' : 'bg-emerald-50 text-emerald-800'"
+        :title="guideHidden ? 'Show how to use this page' : 'Hide the tips'"
+        :aria-pressed="!guideHidden"
+      >
+        <CircleHelp :size="17" />
+        <span class="hidden lg:inline">Help</span>
+      </button>
 
       <!-- Bell: stock alerts + families still waiting to be called in -->
       <div class="relative">
@@ -144,23 +162,31 @@
       </div>
     </div>
   </header>
+  <PageGuide />
+  </div>
 </template>
 
 <script setup>
 import { API_ORIGIN } from '@/utils/apiBase'
 import { ref, computed, onMounted, onUnmounted } from "vue";
-import { useRouter } from "vue-router";
-import { Bell, Settings, Menu } from "lucide-vue-next";
+import { useRouter, useRoute } from "vue-router";
+import { Bell, Settings, Menu, CircleHelp } from "lucide-vue-next";
+import PageGuide from "@/components/Shared/PageGuide.vue";
+import { guideFor, isGuideHidden, setGuideHidden } from "@/utils/pageGuides";
 import { mobileNavOpen } from "@/utils/mobileNav";
 import { getAccount } from "@/utils/auth";
 import { withRelationship } from "@/utils/format";
 
-defineProps({
+const props = defineProps({
   title: { type: String, required: true },
   breadcrumb: { type: String, default: "" },
 });
 
 const router = useRouter();
+const route = useRoute();
+const guide = computed(() => guideFor(route.path));
+const guideHidden = computed(() => isGuideHidden(route.path));
+const subtitle = computed(() => guide.value?.subtitle || props.breadcrumb);
 const API_BASE = `${API_ORIGIN}/api`;
 
 const account = getAccount() || {};

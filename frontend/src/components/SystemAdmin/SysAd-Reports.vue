@@ -1,4 +1,5 @@
 <script setup>
+import { AlertTriangle, Baby, Bell, CircleCheck, FileText, Package, Syringe, Ticket, TrendingUp, Users } from 'lucide-vue-next'
 import { ref, computed, reactive, watch, onMounted } from 'vue'
 import axios from 'axios'
 import AppSidebar from './Components/AppSidebar.vue'
@@ -59,23 +60,23 @@ const summary = computed(() => {
   const onTrack = withSchedule.filter(c => c.vaccinationStatus !== 'Delayed').length
   const stock = summarizeStock(data.inventory, data.vaccines)
   return [
-    { label: 'Vaccinations This Month', value: thisMonth, icon: '💉', tint: 'bg-emerald-50' },
-    { label: 'Total Registered Children', value: data.children.length, icon: '🧒', tint: 'bg-teal-50' },
-    { label: 'On-Schedule Rate', value: withSchedule.length ? `${Math.round(onTrack * 100 / withSchedule.length)}%` : '—', icon: '📈', tint: 'bg-sky-50' },
-    { label: 'Delayed Vaccinations', value: data.children.reduce((s, c) => s + (c.overdueDoses || 0), 0), icon: '⚠️', tint: 'bg-rose-50' },
-    { label: 'Available Doses', value: stock.reduce((s, v) => s + v.stock, 0), icon: '📦', tint: 'bg-amber-50' },
-    { label: 'Fully Vaccinated', value: fully, icon: '✅', tint: 'bg-violet-50' },
+    { label: 'Vaccinations This Month', value: thisMonth, icon: Syringe, tint: 'bg-emerald-50 text-emerald-700' },
+    { label: 'Total Registered Children', value: data.children.length, icon: Baby, tint: 'bg-teal-50 text-teal-700' },
+    { label: 'On-Schedule Rate', value: withSchedule.length ? `${Math.round(onTrack * 100 / withSchedule.length)}%` : '—', icon: TrendingUp, tint: 'bg-sky-50 text-sky-700' },
+    { label: 'Delayed Vaccinations', value: data.children.reduce((s, c) => s + (c.overdueDoses || 0), 0), icon: AlertTriangle, tint: 'bg-rose-50 text-rose-700' },
+    { label: 'Available Doses', value: stock.reduce((s, v) => s + v.stock, 0), icon: Package, tint: 'bg-amber-50 text-amber-700' },
+    { label: 'Fully Vaccinated', value: fully, icon: CircleCheck, tint: 'bg-violet-50 text-violet-700' },
   ]
 })
 
 /* -------------------------------- Report categories -------------------------------- */
 const categories = [
-  { name: 'Patient Reports', icon: '🧒', reports: ['Registered Children', 'Children by Vaccination Status', 'Parent-Child Relationship Report'] },
-  { name: 'Vaccination Reports', icon: '💉', reports: ['Vaccinations Performed', 'Vaccinations by Month', 'Vaccinations by Vaccine', 'Children Fully Vaccinated', 'Delayed Vaccinations', 'Upcoming Vaccinations'] },
-  { name: 'Inventory Reports', icon: '📦', reports: ['Inventory Summary', 'Current Inventory', 'Stock Received', 'Low Stock Vaccines', 'Expired & Expiring Batches'] },
-  { name: 'Queue Reports', icon: '🎫', reports: ['Daily Queue Summary'] },
-  { name: 'Notification Reports', icon: '🔔', reports: ['Notifications Sent', 'Announcement History'] },
-  { name: 'User Reports', icon: '👥', reports: ['Registered Parents', 'Doctors & Nurses'] },
+  { name: 'Patient Reports', icon: Baby, reports: ['Registered Children', 'Children by Vaccination Status', 'Parent-Child Relationship Report'] },
+  { name: 'Vaccination Reports', icon: Syringe, reports: ['Vaccinations Performed', 'Vaccinations by Month', 'Vaccinations by Vaccine', 'Children Fully Vaccinated', 'Delayed Vaccinations', 'Upcoming Vaccinations'] },
+  { name: 'Inventory Reports', icon: Package, reports: ['Inventory Summary', 'Current Inventory', 'Stock Received', 'Low Stock Vaccines', 'Expired & Expiring Batches'] },
+  { name: 'Queue Reports', icon: Ticket, reports: ['Daily Queue Summary'] },
+  { name: 'Notification Reports', icon: Bell, reports: ['Notifications Sent', 'Announcement History'] },
+  { name: 'User Reports', icon: Users, reports: ['Registered Parents', 'Doctors & Nurses'] },
   // Audit Logs and Login History moved to the Super Admin's Audit Logs page
 ]
 
@@ -199,8 +200,9 @@ async function buildInventorySummary(range) {
       { label: 'Expired on Shelf', value: t.expiredOnShelf },
       { label: 'Low / Out of Stock Vaccines', value: t.lowOrOut },
     ],
-    columns: ['Vaccine', 'On Hand', 'Minimum', 'Received', 'Used', 'Expiring ≤30d', 'Expired', 'Avg / Week', 'Lasts About', 'Next Expiry', 'Status'],
-    rows: lines.map(l => [l.vaccineName, l.onHand, l.minimumStock, l.receivedInPeriod, l.usedInPeriod, l.expiringSoon, l.expiredOnShelf, l.averageWeeklyUse, lasts(l), l.nextExpiry ? formatDate(l.nextExpiry) : '—', l.status]),
+    // Removed = doses taken off with Adjust Stock (broken, spoiled, lost, recount)
+    columns: ['Vaccine', 'On Hand', 'Minimum', 'Received', 'Used', 'Removed', 'Expiring ≤30d', 'Expired', 'Avg / Week', 'Lasts About', 'Next Expiry', 'Status'],
+    rows: lines.map(l => [l.vaccineName, l.onHand, l.minimumStock, l.receivedInPeriod, l.usedInPeriod, l.removedInPeriod ?? 0, l.expiringSoon, l.expiredOnShelf, l.averageWeeklyUse, lasts(l), l.nextExpiry ? formatDate(l.nextExpiry) : '—', l.status]),
     chart: { title: 'Doses On Hand per Vaccine', points: lines.map(l => ({ label: l.abbreviation || l.vaccineName, value: l.onHand })) },
   }
 }
@@ -458,7 +460,7 @@ const printReport = () => {
           <div v-for="card in summary" :key="card.label" class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
             <div class="flex items-start justify-between gap-2">
               <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ card.label }}</p>
-              <div :class="card.tint" class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm">{{ card.icon }}</div>
+              <div :class="card.tint" class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"><component :is="card.icon" class="w-4 h-4" /></div>
             </div>
             <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ loading ? '…' : card.value }}</p>
           </div>
@@ -472,7 +474,7 @@ const printReport = () => {
               <div class="space-y-1">
                 <div v-for="cat in categories" :key="cat.name">
                   <button @click="toggleCategory(cat.name)" class="w-full flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
-                    <span class="flex items-center gap-2 min-w-0"><span class="text-base shrink-0">{{ cat.icon }}</span><span class="truncate">{{ cat.name }}</span></span>
+                    <span class="flex items-center gap-2 min-w-0"><component :is="cat.icon" class="w-4 h-4 shrink-0 text-emerald-700" /><span class="truncate">{{ cat.name }}</span></span>
                     <span :class="expandedCategory === cat.name ? 'rotate-90' : ''" class="text-slate-400 text-xs transition-transform shrink-0">▶</span>
                   </button>
                   <div v-if="expandedCategory === cat.name" class="pl-9 pr-2 py-1 space-y-0.5">
@@ -541,7 +543,7 @@ const printReport = () => {
             </div>
 
             <div v-if="!generatedReport && !isGenerating" class="flex flex-col items-center justify-center text-center py-24 px-6">
-              <div class="w-14 h-14 rounded-xl bg-slate-50 flex items-center justify-center text-2xl mb-4">📄</div>
+              <div class="w-14 h-14 rounded-xl bg-slate-50 flex items-center justify-center mb-4"><FileText class="w-6 h-6 text-slate-400" /></div>
               <p class="text-sm font-semibold text-slate-700">No report generated yet</p>
               <p class="text-xs max-w-xs mt-1" :class="reportError ? 'text-rose-600' : 'text-slate-400'">{{ reportError || (loading ? 'Loading the clinic data…' : 'Select a report from the categories panel.') }}</p>
             </div>

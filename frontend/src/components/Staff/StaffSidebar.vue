@@ -8,7 +8,7 @@
   different items, some pages missing entirely), so switching pages made
   the whole sidebar visibly jump around.
 
-  To add/remove/reorder a nav item in the future, edit NAV_ITEMS below —
+  To add/remove/reorder a nav item in the future, edit NAV_GROUPS below —
   it will update on every page at once.
 -->
 <template>
@@ -28,22 +28,29 @@
       </div>
     </div>
 
-    <nav class="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-      <button
-        v-for="item in navItems"
-        :key="item.label"
-        @click="goTo(item)"
-        :disabled="item.disabled"
-        :title="item.disabled ? 'Coming soon' : item.label"
-        class="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-[13.5px] font-medium transition-colors"
-        :class="[
-          isActive(item) ? 'bg-emerald-50 text-emerald-800' : 'text-stone-500 hover:bg-stone-50',
-          item.disabled ? 'opacity-40 cursor-not-allowed hover:bg-transparent' : ''
-        ]"
-      >
-        <component :is="item.icon" :size="18" :stroke-width="2" />
-        <span v-if="!collapsed">{{ item.label }}</span>
-      </button>
+    <nav class="flex-1 px-3 py-4 overflow-y-auto">
+      <div v-for="(group, g) in NAV_GROUPS" :key="group.label" :class="g > 0 ? 'mt-4' : ''">
+        <p v-if="!collapsed" class="px-3 pb-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-stone-400">{{ group.label }}</p>
+        <div v-else-if="g > 0" class="mx-3 mb-3 border-t border-stone-200"></div>
+        <div class="space-y-0.5">
+          <button
+            v-for="item in group.items"
+            :key="item.label"
+            @click="goTo(item)"
+            :disabled="item.disabled"
+            :title="item.disabled ? 'Coming soon' : item.label"
+            :aria-current="isActive(item) ? 'page' : undefined"
+            class="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-[13.5px] font-medium transition-colors"
+            :class="[
+              isActive(item) ? 'bg-emerald-50 text-emerald-800' : 'text-stone-600 hover:bg-stone-50 hover:text-stone-900',
+              item.disabled ? 'opacity-40 cursor-not-allowed hover:bg-transparent' : ''
+            ]"
+          >
+            <component :is="item.icon" :size="18" :stroke-width="2" class="shrink-0" />
+            <span v-if="!collapsed" class="truncate">{{ item.label }}</span>
+          </button>
+        </div>
+      </div>
     </nav>
 
     <div class="border-t border-stone-200 px-3 py-4">
@@ -99,19 +106,25 @@ watch(() => route.fullPath, () => { mobileNavOpen.value = false });
 // portal's own nav, if/when that exists separately).
 // The Dashboard holds the Vaccination Room card (Call Next / Start
 // Vaccinating); vaccination visit pages count as part of it.
-const NAV_ITEMS = [
-  { icon: Home,          label: "Dashboard",       path: "/staff/dashboard", also: "/staff/vaccination/" },
-  { icon: Contact,       label: "Patient Records", path: "/staff/patient-records" },
-  { icon: FileCheck2,    label: "My Vaccination Records", path: "/staff/vaccination-records" },
-  { icon: Syringe,       label: "Vaccine Schedule",path: "/staff/vaccine-schedule" },
-  { icon: Package,       label: "Inventory",       path: "/staff/vaccine-inventory" },
-  { icon: CalendarDays,  label: "Calendar",        path: "/staff/calendar" },
-  { icon: ClipboardList, label: "Queue Management",path: "/staff/queue-management" },
-  { icon: QrCode,        label: "Check-in QR",     path: "/staff/checkin-qr" },
-  { icon: BarChart2,     label: "Clinic Reports",  path: "/staff/reports" },
+// Grouped under short headings so the list is easier to scan (survey
+// feedback, Oct 2026): today's clinic work first, then patients, then stock.
+const NAV_GROUPS = [
+  { label: "Today's clinic", items: [
+    { icon: Home,          label: "Dashboard",        path: "/staff/dashboard", also: "/staff/vaccination/" },
+    { icon: QrCode,        label: "Check-in QR",      path: "/staff/checkin-qr" },
+    { icon: ClipboardList, label: "Queue Management", path: "/staff/queue-management" },
+  ] },
+  { label: "Patients", items: [
+    { icon: Contact,       label: "Patient Records",  path: "/staff/patient-records" },
+    { icon: Syringe,       label: "Vaccine Schedule", path: "/staff/vaccine-schedule" },
+    { icon: CalendarDays,  label: "Calendar",         path: "/staff/calendar" },
+    { icon: FileCheck2,    label: "My Vaccination Records", path: "/staff/vaccination-records" },
+  ] },
+  { label: "Stock & reports", items: [
+    { icon: Package,       label: "Inventory",        path: "/staff/vaccine-inventory" },
+    { icon: BarChart2,     label: "Clinic Reports",   path: "/staff/reports" },
+  ] },
 ];
-
-const navItems = NAV_ITEMS;
 
 const isActive = (item) =>
   !!item.path && (route.path === item.path || (!!item.also && route.path.startsWith(item.also)));

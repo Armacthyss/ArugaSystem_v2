@@ -7,11 +7,11 @@
     <div class="flex-1 flex flex-col overflow-hidden print:overflow-visible">
       <div class="print:hidden">
         <StaffTopbar title="Clinic Reports" breadcrumb="Aruga / Reports">
-          <select v-model="year" class="bg-white border border-slate-200 text-xs font-bold px-3 py-2 rounded-lg outline-none focus:border-emerald-500">
+          <select v-model="year" class="bg-white border border-slate-200 text-[13px] font-medium px-3 py-2 rounded-lg outline-none focus:border-emerald-500">
             <option v-for="y in yearOptions" :key="y" :value="y">Year {{ y }}</option>
           </select>
-          <button @click="printReport" class="bg-emerald-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-emerald-700 transition-colors flex items-center gap-2">
-            <FileDown class="w-3.5 h-3.5" /> DOWNLOAD PDF
+          <button @click="printReport" class="bg-emerald-600 text-white px-4 py-2 rounded-lg text-[13px] font-semibold hover:bg-emerald-700 transition-colors flex items-center gap-2">
+            <FileDown class="w-3.5 h-3.5" /> Download PDF
           </button>
         </StaffTopbar>
       </div>

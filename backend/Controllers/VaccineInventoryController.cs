@@ -83,8 +83,8 @@ namespace AndroidWebAPI.Controllers
                 return BadRequest(new { message = "The minimum stock can't be negative." });
             if (inventory.ExpirationDate.Date < DateTime.Today)
                 return BadRequest(new { message = "This batch has already expired. Check the expiration date." });
-            if (inventory.ManufacturingDate is DateTime made && made.Date > inventory.ExpirationDate.Date)
-                return BadRequest(new { message = "The manufacturing date must be before the expiration date." });
+            if (BatchDateProblem(inventory) is string problem)
+                return BadRequest(new { message = problem });
             inventory.LotNumber = inventory.LotNumber.Trim();
             inventory.CurrentQuantity = inventory.InitialQuantity;
 
@@ -153,6 +153,7 @@ namespace AndroidWebAPI.Controllers
                     onHand = lines.Sum(l => l.OnHand),
                     received = lines.Sum(l => l.ReceivedInPeriod),
                     used = lines.Sum(l => l.UsedInPeriod),
+                    removed = lines.Sum(l => l.RemovedInPeriod),
                     expiringSoon = lines.Sum(l => l.ExpiringSoon),
                     expiredOnShelf = lines.Sum(l => l.ExpiredOnShelf),
                     lowOrOut = lines.Count(l => l.Status != "Good"),
@@ -254,6 +255,14 @@ namespace AndroidWebAPI.Controllers
             if (existing == null)
                 return NotFound();
 
+            // Same checks as receiving a batch (an expired batch can still be
+            // edited, e.g. to deactivate it)
+            if (string.IsNullOrWhiteSpace(inventory.LotNumber))
+                return BadRequest(new { message = "Enter the lot number." });
+            if (BatchDateProblem(inventory) is string problem)
+                return BadRequest(new { message = problem });
+            inventory.LotNumber = inventory.LotNumber.Trim();
+
             // Dose counts only change when doses are given, so an edit made from
             // a page opened earlier can't undo a vaccination done in between.
             inventory.InitialQuantity = existing.InitialQuantity;
@@ -268,6 +277,111 @@ namespace AndroidWebAPI.Controllers
                 newValue: $"Remaining: {inventory.CurrentQuantity}, Active: {inventory.Status}");
 
             return Ok(updated);
+        }
+
+        // ========================================
+        // ADJUST STOCK (Oct 2026)
+        // POST: api/VaccineInventory/1/adjust
+        //   { mode: "remove", quantity: 2, reason: "Broken vial", note: "..." }
+        //   { mode: "count",  quantity: 137, note: "Wednesday stock check" }
+        // Doses that can't be given (broken, spoiled, expired, lost) or a
+        // recount. Doctors and Nurses both handle the vials, so both can.
+        // ========================================
+        public static readonly string[] RemoveReasons =
+            { "Broken vial", "Spoiled (cold chain)", "Expired, thrown away", "Lost", "Other" };
+
+        public class AdjustStockDto
+        {
+            public string Mode { get; set; } = "remove";   // "remove" | "count"
+            public int Quantity { get; set; }
+            public string? Reason { get; set; }
+            public string? Note { get; set; }
+        }
+
+        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.StaffOrAdmin)]
+        [HttpPost("{id}/adjust")]
+        public async Task<IActionResult> AdjustStock(int id, [FromBody] AdjustStockDto dto, [FromServices] AppDbContext context)
+        {
+            var batch = await context.VaccineInventory.Include(b => b.Vaccine).FirstOrDefaultAsync(b => b.InventoryID == id);
+            if (batch == null) return NotFound(new { message = "Batch not found." });
+
+            var note = string.IsNullOrWhiteSpace(dto.Note) ? null : dto.Note.Trim();
+            if (note?.Length > 255) return BadRequest(new { message = "The note is too long (255 characters at most)." });
+
+            int before = batch.CurrentQuantity;
+            int after;
+            string reason;
+            if (dto.Mode == "count")
+            {
+                if (dto.Quantity < 0 || dto.Quantity > batch.InitialQuantity)
+                    return BadRequest(new { message = $"The count must be between 0 and {batch.InitialQuantity} (the doses this batch came with)." });
+                if (dto.Quantity == before)
+                    return BadRequest(new { message = $"{before} is already the count on file, so nothing changes." });
+                after = dto.Quantity;
+                reason = "Recount";
+            }
+            else
+            {
+                reason = RemoveReasons.FirstOrDefault(r => r == dto.Reason) ?? "";
+                if (reason == "") return BadRequest(new { message = "Choose why the doses can't be used." });
+                if (reason == "Other" && note == null) return BadRequest(new { message = "Write a short note saying what happened." });
+                if (dto.Quantity < 1) return BadRequest(new { message = "Enter how many doses to take off." });
+                if (dto.Quantity > before) return BadRequest(new { message = $"Only {before} dose(s) are on file for this batch." });
+                after = before - dto.Quantity;
+            }
+
+            var me = AndroidWebAPI.Services.AccessGuard.CallerId(User);
+            var user = me == null ? null : await context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.UserID == me);
+            var who = user == null ? null : $"{user.FirstName} {user.LastName}".Trim();
+
+            batch.CurrentQuantity = after;
+            batch.UpdatedAt = DateTime.Now;
+            context.StockAdjustments.Add(new StockAdjustment
+            {
+                InventoryID = batch.InventoryID,
+                Change = after - before,
+                QuantityBefore = before,
+                QuantityAfter = after,
+                Reason = reason,
+                Note = note,
+                AdjustedByUserID = me,
+                AdjustedByName = who,
+                AdjustedAt = DateTime.Now,
+            });
+            await context.SaveChangesAsync();
+
+            int change = after - before;
+            await _audit.LogAsync("Inventory", "Adjust Stock",
+                $"Batch {batch.LotNumber} ({batch.Vaccine?.Abbreviation ?? batch.Vaccine?.VaccineName})",
+                (change < 0 ? $"Took off {-change} dose(s): {reason}." : $"Recount added {change} dose(s).") + (note != null ? $" {note}" : ""),
+                oldValue: $"Remaining: {before}",
+                newValue: $"Remaining: {after}");
+
+            return Ok(new { inventoryID = batch.InventoryID, currentQuantity = after, change });
+        }
+
+        // GET: api/VaccineInventory/1/adjustments — newest first
+        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.ClinicTeam)]
+        [HttpGet("{id}/adjustments")]
+        public async Task<IActionResult> GetAdjustments(int id, [FromServices] AppDbContext context)
+        {
+            var rows = await context.StockAdjustments.AsNoTracking()
+                .Where(a => a.InventoryID == id)
+                .OrderByDescending(a => a.AdjustedAt)
+                .Select(a => new { a.AdjustmentID, a.Change, a.QuantityBefore, a.QuantityAfter, a.Reason, a.Note, a.AdjustedByName, a.AdjustedAt })
+                .ToListAsync();
+            return Ok(rows);
+        }
+
+        // A batch can't be made in the future or after it expires
+        private static string? BatchDateProblem(VaccineInventory batch)
+        {
+            if (batch.ManufacturingDate is not DateTime made) return null;
+            if (made.Date > DateTime.Today)
+                return "The manufacturing date can't be in the future.";
+            if (made.Date > batch.ExpirationDate.Date)
+                return "The manufacturing date must be before the expiration date.";
+            return null;
         }
 
         // ========================================

@@ -6,6 +6,84 @@ the beneficiary revision below is on `Aruga-Revision`.
 
 ---
 
+## Clearer pages with built-in instructions (Oct 17, 2026)
+
+From the ISO 25010 survey. Respondents said some features were hard to navigate or understand, asked for instructions on screen ("add helper"), and asked for a cleaner, more organized interface. These changes are to the Staff / Nurse and Admin / Doctor portals, plus the parent's **View Profile** window (the rest of the parent portal was already simplified on Oct 9).
+
+- **"How to use this page"** card at the top of every Staff / Nurse and Admin / Doctor page. It shows 2–4 numbered steps in plain words, e.g. on the Dashboard: Check in → Call Next → Record vaccines → Complete Visit. **Hide tips** hides it on that page and the browser remembers. The new **Help** button in the top bar shows it again.
+- **Each page says what it's for** under its title (e.g. "Run today's clinic: check families in, call them into the room, record their vaccines."), instead of "Aruga / Dashboard".
+- **Sidebar menus are grouped** under short headings. Staff / Nurse: *Today's clinic*, *Patients*, *Stock & reports*. Admin / Doctor: *Overview*, *People*, *Vaccines & stock*, *Clinic*.
+- **Staff / Nurse Dashboard**
+  - The **Vaccination Room** card (Call Next) now sits right under Quick Actions, so the Nurse's main work needs no scrolling. The "Vaccination Room" quick action was removed since the card is right there.
+  - The out-of-turn call button on a queue row now says **Call** instead of being an icon only.
+  - **Add Walk-in Patient** is now just **Add Patient** (the quick action and the window it opens).
+  - When the room is free, the card says what to do next ("Press Call Next to bring in Q-003").
+  - Today's Queue says so when nobody has checked in yet, instead of showing an empty table.
+- **Fixed:** the **⋯ → Remove from Queue** menu on the Dashboard appeared far below its button once the page was scrolled. It now opens right under the button, like the other row menus. Every row menu on both portals was checked.
+- **Admin / Doctor pages** use the same line icons as the Nurse portal instead of emoji (📦, 💉, 🧒…) on the summary cards, report categories and search boxes. The row **⋮** buttons are darker and say "More actions" when pointed at.
+- **Fixed:** the search box on Admin **Inventory** and **Notifications** was squeezed to a few letters ("Se…") by the buttons next to it. It now keeps its width, and the buttons move to the next line on smaller screens.
+- Vaccine Management no longer shows the internal "ID: 5" under each vaccine name.
+- **My Vaccination Records** dropped the "Administered By" column (on this page it's always you; it's still in the record's details). Dates, batch numbers and names no longer wrap onto three lines.
+- Buttons in ALL CAPS ("ADD NEW BATCH", "DOWNLOAD PDF") now use normal capitalization like the rest of the system.
+- **Vaccine Schedule (Staff / Nurse) is one simple list.** It used to show 6 number cards, a status dropdown, a List/Calendar switch, and three side boxes (Today's Summary, Upcoming Vaccines, Overdue List) that repeated the same numbers.
+  - Four boxes at the top are both the numbers and the tabs: **Due today**, **Overdue**, **Coming up** (next 30 days) and **Done today**. Click one to list those children.
+  - The **calendar view was removed**: the Calendar page already shows the month, with names and closed days. The list links to it.
+  - One search box finds a child or a parent (the "Patient ID" option was dropped: it was a system ID the clinic doesn't use). Vaccine and age filters, Refresh and Export stay.
+  - The table has fewer columns (Child, Vaccines, Due, Status). Click a row to see every vaccine for that visit. Statuses read "Not checked in" and "Overdue" instead of "Due Today" and "Delayed".
+  - **Doses needed in the next 30 days** is folded into one line ("Enough stock on hand for every dose due" or "Not enough stock for MMR…"). Click it to see each vaccine.
+- **Calendar (Staff / Nurse)**
+  - Counts **children**, not doses ("2 children due" instead of "4 due").
+  - The day panel lists each child once with all their vaccines, e.g. "MMR Dose 1, IPV Dose 2".
+  - Ordinary closed days are just grey (see the legend) instead of each saying "NO VACCINES". A special closure still shows its reason, e.g. "Closed: Transport Strike".
+- The text for every page's steps is in one file, `frontend/src/utils/pageGuides.js`, so the team can reword it without touching the pages.
+- **Parent portal: View Profile**
+  - Three clear sections: **My details**, **My children**, **Password**.
+  - Readable text instead of tiny grey capitals.
+  - Email, mobile number and home address (with barangay) are shown as one list with icons. Right under it: "Something wrong or changed? Ask the health center staff to update it on your next visit."
+  - Each child's details show right away (age, sex, birthday, how you're related, guardians on file, place of birth, health center). There are no arrows to open.
+  - **Fixed:** the Change Password form used to open under the "Children" heading. It now opens in its own Password section.
+  - The password rules are listed before typing and tick green as they're met. "Type the new password again" warns when the two don't match, and a **Show passwords** box helps on phones.
+  - The window closes with the X, the Close button or the Escape key.
+- **Patient Records (Staff / Nurse): parent details panel**
+  - The header showed the database ID (a long code like 11111111-1111-…). It now shows how Leveriza identifies a family: **Barangay 21 · Family No. FN-002**.
+  - Contact details are one list (mobile, email, home address, portal username) with an **Edit** button.
+  - The children's numbers are **On track / Delayed / Fully vaccinated**. "Upcoming" only counted children with no vaccine yet, which was misleading.
+  - Each child shows their relationship, age and Family No. instead of the ID, with "Primary contact" written out instead of an unexplained star. Click a child to open their record.
+  - The child panel, the "Linked Parent / Guardian Accounts" window and the "Historical Vaccination Records" window also show Family No. and barangay instead of the ID. The Admin vaccine panel no longer shows "ID: 7".
+
+## Adjust Stock, register a parent inside Add Patient, automatic sign-out (Oct 17, 2026)
+
+**Adjust Stock (Doctor and Nurse).** A broken vial, spoiled doses (cold chain), expired doses thrown away, lost doses, or a recount that found a different number can now be recorded, so the system's count matches the fridge.
+- Nurse: **Adjust** button on each batch (Inventory). Doctor: **⋮ → Adjust Stock** on a batch, or the button in its details.
+- One small window: *Some doses can't be used* (how many + why: Broken vial, Spoiled (cold chain), Expired, thrown away, Lost, Other) or *Recount* (the real number). An optional note, required for "Other". It shows "15 → 13" before saving.
+- Each adjustment is kept with who, when, why and the note. The Doctor sees them under **Stock adjustments** in the batch details, which replaced a leftover developer note that was showing there. They also go to the audit log.
+- The Inventory Summary and the Inventory Summary report show **Removed** (doses taken off this way) next to Used. The summary shows it only when there were adjustments in the period.
+- Checks: can't take off more than is on file, a recount can't be more than the batch came with, and parents can't use it.
+- Database: one new table, `StockAdjustments`. The API adds it by itself to an older database at startup, and survey-mode adds it again after each reset. It's also in Schema.sql / Setup_WithDemoData.sql.
+
+**Register a new parent without leaving Add Patient / Register Child.** Every child is still linked to a fully registered parent (with ID and privacy consent). For a brand-new family:
+- Step 1 now has **Register a new parent** (and "Register them now" when a search finds no one).
+- It opens the full Register Parent form in the same window, with the searched name and the child's barangay and address already filled in.
+- After saving, it goes back to the child form with the new parent linked in the chosen role (Mother, Father, Guardian…), and what was typed for the child is kept. The temporary password is shown as before.
+
+**Automatic sign-out after 15 minutes of no activity** (Staff / Nurse, Admin / Doctor, Super Admin), so records aren't left open on a shared clinic computer.
+- At 14 minutes a "Still there?" window counts down the last minute with **Stay signed in**.
+- After signing out, the sign-in page says why, and signing in again returns to the same page.
+- Using Aruga in one tab keeps the other tabs signed in. A browser reopened later signs out at once.
+- **Not signed out:** parents, because their Check-in page must stay open while they wait to be called. (The Check-in QR page is printed each vaccination morning for the entrance, so it isn't left open on a screen.)
+
+## System check: fixes (Oct 17, 2026)
+
+Every page was opened as the Nurse, Doctor and a parent. No page had errors or failed requests, and all fit a 1366×768 laptop and a tablet. The Nurse's whole day was run end to end: Add Patient → Call Next → Record Dose → Complete Visit. A parent account was used to try every data address in the API with another family's IDs, and all of them were refused. Fixed:
+
+- **A deactivated account kept working for up to 8 hours.** Sign-ins last 8 hours, and nothing checked the account again in between. Now every request checks that the account is still active, so a Nurse who left or a parent account the clinic turned off is shut out at once. *(Server change: needs a backend deploy.)*
+- **Stock batches:** a manufacturing date in the future was accepted, and editing a batch had no checks at all. Both now refuse a manufacturing date in the future or after the expiry date, and an empty lot number. The date pickers no longer offer future dates. *(Server change: needs a backend deploy.)*
+- **Out-of-date instructions:** if a child was already in today's queue, Vaccine Schedule and Add Patient said to "remove that entry in Queue Management". Queue Management is read-only since Oct 9, and one message even showed "queue #undefined". They now show the server's own message (e.g. "Kyle Santos is already in today's queue (Q-003)") and refresh the list.
+- **Two developer test pages** (`/admin/test-api`, `/admin/vaccine-schedule`) could be opened by any Admin who typed the address. One asked for a child's internal ID. Both now go to the Admin dashboard. The files are kept in `components/SystemAdmin`.
+- The Check-in QR page says "Families without a phone can always be checked in from the Dashboard" (was "Walk-ins…").
+
+---
+
 ## Queue Management is now the daily queue record (Oct 9, 2026)
 
 The page used to list every queue entry ever, oldest first, with a status dropdown and a delete button on each. It now shows **one day at a time** as a read-only record. Today's queue is still run from the Dashboard.
