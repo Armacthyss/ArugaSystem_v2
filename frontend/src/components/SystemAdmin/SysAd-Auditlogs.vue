@@ -1,4 +1,5 @@
 <script setup>
+import { Baby, CircleCheck, ClipboardList, Package, Search, ShieldX, Users } from 'lucide-vue-next'
 import { ref, computed, reactive, watch, onMounted } from 'vue'
 import axios from 'axios'
 import AppSidebar from './Components/AppSidebar.vue'
@@ -144,42 +145,42 @@ const timeline = computed(() => logs.value.slice(0, 6))
           <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
             <div class="flex items-start justify-between gap-2">
               <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Total Logs · {{ appliedFilters.dateRange }}</p>
-              <div class="bg-teal-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm">📋</div>
+              <div class="bg-teal-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0"><ClipboardList class="w-4 h-4 text-teal-700" /></div>
             </div>
             <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.total }}</p>
           </div>
           <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
             <div class="flex items-start justify-between gap-2">
               <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Successful Logins</p>
-              <div class="bg-emerald-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm">✅</div>
+              <div class="bg-emerald-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0"><CircleCheck class="w-4 h-4 text-emerald-700" /></div>
             </div>
             <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.successfulLogins }}</p>
           </div>
           <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
             <div class="flex items-start justify-between gap-2">
               <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Failed Logins</p>
-              <div class="bg-rose-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm">⛔</div>
+              <div class="bg-rose-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0"><ShieldX class="w-4 h-4 text-rose-700" /></div>
             </div>
             <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.failedLogins }}</p>
           </div>
           <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
             <div class="flex items-start justify-between gap-2">
               <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">User Account Changes</p>
-              <div class="bg-sky-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm">👥</div>
+              <div class="bg-sky-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0"><Users class="w-4 h-4 text-sky-700" /></div>
             </div>
             <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.userChanges }}</p>
           </div>
           <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
             <div class="flex items-start justify-between gap-2">
               <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Patient Record Updates</p>
-              <div class="bg-amber-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm">🧒</div>
+              <div class="bg-amber-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0"><Baby class="w-4 h-4 text-amber-700" /></div>
             </div>
             <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.patientUpdates }}</p>
           </div>
           <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
             <div class="flex items-start justify-between gap-2">
               <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Inventory Transactions</p>
-              <div class="bg-violet-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm">📦</div>
+              <div class="bg-violet-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0"><Package class="w-4 h-4 text-violet-700" /></div>
             </div>
             <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.inventoryTx }}</p>
           </div>
@@ -188,7 +189,7 @@ const timeline = computed(() => logs.value.slice(0, 6))
         <!-- Toolbar -->
         <section class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm space-y-3">
           <div class="relative">
-            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm" aria-hidden="true">🔍</span>
+            <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" aria-hidden="true" />
             <input
               v-model="searchQuery"
               type="text"

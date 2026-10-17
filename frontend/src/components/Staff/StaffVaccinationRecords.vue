@@ -107,17 +107,16 @@
           <div v-else class="overflow-x-auto">
             <table class="w-full text-sm">
               <thead class="bg-slate-50 border-b border-slate-200">
-                <tr class="text-xs text-slate-500 uppercase tracking-wide">
-                  <th class="px-5 py-3.5 text-left font-medium">Child Name</th>
-                  <th class="px-5 py-3.5 text-left font-medium">Parent</th>
-                  <th class="px-5 py-3.5 text-left font-medium">Vaccine Name</th>
-                  <th class="px-5 py-3.5 text-left font-medium">Dose</th>
-                  <th class="px-5 py-3.5 text-left font-medium">Date Given</th>
-                  <th class="px-5 py-3.5 text-left font-medium">Batch No.</th>
-                  <th class="px-5 py-3.5 text-left font-medium">Administered By</th>
-                  <th class="px-5 py-3.5 text-left font-medium">Status</th>
-                  <th class="px-5 py-3.5 text-left font-medium">Remarks</th>
-                  <th class="px-5 py-3.5 text-left font-medium">Actions</th>
+                <tr class="text-xs text-slate-500 uppercase tracking-wide whitespace-nowrap">
+                  <th class="px-4 py-3.5 text-left font-medium">Child Name</th>
+                  <th class="px-4 py-3.5 text-left font-medium">Parent</th>
+                  <th class="px-4 py-3.5 text-left font-medium">Vaccine Name</th>
+                  <th class="px-4 py-3.5 text-left font-medium">Dose</th>
+                  <th class="px-4 py-3.5 text-left font-medium">Date Given</th>
+                  <th class="px-4 py-3.5 text-left font-medium">Batch No.</th>
+                  <th class="px-4 py-3.5 text-left font-medium">Status</th>
+                  <th class="px-4 py-3.5 text-left font-medium">Remarks</th>
+                  <th class="px-4 py-3.5 text-left font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-100">
@@ -125,24 +124,24 @@
                   class="hover:bg-slate-50 transition-colors">
 
                   <!-- Child -->
-                  <td class="px-5 py-3.5">
+                  <td class="px-4 py-3.5">
                     <div class="flex items-center gap-2.5">
                       <div class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
                         :style="{ backgroundColor: avatarColor(rec.childName) }">
                         {{ initials(rec.childName) }}
                       </div>
-                      <span class="font-medium text-slate-800">{{ rec.childName }}</span>
+                      <span class="font-medium text-slate-800 whitespace-nowrap">{{ rec.childName }}</span>
                     </div>
                   </td>
 
-                  <td class="px-5 py-3.5 text-slate-500">{{ rec.parentName }}</td>
-                  <td class="px-5 py-3.5 font-medium text-slate-700">{{ rec.vaccineName }}</td>
-                  <td class="px-5 py-3.5 text-slate-500">{{ rec.doseNumber }}{{ ordinal(rec.doseNumber) }}</td>
+                  <td class="px-4 py-3.5 text-slate-500 whitespace-nowrap">{{ rec.parentName }}</td>
+                  <td class="px-4 py-3.5 font-medium text-slate-700">{{ rec.vaccineName }}</td>
+                  <td class="px-4 py-3.5 text-slate-500">{{ rec.doseNumber }}{{ ordinal(rec.doseNumber) }}</td>
 
                   <!-- Date — highlights if late -->
-                  <td class="px-5 py-3.5">
+                  <td class="px-4 py-3.5">
                     <div v-if="rec.dateAdministered">
-                      <p class="text-slate-700">{{ formatDate(rec.dateAdministered) }}</p>
+                      <p class="text-slate-700 whitespace-nowrap">{{ formatDate(rec.dateAdministered) }}</p>
                       <!-- ✅ Show "X days late" if administered after scheduled date -->
                       <p v-if="rec.daysLate > 0" class="text-xs text-amber-600 font-medium mt-0.5">
                         {{ rec.daysLate }}d late
@@ -151,23 +150,22 @@
                     <span v-else class="text-slate-400">—</span>
                   </td>
 
-                  <td class="px-5 py-3.5 font-mono text-xs text-slate-500">{{ rec.lotNumber || '—' }}</td>
-                  <td class="px-5 py-3.5 text-slate-500">{{ rec.administeredByName || '—' }}</td>
+                  <td class="px-4 py-3.5 font-mono text-xs text-slate-500 whitespace-nowrap">{{ rec.lotNumber || '—' }}</td>
 
                   <!-- Status badge -->
-                  <td class="px-5 py-3.5">
+                  <td class="px-4 py-3.5">
                     <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
                       :class="statusClass(rec.status)">
                       {{ rec.status }}
                     </span>
                   </td>
 
-                  <td class="px-5 py-3.5 text-slate-500 max-w-[160px] truncate" :title="rec.remarks">
+                  <td class="px-4 py-3.5 text-slate-500 max-w-[160px] truncate" :title="rec.remarks">
                     {{ rec.remarks || '—' }}
                   </td>
 
                   <!-- Actions -->
-                  <td class="px-5 py-3.5">
+                  <td class="px-4 py-3.5">
                     <div class="flex items-center gap-1.5">
                       <!-- View details -->
                       <button @click="viewRecord(rec)"

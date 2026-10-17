@@ -18,7 +18,9 @@ function redirectTarget() {
   return typeof target === "string" && target.startsWith("/") && !target.startsWith("//") ? target : null
 }
 
-const sessionNote = route.query.expired ? "Your session expired. Please sign in again." : ""
+const sessionNote =
+  route.query.idle ? "You were signed out after 15 minutes of no activity, to protect patient records. Please sign in again." :
+  route.query.expired ? "Your session expired. Please sign in again." : ""
 
 // =====================================================
 // FORM STATE

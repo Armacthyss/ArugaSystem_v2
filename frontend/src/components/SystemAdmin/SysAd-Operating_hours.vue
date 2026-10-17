@@ -1,4 +1,5 @@
 <script setup>
+import { CalendarDays } from 'lucide-vue-next'
 
 import { API_ORIGIN } from '@/utils/apiBase'
 import axios from "axios"
@@ -819,7 +820,7 @@ onMounted(() => {
               <span :class="exceptionForm.exceptionDate ? 'text-slate-900' : 'text-slate-400'">
                 {{ exceptionForm.exceptionDate ? formatDateLong(exceptionForm.exceptionDate) : "Select a date" }}
               </span>
-              <span aria-hidden="true" class="text-slate-400">📅</span>
+              <CalendarDays class="w-4 h-4 text-slate-400" aria-hidden="true" />
             </button>
 
             <!-- click-away layer -->

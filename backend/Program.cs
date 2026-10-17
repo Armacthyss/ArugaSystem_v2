@@ -101,6 +101,23 @@ builder.Services
                 )
             )
         };
+
+        // A sign-in lasts 8 hours, but a deactivated (or deleted) account is
+        // shut out on its next request instead of keeping access until then,
+        // e.g. a Nurse who left or a parent account the clinic turned off.
+        options.Events = new JwtBearerEvents
+        {
+            OnTokenValidated = async ctx =>
+            {
+                if (!Guid.TryParse(ctx.Principal?.FindFirst("AccountID")?.Value, out var accountId)) return;
+                var db = ctx.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
+                var active = await db.Accounts.AsNoTracking()
+                    .Where(a => a.AccountID == accountId)
+                    .Select(a => (bool?)a.Status)
+                    .FirstOrDefaultAsync();
+                if (active != true) ctx.Fail("This account is no longer active.");
+            },
+        };
     });
 // Every API call needs a signed-in user unless the endpoint says [AllowAnonymous]
 // (login, Forgot Password). Role rules sit on the controllers themselves.

@@ -1,4 +1,5 @@
 <script setup>
+import { AlertTriangle, CalendarClock, Hourglass, Megaphone, Search, Send, TrendingUp } from 'lucide-vue-next'
 import { ref, computed, reactive, onMounted, watch } from 'vue'
 import { useFloatingMenu } from '@/utils/floatingMenu'
 import axios from 'axios'
@@ -289,42 +290,42 @@ const reminderSchedule = {
           <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
             <div class="flex items-start justify-between gap-2">
               <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Sent Today</p>
-              <div class="bg-emerald-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm">📨</div>
+              <div class="bg-emerald-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0"><Send class="w-4 h-4 text-emerald-700" /></div>
             </div>
             <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.sentToday }}</p>
           </div>
           <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
             <div class="flex items-start justify-between gap-2">
               <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Vaccine Reminders</p>
-              <div class="bg-sky-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm">🗓️</div>
+              <div class="bg-sky-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0"><CalendarClock class="w-4 h-4 text-sky-700" /></div>
             </div>
             <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.reminders }}</p>
           </div>
           <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
             <div class="flex items-start justify-between gap-2">
               <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Unread</p>
-              <div class="bg-amber-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm">⏳</div>
+              <div class="bg-amber-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0"><Hourglass class="w-4 h-4 text-amber-700" /></div>
             </div>
             <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.unread }}</p>
           </div>
           <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
             <div class="flex items-start justify-between gap-2">
               <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Missed-Dose Follow-ups</p>
-              <div class="bg-rose-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm">⚠️</div>
+              <div class="bg-rose-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0"><AlertTriangle class="w-4 h-4 text-rose-700" /></div>
             </div>
             <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.missed }}</p>
           </div>
           <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
             <div class="flex items-start justify-between gap-2">
               <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Announcements</p>
-              <div class="bg-teal-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm">📢</div>
+              <div class="bg-teal-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0"><Megaphone class="w-4 h-4 text-teal-700" /></div>
             </div>
             <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.manual }}</p>
           </div>
           <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
             <div class="flex items-start justify-between gap-2">
               <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Read Rate</p>
-              <div class="bg-violet-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm">📈</div>
+              <div class="bg-violet-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0"><TrendingUp class="w-4 h-4 text-violet-700" /></div>
             </div>
             <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.readRate }}%</p>
           </div>
@@ -332,9 +333,9 @@ const reminderSchedule = {
 
         <!-- Toolbar -->
         <section class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
-          <div class="flex flex-col lg:flex-row lg:items-center gap-3">
-            <div class="relative flex-1 min-w-0">
-              <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm" aria-hidden="true">🔍</span>
+          <div class="flex flex-col lg:flex-row lg:flex-wrap lg:items-center gap-3">
+            <div class="relative flex-1 min-w-0 lg:min-w-[280px]">
+              <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" aria-hidden="true" />
               <input
                 v-model="searchQuery"
                 type="text"
@@ -360,7 +361,7 @@ const reminderSchedule = {
               <option>Read</option>
             </select>
 
-            <div class="flex items-center gap-2 shrink-0 flex-wrap">
+            <div class="flex items-center gap-2 shrink-0 flex-wrap lg:ml-auto">
               <button @click="showSettingsModal = true" class="text-sm font-semibold px-4 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
                 Reminder Schedule
               </button>
@@ -418,7 +419,7 @@ const reminderSchedule = {
                   <td class="px-5 py-3 text-right relative">
                     <button
                       @click.stop="toggleMenu(n.id, $event)"
-                      class="text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg w-8 h-8 inline-flex items-center justify-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                      title="More actions" aria-label="More actions" class="text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg w-8 h-8 inline-flex items-center justify-center text-lg font-bold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                     >
                       ⋮
                     </button>

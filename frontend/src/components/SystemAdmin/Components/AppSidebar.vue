@@ -30,20 +30,32 @@ watch(() => route.fullPath, () => { mobileNavOpen.value = false })
 
 // Admin / Doctor: the clinic. Super Admin (the development team): the
 // system only, with the audit logs (technical adviser, Oct 2026).
-const ADMIN_ITEMS = [
-  { label: 'Dashboard',          icon: House,          to: '/admin/home' },
-  { label: 'User Management',    icon: Users,         to: '/admin/user-management' },
-  { label: 'Patient Management', icon: Baby,          to: '/admin/patients' },
-  { label: 'Vaccine Management', icon: Syringe,       to: '/admin/vaccines' },
-  { label: 'Inventory',          icon: Package,       to: '/admin/inventory' },
-  { label: 'Notifications',      icon: Bell,          to: '/admin/notifications' },
-  { label: 'Operating Hours',    icon: Clock,         to: '/admin/operating-hours' },
-  { label: 'Reports',            icon: BarChart3,     to: '/admin/reports' },
+// Grouped under short headings so the list is easier to scan (survey
+// feedback, Oct 2026).
+const ADMIN_GROUPS = [
+  { label: 'Overview', items: [
+    { label: 'Dashboard',          icon: House,          to: '/admin/home' },
+  ] },
+  { label: 'People', items: [
+    { label: 'User Management',    icon: Users,         to: '/admin/user-management' },
+    { label: 'Patient Management', icon: Baby,          to: '/admin/patients' },
+  ] },
+  { label: 'Vaccines & stock', items: [
+    { label: 'Vaccine Management', icon: Syringe,       to: '/admin/vaccines' },
+    { label: 'Inventory',          icon: Package,       to: '/admin/inventory' },
+  ] },
+  { label: 'Clinic', items: [
+    { label: 'Notifications',      icon: Bell,          to: '/admin/notifications' },
+    { label: 'Operating Hours',    icon: Clock,         to: '/admin/operating-hours' },
+    { label: 'Reports',            icon: BarChart3,     to: '/admin/reports' },
+  ] },
 ]
-const SUPER_ADMIN_ITEMS = [
-  { label: 'System Status',      icon: Activity,      to: '/super-admin/home' },
-  { label: 'Admin Accounts',     icon: UserCog,       to: '/super-admin/accounts' },
-  { label: 'Audit Logs',         icon: ClipboardList, to: '/super-admin/audit-logs' },
+const SUPER_ADMIN_GROUPS = [
+  { label: '', items: [
+    { label: 'System Status',      icon: Activity,      to: '/super-admin/home' },
+    { label: 'Admin Accounts',     icon: UserCog,       to: '/super-admin/accounts' },
+    { label: 'Audit Logs',         icon: ClipboardList, to: '/super-admin/audit-logs' },
+  ] },
 ]
 
 const props = defineProps({
@@ -67,7 +79,8 @@ const account = computed(() => {
 const loggedInUser = computed(() => account.value?.user || {})
 
 const isSuperAdmin = getRole() === 'SuperAdmin'
-const items = computed(() => props.navItems || (isSuperAdmin ? SUPER_ADMIN_ITEMS : ADMIN_ITEMS))
+const groups = computed(() =>
+  props.navItems ? [{ label: '', items: props.navItems }] : (isSuperAdmin ? SUPER_ADMIN_GROUPS : ADMIN_GROUPS))
 
 // Login.vue stores FirstName / LastName (PascalCase); accept both spellings
 const firstName = computed(() => loggedInUser.value.FirstName || loggedInUser.value.firstName || '')
@@ -127,25 +140,28 @@ const toggleSidebar = () => {
       </div>
     </div>
 
-    <nav class="flex-1 overflow-y-auto py-4 px-3 space-y-1">
-     <RouterLink
-  v-for="item in items"
-  :key="item.label"
-  :to="item.to"
-  class="w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-  :class="[
-    $route.path === item.to
-      ? 'bg-emerald-50 text-emerald-700'
-      : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-  ]"
->
-       <component
-  :is="item.icon"
-  class="w-5 h-5 shrink-0"
-  :stroke-width="1.8"
-/>
-        <span v-if="!isCollapsed" class="truncate">{{ item.label }}</span>
-      </RouterLink>
+    <nav class="flex-1 overflow-y-auto py-4 px-3">
+      <div v-for="(group, g) in groups" :key="group.label || g" :class="g > 0 ? 'mt-4' : ''">
+        <p v-if="group.label && !isCollapsed" class="px-3 pb-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-slate-400">{{ group.label }}</p>
+        <div v-else-if="g > 0" class="mx-3 mb-3 border-t border-slate-200"></div>
+        <div class="space-y-0.5">
+          <RouterLink
+            v-for="item in group.items"
+            :key="item.label"
+            :to="item.to"
+            :title="item.label"
+            class="w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+            :class="[
+              $route.path === item.to
+                ? 'bg-emerald-50 text-emerald-700'
+                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+            ]"
+          >
+            <component :is="item.icon" class="w-5 h-5 shrink-0" :stroke-width="1.8" />
+            <span v-if="!isCollapsed" class="truncate">{{ item.label }}</span>
+          </RouterLink>
+        </div>
+      </div>
     </nav>
 
     <div class="border-t border-slate-200 p-3 shrink-0 space-y-2">

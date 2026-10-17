@@ -6,7 +6,7 @@ import {
   Users, Syringe, Search,
   UserPlus, Eye, Pencil, Link2, KeyRound, Ban,
   MoreHorizontal, X, MapPin, Phone, Mail, Baby, Check,
-  ArrowRightLeft, UserCircle2, Star, ShieldCheck, Trash2, AlertTriangle,
+  ArrowRightLeft, UserCircle2, Star, ShieldCheck, Trash2, AlertTriangle, ChevronRight, ArrowLeft,
 } from "lucide-vue-next";
 import axios from "axios";
 
@@ -273,6 +273,14 @@ const childrenOf = (parent) => relationshipsOfParent(parent)
     child: children.value.find(c => c.id === rel.childId)
   }))
   .filter(x => x.child);
+
+// "Barangay 21 · Family No. FN-002" — how the clinic identifies a family.
+// Family numbers are kept on the children, so a parent shows their children's.
+function familyLine(parent) {
+  const nos = [...new Set(childrenOf(parent).map(x => x.child.familyNo).filter(Boolean))];
+  const brgy = parent.barangay ? barangayLabel(parent.barangay) : "No barangay on file";
+  return `${brgy} · ${nos.length ? `Family No. ${nos.join(", ")}` : "No Family No. yet"}`;
+}
 
 async function setPrimary(childId, relId) {
   try {
@@ -884,13 +892,15 @@ function fieldRows(fields) {
    record types get created, using the `parents.value` / `children.value`
    already loaded by loadAll() instead of a separate fetch.
 ========================================================================= */
-// walkIn: "Add Walk-in Patient" on the Dashboard — a new child who is here
+// walkIn: "Add Patient" on the Dashboard — a new child who is here
 // now, so after registering they're also added to today's queue.
-const registerModal = ref({ open:false, kind:null, walkIn:false }); // kind: "parent" | "child"
+// fromChild: the parent form was opened from inside the child form ("Register
+// a new parent"); saving goes back to the child form with that parent linked.
+const registerModal = ref({ open:false, kind:null, walkIn:false, fromChild:false }); // kind: "parent" | "child"
 const registerSubmitting = ref(false);
 
 function openRegisterModal(kind, ctx = {}) {
-  registerModal.value = { open:true, kind, walkIn: kind === "child" && !!ctx.walkIn };
+  registerModal.value = { open:true, kind, walkIn: kind === "child" && !!ctx.walkIn, fromChild:false };
   actionsMenuOpenFor.value = null;
   error.value = null;
   if (kind === "parent") {
@@ -905,6 +915,29 @@ function openRegisterModal(kind, ctx = {}) {
   }
 }
 const closeRegisterModal = () => { registerModal.value.open = false; };
+
+// A brand-new family at the desk: the parent still gets the full Register
+// Parent form (with the privacy consent), but in the same window, and the
+// child's details typed so far are kept.
+function registerParentFromChild() {
+  const typed = regParentSearch.value.trim();
+  resetParentForm();
+  // Searched "Ana Cruz" (a name, not an email or number): start with that name
+  if (typed && !/[@\d]/.test(typed)) {
+    const parts = typed.split(/\s+/);
+    regParentForm.LastName = parts.length > 1 ? parts.pop() : "";
+    regParentForm.GivenName = parts.join(" ");
+  }
+  if (regChildForm.Barangay) regParentForm.BarangayNo = regChildForm.Barangay;
+  if (regChildForm.Address) regParentForm.Address = regChildForm.Address;
+  regParentSearch.value = "";
+  registerModal.value = { ...registerModal.value, kind: "parent", fromChild: true };
+  error.value = null;
+}
+function backToChildForm() {
+  registerModal.value = { ...registerModal.value, kind: "child", fromChild: false };
+  error.value = null;
+}
 
 // ── PARENT FORM ─────────────────────────────────────────────────────
 const regParentForm = reactive({ GivenName:"", MiddleName:"", LastName:"", Email:"", ContactNo:"", BarangayNo:"", Address:"", CreateLogin:true, PrivacyConsent:false });
@@ -987,7 +1020,14 @@ async function submitParentRegister() {
     }
 
     await loadAll();
-    closeRegisterModal();
+    if (registerModal.value.fromChild) {
+      // Back to the child form, with the new parent in the chosen role
+      backToChildForm();
+      const added = parents.value.find(p => String(p.id).toLowerCase() === String(newParentID).toLowerCase());
+      if (added) regLinkExistingParent(added);
+    } else {
+      closeRegisterModal();
+    }
     if (created?.temporaryPassword) {
       const realEmail = created.email && !/@example\.com$|@demo\./i.test(created.email);
       accountDialog.value = {
@@ -1183,9 +1223,9 @@ async function submitChildRegister() {
         walkInMessage = `${regChildForm.FirstName} was added to today's queue as Q-${String(queued?.queueNumber ?? "").padStart(3, "0")}.`;
       } catch (e) {
         console.error("Error adding walk-in to the queue:", e);
-        walkInMessage = e.response?.status === 409
-          ? `This family is already in today's queue (Q-${String(e.response.data?.queueNumber ?? "").padStart(3, "0")}), so ${regChildForm.FirstName} wasn't added to it. To add them, remove that entry in Queue Management, then use Check-In Patient on the Dashboard and tick all the children.`
-          : `${regChildForm.FirstName} was registered, but couldn't be added to the queue: ${e.response?.data?.message || e.message}. Use Check-In Patient on the Dashboard.`;
+        // (Queue Management is a read-only record now, so the old "remove that
+        // entry in Queue Management" advice no longer applied.)
+        walkInMessage = `${regChildForm.FirstName} was registered, but couldn't be added to the queue: ${e.response?.data?.message || e.message}. Use Check-In Patient on the Dashboard.`;
       }
     }
 
@@ -1193,7 +1233,7 @@ async function submitChildRegister() {
     closeRegisterModal();
     if (walkInMessage) {
       await showAlert({
-        title: walkInQueued ? "Walk-in checked in" : "Child registered, not in the queue",
+        title: walkInQueued ? "Patient added and checked in" : "Child registered, not in the queue",
         message: walkInMessage,
         tone: walkInQueued ? "primary" : "error",
       });
@@ -1371,7 +1411,7 @@ async function submitChildRegister() {
     <div v-if="showLinkedAccountsModal && viewingChildAccounts" class="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/40 px-4">
       <div class="w-full max-w-md rounded-2xl bg-white shadow-xl">
         <div class="flex items-center justify-between px-6 py-4 border-b border-stone-200">
-          <div><p class="text-[15px] font-semibold">Linked Parent / Guardian Accounts</p><p class="text-[11.5px] text-stone-500">{{ viewingChildAccounts.name }} · {{ viewingChildAccounts.id }}</p></div>
+          <div><p class="text-[15px] font-semibold">Linked Parent / Guardian Accounts</p><p class="text-[11.5px] text-stone-500">{{ viewingChildAccounts.name }} · {{ viewingChildAccounts.familyNo ? `Family No. ${viewingChildAccounts.familyNo}` : 'No Family No. yet' }} · {{ barangayLabel(viewingChildAccounts.barangay) }}</p></div>
           <button @click="showLinkedAccountsModal = false" class="p-1.5 rounded-lg hover:bg-stone-100"><X :size="18" class="text-stone-500" /></button>
         </div>
         <div class="p-6 space-y-2 max-h-[60vh] overflow-y-auto">
@@ -1394,45 +1434,78 @@ async function submitChildRegister() {
     <!-- VIEW PARENT DRAWER -->
     <transition name="fade"><div v-if="showParentDrawer" class="fixed inset-0 z-30 bg-stone-900/30" @click="showParentDrawer = false"></div></transition>
     <transition name="slide">
-      <aside v-if="showParentDrawer && selectedParent" class="fixed right-0 top-0 z-40 h-full w-[440px] bg-white border-l border-stone-200 shadow-xl overflow-y-auto">
-        <div class="flex items-center justify-between px-5 py-4 border-b border-stone-200 sticky top-0 bg-white">
-          <div><p class="text-[15px] font-semibold">Parent Information</p><p class="text-[11.5px] text-stone-500">{{ selectedParent.id }}</p></div>
-          <button @click="showParentDrawer = false" class="p-1.5 rounded-lg hover:bg-stone-100"><X :size="17" class="text-stone-500" /></button>
-        </div>
-        <div class="p-5 space-y-6">
-          <div class="flex items-center gap-4">
+      <!-- Reworked Oct 2026: the header showed the database ID (a long code
+           nobody at the clinic uses); it now shows how Leveriza identifies a
+           family, the barangay and Family No. -->
+      <aside v-if="showParentDrawer && selectedParent" class="fixed right-0 top-0 z-40 h-full w-full max-w-[440px] bg-white border-l border-stone-200 shadow-xl overflow-y-auto"
+        role="dialog" aria-label="Parent / guardian details">
+        <div class="flex items-start justify-between gap-3 px-5 py-4 border-b border-stone-200 sticky top-0 z-10 bg-white">
+          <div class="flex items-center gap-3.5 min-w-0">
             <Avatar :text="selectedParent.initials" size="lg" />
-            <div><p class="text-[16px] font-bold">{{ selectedParent.name }}</p><p class="text-[12px] text-stone-500">{{ selectedParent.relationship }}</p><div class="mt-1"><StatusBadge :status="selectedParent.status" /></div></div>
-          </div>
-          <div class="rounded-xl bg-stone-50 p-3.5 space-y-2">
-            <div class="flex items-center justify-between"><span class="text-[12px] text-stone-500">Contact Number</span><span class="text-[13px] font-medium flex items-center gap-1.5"><Phone :size="13" class="text-stone-400" /> {{ selectedParent.contact }}</span></div>
-            <div class="flex items-center justify-between"><span class="text-[12px] text-stone-500">Email</span><span class="text-[13px] font-medium flex items-center gap-1.5"><Mail :size="13" class="text-stone-400" /> {{ selectedParent.email }}</span></div>
-            <div class="flex items-center justify-between"><span class="text-[12px] text-stone-500">Username</span><span class="text-[13px] font-medium" :class="selectedParent.accountId ? '' : 'text-stone-400'">{{ selectedParent.accountId ? selectedParent.username : 'No portal login' }}</span></div>
-            <div class="flex items-start justify-between"><span class="text-[12px] text-stone-500">Address</span><span class="text-[13px] font-medium flex items-center gap-1.5 text-right max-w-[220px]"><MapPin :size="13" class="text-stone-400 shrink-0" /> {{ selectedParent.address }}</span></div>
-          </div>
-          <div class="border-t border-stone-200 pt-5">
-            <p class="text-[13px] font-semibold mb-3">Quick Statistics</p>
-            <div class="grid grid-cols-3 gap-2">
-              <div class="rounded-xl bg-stone-50 p-3 text-center"><p class="text-[18px] font-bold">{{ childrenOf(selectedParent).length }}</p><p class="text-[10.5px] text-stone-500 mt-0.5">Children</p></div>
-              <div class="rounded-xl bg-sky-50 p-3 text-center"><p class="text-[18px] font-bold text-sky-700">{{ childrenOf(selectedParent).filter(x => x.child.vaccStatus === 'Upcoming').length }}</p><p class="text-[10.5px] text-stone-500 mt-0.5">Upcoming</p></div>
-              <div class="rounded-xl bg-rose-50 p-3 text-center"><p class="text-[18px] font-bold text-rose-700">{{ childrenOf(selectedParent).filter(x => x.child.vaccStatus === 'Delayed').length }}</p><p class="text-[10.5px] text-stone-500 mt-0.5">Delayed</p></div>
+            <div class="min-w-0">
+              <p class="text-[16px] font-bold leading-tight break-words">{{ selectedParent.name }}</p>
+              <p class="text-[12.5px] text-stone-500 mt-0.5">{{ familyLine(selectedParent) }}</p>
+              <div class="mt-1.5 flex items-center gap-1.5 text-[11.5px] text-stone-500">Portal login: <StatusBadge :status="selectedParent.status" /></div>
             </div>
           </div>
-          <div class="border-t border-stone-200 pt-5">
-            <p class="text-[13px] font-semibold mb-3">Children Linked</p>
-            <div class="space-y-2">
-              <div v-for="x in childrenOf(selectedParent)" :key="x.rel.id" class="flex items-center gap-3 rounded-xl border border-stone-200 p-3">
-                <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 shrink-0"><Baby :size="17" class="text-emerald-700" /></div>
-                <div class="flex-1 min-w-0"><p class="text-[12.5px] font-semibold truncate flex items-center gap-1.5">{{ x.child.name }} <Star v-if="x.rel.isPrimary" :size="11" class="text-amber-500 fill-amber-500" /></p><p class="text-[11px] text-stone-500">{{ x.child.id }} · {{ x.rel.relationship }} · {{ x.child.age }}</p></div>
-                <div class="shrink-0"><VaccBadge :status="x.child.vaccStatus" /></div>
+          <button @click="showParentDrawer = false" class="p-1.5 rounded-lg hover:bg-stone-100 shrink-0" aria-label="Close"><X :size="17" class="text-stone-500" /></button>
+        </div>
+
+        <div class="p-5 space-y-6">
+          <!-- Contact details -->
+          <section>
+            <div class="flex items-center justify-between mb-2">
+              <p class="text-[13px] font-semibold">Contact details</p>
+              <button @click="openEdit('parent', selectedParent)" class="flex items-center gap-1 rounded-lg px-2 py-1 text-[12px] font-medium text-emerald-700 hover:bg-emerald-50"><Pencil :size="13" /> Edit</button>
+            </div>
+            <dl class="rounded-xl border border-stone-200 divide-y divide-stone-100">
+              <div class="flex items-start gap-3 px-3.5 py-2.5">
+                <Phone :size="15" class="text-stone-400 mt-0.5 shrink-0" />
+                <div class="min-w-0"><dt class="text-[11.5px] text-stone-500">Mobile number</dt><dd class="text-[13px] font-medium">{{ selectedParent.contact || '—' }}</dd></div>
               </div>
-              <p v-if="childrenOf(selectedParent).length === 0" class="text-[12.5px] text-stone-500">No children linked yet.</p>
+              <div class="flex items-start gap-3 px-3.5 py-2.5">
+                <Mail :size="15" class="text-stone-400 mt-0.5 shrink-0" />
+                <div class="min-w-0"><dt class="text-[11.5px] text-stone-500">Email</dt><dd class="text-[13px] font-medium break-all">{{ selectedParent.email || '—' }}</dd></div>
+              </div>
+              <div class="flex items-start gap-3 px-3.5 py-2.5">
+                <MapPin :size="15" class="text-stone-400 mt-0.5 shrink-0" />
+                <div class="min-w-0"><dt class="text-[11.5px] text-stone-500">Home address</dt><dd class="text-[13px] font-medium break-words">{{ selectedParent.address || '—' }}</dd></div>
+              </div>
+              <div class="flex items-start gap-3 px-3.5 py-2.5">
+                <UserCircle2 :size="15" class="text-stone-400 mt-0.5 shrink-0" />
+                <div class="min-w-0"><dt class="text-[11.5px] text-stone-500">Portal username</dt><dd class="text-[13px] font-medium" :class="selectedParent.accountId ? '' : 'text-stone-400'">{{ selectedParent.accountId ? selectedParent.username : 'No portal login' }}</dd></div>
+              </div>
+            </dl>
+          </section>
+
+          <!-- Children -->
+          <section>
+            <p class="text-[13px] font-semibold mb-2">Children <span class="font-normal text-stone-500">({{ childrenOf(selectedParent).length }})</span></p>
+            <div v-if="childrenOf(selectedParent).length" class="grid grid-cols-3 gap-2 mb-3">
+              <div class="rounded-xl bg-emerald-50 p-2.5 text-center"><p class="text-[17px] font-bold text-emerald-700">{{ childrenOf(selectedParent).filter(x => ['Upcoming', 'In Progress'].includes(x.child.vaccStatus)).length }}</p><p class="text-[11px] text-stone-600">On track</p></div>
+              <div class="rounded-xl bg-rose-50 p-2.5 text-center"><p class="text-[17px] font-bold text-rose-700">{{ childrenOf(selectedParent).filter(x => x.child.vaccStatus === 'Delayed').length }}</p><p class="text-[11px] text-stone-600">Delayed</p></div>
+              <div class="rounded-xl bg-stone-50 p-2.5 text-center"><p class="text-[17px] font-bold">{{ childrenOf(selectedParent).filter(x => x.child.vaccStatus === 'Fully Vaccinated').length }}</p><p class="text-[11px] text-stone-600">Fully vaccinated</p></div>
             </div>
-          </div>
-          <div class="flex gap-2">
-            <button @click="openRegisterModal('child', { parent: selectedParent })" class="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-stone-200 px-3 py-2 text-[12.5px] font-medium hover:bg-stone-50"><Baby :size="14" /> Register Child</button>
-            <button @click="openPicker('linkChild', { parent: selectedParent })" class="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-stone-200 px-3 py-2 text-[12.5px] font-medium hover:bg-stone-50"><Link2 :size="14" /> Link Existing Child</button>
-          </div>
+            <div class="space-y-2">
+              <!-- Click a child to open their record -->
+              <button v-for="x in childrenOf(selectedParent)" :key="x.rel.id" @click="viewChild(x.child)"
+                class="w-full flex items-center gap-3 rounded-xl border border-stone-200 p-3 text-left hover:border-emerald-300 hover:bg-emerald-50/30 transition-colors"
+                :title="`Open ${x.child.name}'s record`">
+                <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 shrink-0"><Baby :size="17" class="text-emerald-700" /></div>
+                <div class="flex-1 min-w-0">
+                  <p class="text-[13px] font-semibold truncate">{{ x.child.name }}</p>
+                  <p class="text-[11.5px] text-stone-500 truncate">{{ x.rel.relationship }} · {{ x.child.age }}<template v-if="x.child.familyNo"> · {{ x.child.familyNo }}</template></p>
+                  <p v-if="x.rel.isPrimary" class="mt-0.5 inline-flex items-center gap-1 text-[10.5px] font-medium text-amber-700"><Star :size="10" class="fill-amber-500 text-amber-500" /> Primary contact</p>
+                </div>
+                <div class="shrink-0 flex items-center gap-1.5"><VaccBadge :status="x.child.vaccStatus" /><ChevronRight :size="15" class="text-stone-300" /></div>
+              </button>
+              <p v-if="childrenOf(selectedParent).length === 0" class="rounded-xl bg-stone-50 p-3.5 text-[12.5px] text-stone-500">No children linked yet. Register a new child or link one already in the system.</p>
+            </div>
+            <div class="mt-3 flex gap-2">
+              <button @click="openRegisterModal('child', { parent: selectedParent })" class="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-stone-200 px-3 py-2 text-[12.5px] font-medium hover:bg-stone-50"><Baby :size="14" /> Register Child</button>
+              <button @click="openPicker('linkChild', { parent: selectedParent })" class="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-stone-200 px-3 py-2 text-[12.5px] font-medium hover:bg-stone-50"><Link2 :size="14" /> Link Existing Child</button>
+            </div>
+          </section>
         </div>
       </aside>
     </transition>
@@ -1442,8 +1515,8 @@ async function submitChildRegister() {
     <transition name="slide">
       <aside v-if="showChildDrawer && selectedChild" class="fixed right-0 top-0 z-40 h-full w-[440px] bg-white border-l border-stone-200 shadow-xl overflow-y-auto">
         <div class="flex items-center justify-between px-5 py-4 border-b border-stone-200 sticky top-0 bg-white">
-          <div><p class="text-[15px] font-semibold">Child Information</p><p class="text-[11.5px] text-stone-500">{{ selectedChild.id }}</p></div>
-          <button @click="showChildDrawer = false" class="p-1.5 rounded-lg hover:bg-stone-100"><X :size="17" class="text-stone-500" /></button>
+          <div><p class="text-[15px] font-semibold">Child Information</p><p class="text-[11.5px] text-stone-500">{{ selectedChild.familyNo ? `Family No. ${selectedChild.familyNo}` : 'No Family No. yet' }} · {{ barangayLabel(selectedChild.barangay) }}</p></div>
+          <button @click="showChildDrawer = false" class="p-1.5 rounded-lg hover:bg-stone-100" aria-label="Close"><X :size="17" class="text-stone-500" /></button>
         </div>
         <div class="p-5 space-y-6">
           <div class="flex items-center gap-4">
@@ -1599,12 +1672,20 @@ async function submitChildRegister() {
     <div v-if="registerModal.open" class="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/40 px-4">
       <div class="relative bg-white w-full rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]" :class="registerModal.kind === 'child' ? 'max-w-4xl' : 'max-w-2xl'">
         <div class="p-6 border-b border-stone-200 flex justify-between items-center bg-white sticky top-0 z-10">
-          <div>
-            <p class="text-[16px] font-semibold">{{ registerModal.walkIn ? 'Add Walk-in Patient' : `Register ${registerModal.kind === 'parent' ? 'Parent' : 'New Child'}` }}</p>
+          <div v-if="registerModal.fromChild">
+            <button @click="backToChildForm" class="mb-1 flex items-center gap-1 text-[12px] font-medium text-emerald-700 hover:underline">
+              <ArrowLeft :size="13" /> Back to {{ registerModal.walkIn ? 'Add Patient' : 'Register New Child' }}
+            </button>
+            <p class="text-[16px] font-semibold">Register Parent / Guardian</p>
+            <p class="text-[11px] text-emerald-700 font-semibold">After saving, they're linked to the child you're adding and you go back to that form.</p>
+          </div>
+          <div v-else>
+            <p class="text-[16px] font-semibold">{{ registerModal.walkIn ? 'Add Patient' : `Register ${registerModal.kind === 'parent' ? 'Parent' : 'New Child'}` }}</p>
             <p v-if="registerModal.walkIn" class="text-[11px] text-emerald-700 font-semibold">Registers the child and adds them to today's queue</p>
             <p v-else-if="registerModal.kind === 'child'" class="text-[11px] text-stone-400 uppercase font-bold tracking-wider">Health Intake Form</p>
           </div>
-          <button @click="closeRegisterModal" class="p-1.5 rounded-lg hover:bg-stone-100"><X :size="18" class="text-stone-500" /></button>
+          <button @click="registerModal.fromChild ? backToChildForm() : closeRegisterModal()" class="p-1.5 rounded-lg hover:bg-stone-100"
+            :aria-label="registerModal.fromChild ? 'Back to the child form' : 'Close'" :title="registerModal.fromChild ? 'Back to the child form' : 'Close'"><X :size="18" class="text-stone-500" /></button>
         </div>
 
         <!-- ============== PARENT FORM ============== -->
@@ -1670,8 +1751,9 @@ async function submitChildRegister() {
             <p class="text-[11px] text-stone-500 ml-1">A temporary password will be made automatically and shown after you register. Give it to the parent; they'll choose their own password the first time they sign in.</p>
           </div>
 
-          <!-- LINK TO EXISTING CHILD (OPTIONAL) -->
-          <div class="pt-2 border-t border-stone-100 space-y-3">
+          <!-- LINK TO EXISTING CHILD (OPTIONAL) — not when registering the
+               parent for the child being added right now -->
+          <div v-if="!registerModal.fromChild" class="pt-2 border-t border-stone-100 space-y-3">
             <div>
               <p class="text-[11px] font-bold text-emerald-700 uppercase tracking-wide">Link to Existing Child <span class="text-stone-400 font-medium normal-case">(optional)</span></p>
               <p class="text-[11px] text-stone-400 mt-0.5">Already have a child registered? Link this new parent account to them now, or skip and link it later.</p>
@@ -1729,9 +1811,19 @@ async function submitChildRegister() {
                   </div>
                 </div>
                 <p v-else-if="regParentSearch.trim()" class="text-[11px] text-amber-700 ml-1 mt-1">
-                  No registered parent matches “{{ regParentSearch.trim() }}”. Register the parent first (Patient Records → Parents → Register Parent), then link them here.
+                  No registered parent matches “{{ regParentSearch.trim() }}”.
+                  <button type="button" @click="registerParentFromChild" class="font-semibold text-emerald-700 underline hover:text-emerald-800">Register them now</button>
                 </p>
               </div>
+            </div>
+            <!-- A brand-new family: register the parent without leaving this form -->
+            <div class="flex flex-wrap items-center gap-2 text-[12px] text-emerald-900">
+              <span>Parent not registered yet?</span>
+              <button type="button" @click="registerParentFromChild"
+                class="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-white px-3 py-1.5 font-semibold text-emerald-700 hover:bg-emerald-100">
+                <UserPlus :size="14" /> Register a new parent
+              </button>
+              <span class="text-emerald-700/80">The child's details you've typed are kept.</span>
             </div>
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
               <div v-for="role in ['Mother', 'Father', 'Guardian']" :key="role" class="p-3 rounded-xl border transition-all" :class="regChildForm[role+'Name'] ? 'bg-white border-emerald-200 shadow-sm' : 'bg-emerald-50/50 border-dashed border-emerald-200'">
@@ -1862,13 +1954,16 @@ async function submitChildRegister() {
         </div>
 
         <div class="flex items-center justify-end gap-3 px-6 py-4 border-t border-stone-200 bg-stone-50 sticky bottom-0">
-          <button @click="closeRegisterModal" class="rounded-xl px-4 py-2.5 text-[13px] font-medium text-stone-600 hover:bg-stone-50">Cancel</button>
+          <button @click="registerModal.fromChild ? backToChildForm() : closeRegisterModal()" class="rounded-xl px-4 py-2.5 text-[13px] font-medium text-stone-600 hover:bg-stone-50">{{ registerModal.fromChild ? 'Back' : 'Cancel' }}</button>
           <button
             @click="registerModal.kind === 'parent' ? submitParentRegister() : submitChildRegister()"
             :disabled="registerSubmitting || (registerModal.kind === 'parent' && !regParentForm.PrivacyConsent)"
             class="rounded-xl px-5 py-2.5 text-[13px] font-semibold text-white bg-emerald-700 hover:bg-emerald-800 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {{ registerSubmitting ? 'Saving...' : registerModal.walkIn ? 'Register & Add to Queue' : `Register ${registerModal.kind === 'parent' ? 'Parent' : 'Child'}` }}
+            {{ registerSubmitting ? 'Saving...'
+              : registerModal.fromChild ? 'Register Parent & Continue'
+              : registerModal.kind === 'child' && registerModal.walkIn ? 'Register & Add to Queue'
+              : `Register ${registerModal.kind === 'parent' ? 'Parent' : 'Child'}` }}
           </button>
         </div>
       </div>
@@ -1913,7 +2008,7 @@ async function submitChildRegister() {
         <div class="flex items-center justify-between px-6 py-4 border-b border-stone-200">
           <div>
             <p class="text-[16px] font-semibold">Historical Vaccination Records</p>
-            <p class="text-[11.5px] text-stone-500 mt-0.5" v-if="selectedChild">{{ selectedChild.name }} · {{ selectedChild.id }}</p>
+            <p class="text-[11.5px] text-stone-500 mt-0.5" v-if="selectedChild">{{ selectedChild.name }} · {{ selectedChild.familyNo ? `Family No. ${selectedChild.familyNo}` : 'No Family No. yet' }} · {{ barangayLabel(selectedChild.barangay) }}</p>
           </div>
           <button @click="closeHistoricalModal" class="p-1.5 rounded-lg hover:bg-stone-100"><X :size="18" class="text-stone-500" /></button>
         </div>

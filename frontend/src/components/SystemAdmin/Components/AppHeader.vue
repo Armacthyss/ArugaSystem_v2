@@ -1,20 +1,33 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import axios from 'axios'
-import { Bell, Settings, KeyRound, Clock, LogOut, ArrowRight, Menu } from 'lucide-vue-next'
+import { Bell, Settings, KeyRound, Clock, LogOut, ArrowRight, Menu, CircleHelp } from 'lucide-vue-next'
 import { mobileNavOpen } from '@/utils/mobileNav'
 import { getUser, getRole, logout } from '@/utils/auth'
 import ChangePasswordModal from './ChangePasswordModal.vue'
+import PageGuide from '@/components/Shared/PageGuide.vue'
+import { guideFor, isGuideHidden, setGuideHidden } from '@/utils/pageGuides'
 
 // The Super Admin gets no clinic alerts or clinic settings
 const isSuperAdmin = getRole() === 'SuperAdmin'
 import { API_BASE, relativeTime } from '@/utils/format'
 
-defineProps({
+// The header stays a sticky bar of its own, so the "How to use this page"
+// tips (Shared/PageGuide.vue) sit next to it rather than inside it; attributes
+// pages pass in (e.g. user-initials) go on the bar.
+defineOptions({ inheritAttrs: false })
+
+const props = defineProps({
   title: { type: String, required: true },
   breadcrumb: { type: String, default: '' },
 })
+
+// The line under the title says what the page is for (utils/pageGuides.js)
+const route = useRoute()
+const guide = computed(() => guideFor(route.path))
+const guideHidden = computed(() => isGuideHidden(route.path))
+const subtitle = computed(() => guide.value?.subtitle || props.breadcrumb)
 
 // Pages may still listen for these; the header now handles both itself.
 const emit = defineEmits(['notification-click', 'settings-click'])
@@ -90,6 +103,7 @@ onUnmounted(() => {
 
 <template>
   <header
+    v-bind="$attrs"
     class="h-17.5 sticky top-0 z-20 bg-white border-b border-slate-200 flex items-center justify-between px-4 md:px-6 gap-4"
   >
     <!-- Phones / small tablets: opens the sidebar menu -->
@@ -103,15 +117,29 @@ onUnmounted(() => {
       </h1>
 
       <p
-        v-if="breadcrumb"
+        v-if="subtitle"
         class="text-xs text-slate-500 truncate"
+        :title="subtitle"
       >
-        {{ breadcrumb }}
+        {{ subtitle }}
       </p>
     </div>
 
     <!-- Right side -->
     <div class="flex items-center gap-3 shrink-0">
+
+      <!-- Help: shows or hides this page's "How to use this page" tips -->
+      <button
+        v-if="guide?.steps"
+        @click="setGuideHidden(route.path, !guideHidden)"
+        class="h-9 rounded-lg px-2.5 flex items-center gap-1.5 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+        :class="guideHidden ? 'text-slate-500 hover:bg-slate-50' : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'"
+        :title="guideHidden ? 'Show how to use this page' : 'Hide the tips'"
+        :aria-pressed="!guideHidden"
+      >
+        <CircleHelp class="w-5 h-5" :stroke-width="1.8" />
+        <span class="hidden lg:inline">Help</span>
+      </button>
 
       <!-- Notifications -->
       <div v-if="!isSuperAdmin" class="relative">
@@ -191,4 +219,5 @@ onUnmounted(() => {
 
     <ChangePasswordModal v-if="showChangePassword" @close="showChangePassword = false" />
   </header>
+  <PageGuide inset="px-4 md:px-6 pt-6" />
 </template>

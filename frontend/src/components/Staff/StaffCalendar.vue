@@ -41,29 +41,29 @@
                   type="button"
                   :disabled="!cell.day"
                   @click="cell.day && (selectedDay = cell.day)"
-                  class="border-r border-b border-slate-100 p-2 text-left align-top transition-colors relative overflow-hidden"
+                  class="flex flex-col justify-start border-r border-b border-slate-100 p-2 text-left transition-colors relative overflow-hidden"
                   :class="[
                     !cell.day ? 'bg-slate-50/40 cursor-default' : cell.closed ? 'bg-slate-50 hover:bg-slate-100' : 'hover:bg-emerald-50/40',
                     cell.day === selectedDay ? 'ring-2 ring-inset ring-emerald-500' : '',
                   ]"
+                  :title="cell.closed ? (cell.closedReason ? `Closed: ${cell.closedReason}` : 'No vaccinations on this day') : ''"
                 >
-                  <div v-if="cell.day" class="flex items-center justify-between">
-                    <span class="text-xs font-bold" :class="cell.isToday ? 'text-white bg-emerald-600 rounded-full w-6 h-6 flex items-center justify-center' : 'text-slate-500'">
-                      {{ cell.day }}
-                    </span>
-                    <span v-if="cell.closed" class="text-[9px] font-bold uppercase text-slate-400 truncate max-w-[70%]" :title="cell.closedReason">
-                      {{ cell.closedReason || 'No vaccines' }}
-                    </span>
-                  </div>
+                  <!-- Grey = no vaccinations (see the legend), so ordinary closed
+                       days need no label; a special closure says why. -->
+                  <span v-if="cell.day" class="text-xs font-bold" :class="cell.isToday ? 'text-white bg-emerald-600 rounded-full w-6 h-6 flex items-center justify-center' : cell.closed ? 'text-slate-400' : 'text-slate-600'">
+                    {{ cell.day }}
+                  </span>
+                  <span v-if="cell.closed && cell.closedReason" class="mt-1 text-[10px] font-semibold text-rose-600 truncate w-full">
+                    Closed: {{ cell.closedReason }}
+                  </span>
 
-                  <div v-if="cell.day" class="mt-1.5 space-y-1">
+                  <div v-if="cell.day && (cell.due.length || cell.given.length)" class="mt-1.5 space-y-1 w-full">
                     <div v-if="cell.due.length" class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 truncate">
-                      {{ cell.due.length }} due
+                      {{ cell.due.length }} {{ cell.due.length === 1 ? 'child' : 'children' }} due
                     </div>
                     <div v-if="cell.given.length" class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 truncate">
                       {{ cell.given.length }} vaccinated
                     </div>
-                    <p v-for="n in cell.names" :key="n" class="text-[10px] text-slate-500 truncate">{{ n }}</p>
                   </div>
                 </button>
               </div>
@@ -75,12 +75,13 @@
             <p class="text-sm font-bold text-slate-800">{{ selectedLabel }}</p>
             <p v-if="selectedCell?.closed" class="mt-1 text-xs text-slate-500">{{ selectedCell.closedReason ? `Health center closed · ${selectedCell.closedReason}` : 'No vaccinations on this day' }}</p>
 
+            <!-- One entry per child, with all of that day's vaccines -->
             <div class="mt-4">
               <p class="text-[11px] font-bold uppercase tracking-wide text-amber-700 mb-2">Due ({{ selectedCell?.due.length || 0 }})</p>
               <p v-if="!selectedCell?.due.length" class="text-xs text-slate-400">No one is due this day.</p>
-              <div v-for="d in selectedCell?.due || []" :key="d.timelineID" class="py-2 border-b border-slate-50 last:border-0">
+              <div v-for="d in selectedCell?.due || []" :key="d.childName" class="py-2 border-b border-slate-50 last:border-0">
                 <p class="text-xs font-semibold text-slate-800">{{ d.childName }}</p>
-                <p class="text-[11px] text-slate-500">{{ d.vaccineName }} · Dose {{ d.doseNumber }}</p>
+                <p class="text-[11px] text-slate-500">{{ d.vaccines.join(', ') }}</p>
                 <p v-if="d.parentName" class="text-[10.5px] text-slate-400">{{ d.parentName }}{{ d.parentContact ? ` · ${d.parentContact}` : '' }}</p>
               </div>
             </div>
@@ -88,10 +89,10 @@
             <div class="mt-5">
               <p class="text-[11px] font-bold uppercase tracking-wide text-emerald-700 mb-2">Vaccinated ({{ selectedCell?.given.length || 0 }})</p>
               <p v-if="!selectedCell?.given.length" class="text-xs text-slate-400">No vaccinations recorded this day.</p>
-              <div v-for="(g, i) in selectedCell?.given || []" :key="i" class="py-2 border-b border-slate-50 last:border-0">
+              <div v-for="g in selectedCell?.given || []" :key="g.childName" class="py-2 border-b border-slate-50 last:border-0">
                 <p class="text-xs font-semibold text-slate-800">{{ g.childName }}</p>
-                <p class="text-[11px] text-slate-500">{{ g.vaccineName }} · Dose {{ g.doseNumber }}</p>
-                <p v-if="g.administeredByName" class="text-[10.5px] text-slate-400">by {{ g.administeredByName }}</p>
+                <p class="text-[11px] text-slate-500">{{ g.vaccines.join(', ') }}</p>
+                <p v-if="g.by.length" class="text-[10.5px] text-slate-400">by {{ g.by.join(', ') }}</p>
               </div>
             </div>
 
@@ -118,6 +119,7 @@ const due = ref([])          // VaccinationTimeline/schedule rows not yet given
 const given = ref([])        // VaccinationRecords/all rows
 const weekly = ref([])       // ClinicOperatingSchedule
 const exceptions = ref([])   // ClinicScheduleExceptions (holidays / special openings)
+const shortName = ref({})    // vaccine name -> abbreviation ("MMR"), so both lists match
 
 const today = new Date()
 const viewYear = ref(today.getFullYear())
@@ -147,16 +149,18 @@ async function loadMonth() {
   const from = toISODate(new Date(viewYear.value, viewMonth.value, 1))
   const to = toISODate(new Date(viewYear.value, viewMonth.value + 1, 0))
   try {
-    const [sched, recs, week, exc] = await Promise.all([
+    const [sched, recs, week, exc, vax] = await Promise.all([
       axios.get(`${API_BASE}/VaccinationTimeline/schedule`, { params: { from, to, includeOverdue: false } }),
       axios.get(`${API_BASE}/VaccinationRecords/all`),
       axios.get(`${API_BASE}/ClinicOperatingSchedule`),
       axios.get(`${API_BASE}/ClinicScheduleExceptions`),
+      axios.get(`${API_BASE}/Vaccines`).catch(() => ({ data: [] })),
     ])
     due.value = sched.data.filter(r => r.displayStatus !== 'Completed')
     given.value = recs.data
     weekly.value = week.data
     exceptions.value = exc.data.filter(e => e.isActive !== false)
+    shortName.value = Object.fromEntries(vax.data.filter(v => v.abbreviation).map(v => [v.vaccineName, v.abbreviation]))
   } catch (err) {
     console.error('Calendar load error:', err)
   } finally {
@@ -176,6 +180,19 @@ function closedInfo(date) {
   return { closed: !day || !day.isOpen, reason: '' }
 }
 
+// A day's doses, one entry per child ("MMR Dose 1, IPV Dose 2"), so the
+// counts are children, not doses, and nobody is listed twice.
+function byChild(rows) {
+  const map = new Map()
+  for (const r of rows) {
+    if (!map.has(r.childName)) map.set(r.childName, { childName: r.childName, parentName: r.parentName, parentContact: r.parentContact, vaccines: [], by: [] })
+    const c = map.get(r.childName)
+    c.vaccines.push(`${r.abbreviation || shortName.value[r.vaccineName] || r.vaccineName} Dose ${r.doseNumber}`)
+    if (r.administeredByName && !c.by.includes(r.administeredByName)) c.by.push(r.administeredByName)
+  }
+  return [...map.values()]
+}
+
 const calendarCells = computed(() => {
   const y = viewYear.value
   const m = viewMonth.value
@@ -183,24 +200,22 @@ const calendarCells = computed(() => {
   const daysInMonth = new Date(y, m + 1, 0).getDate()
 
   const cells = []
-  for (let i = 0; i < startWeekday; i++) cells.push({ day: null, due: [], given: [], names: [] })
+  for (let i = 0; i < startWeekday; i++) cells.push({ day: null, due: [], given: [] })
   for (let d = 1; d <= daysInMonth; d++) {
     const date = new Date(y, m, d)
     const dayDue = due.value.filter(r => sameDay(r.scheduledDate, y, m, d))
     const dayGiven = given.value.filter(r => sameDay(r.dateAdministered ?? r.vaccinationDate, y, m, d))
     const { closed, reason } = closedInfo(date)
-    const names = [...new Set([...dayDue, ...dayGiven].map(r => r.childName))].slice(0, 2)
     cells.push({
       day: d,
       isToday: sameDay(today, y, m, d),
       closed,
       closedReason: reason,
-      due: dayDue,
-      given: dayGiven,
-      names,
+      due: byChild(dayDue),
+      given: byChild(dayGiven),
     })
   }
-  while (cells.length % 7 !== 0) cells.push({ day: null, due: [], given: [], names: [] })
+  while (cells.length % 7 !== 0) cells.push({ day: null, due: [], given: [] })
   return cells
 })
 

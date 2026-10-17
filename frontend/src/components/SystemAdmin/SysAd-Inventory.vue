@@ -1,4 +1,5 @@
 <script setup>
+import { Search } from 'lucide-vue-next'
 import { API_ORIGIN } from '@/utils/apiBase'
 import { toISODate } from '@/utils/format'
 import { ref, reactive, computed, watch, onMounted } from 'vue'
@@ -7,6 +8,7 @@ import axios from 'axios'
 import AppSidebar from './Components/AppSidebar.vue'
 import AppHeader from './Components/AppHeader.vue'
 import InventorySummary from '@/components/Shared/InventorySummary.vue'
+import StockAdjustModal from '@/components/Shared/StockAdjustModal.vue'
 
 /* =========================================================================
    API LAYER
@@ -286,13 +288,35 @@ const { openMenuId, menuStyle, toggleMenu, closeMenu } = useFloatingMenu()
 /* --------------------------------- Batch details drawer --------------------------------- */
 const showDrawer = ref(false)
 const selectedBatch = ref(null)
+const batchHistory = ref([])   // stock adjustments of the open batch, newest first
+async function loadBatchHistory(id) {
+  batchHistory.value = []
+  try { batchHistory.value = (await axios.get(`${API_BASE}/VaccineInventory/${id}/adjustments`)).data } catch { /* the drawer still shows the batch */ }
+}
 function openDrawer(item) {
   selectedBatch.value = item
   showDrawer.value = true
   closeMenu()
+  loadBatchHistory(item.inventoryID)
 }
 function closeDrawer() {
   showDrawer.value = false
+}
+
+/* ------------- Adjust Stock: broken / spoiled / lost doses, recount ------------- */
+const adjusting = ref(null)
+function openAdjust(item) {
+  closeMenu()
+  adjusting.value = item
+}
+async function onAdjusted(res) {
+  const id = res.inventoryID
+  await loadAll()
+  // Keep the open drawer showing the new count and the new history row
+  if (showDrawer.value && selectedBatch.value?.inventoryID === id) {
+    selectedBatch.value = inventory.value.find(i => i.inventoryID === id) || selectedBatch.value
+    loadBatchHistory(id)
+  }
 }
 
 /* --------------------------------- Receive New Batch modal --------------------------------- */
@@ -552,9 +576,9 @@ async function setActiveState(item, nextActive) {
 
         <!-- ============ Toolbar ============ -->
         <section class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
-          <div class="flex flex-col lg:flex-row lg:items-center gap-3">
-            <div class="relative flex-1 min-w-0">
-              <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm" aria-hidden="true">🔍</span>
+          <div class="flex flex-col lg:flex-row lg:flex-wrap lg:items-center gap-3">
+            <div class="relative flex-1 min-w-0 lg:min-w-[280px]">
+              <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" aria-hidden="true" />
               <input
                 v-model="searchQuery"
                 type="text"
@@ -590,7 +614,7 @@ async function setActiveState(item, nextActive) {
               <option value="Inactive">Inactive only</option>
             </select>
 
-            <div class="flex items-center gap-2 shrink-0">
+            <div class="flex items-center gap-2 shrink-0 lg:ml-auto">
               <button
                 @click="openAlertModal"
                 class="text-sm font-semibold px-4 py-2 rounded-lg border border-amber-300 text-amber-800 bg-amber-50 hover:bg-amber-100 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
@@ -703,7 +727,7 @@ async function setActiveState(item, nextActive) {
                         <td class="pr-5 py-2.5 text-right relative">
                           <button
                             @click.stop="toggleMenu(item.inventoryID, $event)"
-                            class="text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg w-8 h-8 inline-flex items-center justify-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                            title="More actions" aria-label="More actions" class="text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg w-8 h-8 inline-flex items-center justify-center text-lg font-bold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                           >⋮</button>
 
                           <Teleport to="body">
@@ -714,6 +738,7 @@ async function setActiveState(item, nextActive) {
                           >
                             <button @click="openDrawer(item)" class="w-full text-left px-3.5 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors">View Details</button>
                             <button @click="openEditModal(item)" class="w-full text-left px-3.5 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors">Edit Batch</button>
+                            <button @click="openAdjust(item)" class="w-full text-left px-3.5 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors" title="Broken, spoiled or lost doses, or a recount">Adjust Stock</button>
                             <button
                               v-if="isActive(item)"
                               @click="confirmDeactivate(item)"
@@ -888,7 +913,7 @@ async function setActiveState(item, nextActive) {
             </div>
             <div>
               <label class="block text-xs font-semibold text-slate-500 mb-1.5">Manufacturing Date <span class="font-normal text-slate-400">(optional)</span></label>
-              <input v-model="receiveForm.manufacturingDate" type="date" class="w-full text-sm rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-colors" />
+              <input v-model="receiveForm.manufacturingDate" type="date" :max="toISODate()" class="w-full text-sm rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-colors" />
             </div>
             <div>
               <label class="block text-xs font-semibold text-slate-500 mb-1.5">Received Date</label>
@@ -935,7 +960,7 @@ async function setActiveState(item, nextActive) {
             </div>
             <div>
               <label class="block text-xs font-semibold text-slate-500 mb-1.5">Manufacturing Date <span class="font-normal text-slate-400">(optional)</span></label>
-              <input v-model="editForm.manufacturingDate" type="date" class="w-full text-sm rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-colors" />
+              <input v-model="editForm.manufacturingDate" type="date" :max="toISODate()" class="w-full text-sm rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-colors" />
             </div>
             <div class="sm:col-span-2">
               <label class="block text-xs font-semibold text-slate-500 mb-1.5">Supplier</label>
@@ -1014,18 +1039,35 @@ async function setActiveState(item, nextActive) {
               <div><p class="text-xs text-slate-500">Received Date</p><p class="text-sm font-medium text-slate-900">{{ formatDate(selectedBatch.receivedDate) }}</p></div>
             </div>
           </div>
-          <p class="text-xs text-slate-400">
-            Detailed movement/audit history isn't wired up here yet — your current API doesn't expose a per-batch history
-            endpoint. Add one on the backend (e.g. an AuditLog tied to InventoryID) and this drawer can list it here.
-          </p>
+          <!-- Stock adjustments: doses taken off without being given, or recounts -->
+          <div>
+            <p class="text-sm font-bold text-slate-900 mb-2">Stock adjustments</p>
+            <p v-if="!batchHistory.length" class="rounded-xl bg-slate-50 px-4 py-3 text-xs text-slate-500">
+              None. This batch's count has only gone down through vaccinations.
+            </p>
+            <ul v-else class="rounded-xl border border-slate-200 divide-y divide-slate-100">
+              <li v-for="a in batchHistory" :key="a.adjustmentID" class="px-4 py-3">
+                <div class="flex items-center justify-between gap-3">
+                  <p class="text-sm font-semibold text-slate-800">{{ a.reason }}</p>
+                  <span class="text-sm font-bold shrink-0" :class="a.change < 0 ? 'text-rose-700' : 'text-emerald-700'">{{ a.change > 0 ? '+' : '' }}{{ a.change }} dose{{ Math.abs(a.change) === 1 ? '' : 's' }}</span>
+                </div>
+                <p v-if="a.note" class="text-xs text-slate-600 mt-0.5">{{ a.note }}</p>
+                <p class="text-[11px] text-slate-400 mt-0.5">{{ a.quantityBefore }} → {{ a.quantityAfter }} · {{ a.adjustedByName || 'Unknown' }} · {{ formatDate(a.adjustedAt) }}</p>
+              </li>
+            </ul>
+          </div>
         </div>
 
         <div class="border-t border-slate-200 p-4 flex items-center gap-2 shrink-0">
           <button @click="closeDrawer(); openEditModal(selectedBatch)" class="flex-1 text-sm font-semibold px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors">Edit Batch</button>
+          <button @click="openAdjust(selectedBatch)" class="flex-1 text-sm font-semibold px-4 py-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors">Adjust Stock</button>
           <button @click="closeDrawer" class="text-sm font-semibold px-4 py-2 rounded-lg text-slate-500 hover:bg-slate-50 transition-colors">Close</button>
         </div>
       </aside>
     </transition>
+
+    <StockAdjustModal v-if="adjusting" :batch="adjusting" :vaccine-name="vaccineName(adjusting.vaccineID)"
+      @close="adjusting = null" @saved="onAdjusted" />
   </div>
 </template>
 

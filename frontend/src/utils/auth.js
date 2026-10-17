@@ -37,9 +37,13 @@ export function isLoggedIn() {
   return !!getToken() && !!getAccount()
 }
 
+// When the signed-in staff member last used Aruga (Shared/IdleSignOut.vue)
+export const LAST_ACTIVITY_KEY = 'aruga.lastActivity'
+
 export function logout() {
   localStorage.removeItem('account')
   localStorage.removeItem('authToken')
+  localStorage.removeItem(LAST_ACTIVITY_KEY)
 
   // Parent-specific session cleanup
   localStorage.removeItem('selectedParentChild')
