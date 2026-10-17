@@ -44,6 +44,10 @@ From the ISO 25010 survey. Respondents said some features were hard to navigate 
   - **Fixed:** the Change Password form used to open under the "Children" heading. It now opens in its own Password section.
   - The password rules are listed before typing and tick green as they're met. "Type the new password again" warns when the two don't match, and a **Show passwords** box helps on phones.
   - The window closes with the X, the Close button or the Escape key.
+- **Parent portal: the row of children** stays one line, but now scrolls properly when a big family has more children than fit.
+  - **‹ ›** arrows and a soft fade appear at the ends only when names are hidden.
+  - The mouse wheel scrolls the row sideways.
+  - A child picked with "Search children…" is scrolled into view.
 - **Patient Records (Staff / Nurse): parent details panel**
   - The header showed the database ID (a long code like 11111111-1111-…). It now shows how Leveriza identifies a family: **Barangay 21 · Family No. FN-002**.
   - Contact details are one list (mobile, email, home address, portal username) with an **Edit** button.
