@@ -1,4 +1,5 @@
 <script setup>
+import { Baby, Ban, CalendarRange, CircleCheck, Search, Syringe } from 'lucide-vue-next'
 import { API_ORIGIN } from '@/utils/apiBase'
 import axios from "axios"
 import { ref, computed, onMounted } from "vue"
@@ -587,35 +588,35 @@ async function save() {
           <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
             <div class="flex items-start justify-between gap-2">
               <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Total Vaccines</p>
-              <div class="bg-teal-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm">💉</div>
+              <div class="bg-teal-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0"><Syringe class="w-4 h-4 text-teal-700" /></div>
             </div>
             <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.total }}</p>
           </div>
           <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
             <div class="flex items-start justify-between gap-2">
               <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Active Vaccines</p>
-              <div class="bg-emerald-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm">✅</div>
+              <div class="bg-emerald-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0"><CircleCheck class="w-4 h-4 text-emerald-700" /></div>
             </div>
             <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.active }}</p>
           </div>
           <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
             <div class="flex items-start justify-between gap-2">
               <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Inactive Vaccines</p>
-              <div class="bg-slate-100 w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm">💤</div>
+              <div class="bg-slate-100 w-8 h-8 rounded-lg flex items-center justify-center shrink-0"><Ban class="w-4 h-4 text-slate-500" /></div>
             </div>
             <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.inactive }}</p>
           </div>
           <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
             <div class="flex items-start justify-between gap-2">
               <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Given at Birth</p>
-              <div class="bg-sky-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm">👶</div>
+              <div class="bg-sky-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0"><Baby class="w-4 h-4 text-sky-700" /></div>
             </div>
             <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.birth }}</p>
           </div>
           <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
             <div class="flex items-start justify-between gap-2">
               <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Infant Vaccines</p>
-              <div class="bg-amber-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm">🧒</div>
+              <div class="bg-amber-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0"><CalendarRange class="w-4 h-4 text-amber-700" /></div>
             </div>
             <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.infant }}</p>
           </div>
@@ -625,7 +626,7 @@ async function save() {
         <section class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
           <div class="flex flex-col lg:flex-row lg:items-center gap-3">
             <div class="relative flex-1 min-w-0">
-              <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm" aria-hidden="true">🔍</span>
+              <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" aria-hidden="true" />
               <input
                 v-model="search"
                 type="text"
@@ -688,10 +689,9 @@ async function save() {
                 >
                   <td class="px-5 py-3">
                     <div class="flex items-center gap-3">
-                      <div class="w-9 h-9 rounded-lg bg-teal-50 flex items-center justify-center text-sm shrink-0">💉</div>
+                      <div class="w-9 h-9 rounded-lg bg-teal-50 flex items-center justify-center shrink-0"><Syringe class="w-4 h-4 text-teal-700" /></div>
                       <div class="min-w-0">
                         <p class="font-semibold text-slate-900 whitespace-nowrap">{{ vaccine.vaccineName }}</p>
-                        <p class="text-xs text-slate-400 font-mono">ID: {{ vaccine.vaccineID }}</p>
                       </div>
                     </div>
                   </td>
@@ -719,7 +719,7 @@ async function save() {
                   <td class="px-5 py-3 text-right relative">
                     <button
                       @click.stop="toggleMenu(vaccine.vaccineID, $event)"
-                      class="text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg w-8 h-8 inline-flex items-center justify-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                      title="More actions" aria-label="More actions" class="text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg w-8 h-8 inline-flex items-center justify-center text-lg font-bold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                     >
                       ⋮
                     </button>
@@ -764,10 +764,9 @@ async function save() {
 
         <div v-if="selectedVaccine" class="flex-1 overflow-y-auto p-6 space-y-6">
           <div class="flex flex-col items-center text-center gap-3">
-            <div class="w-16 h-16 rounded-full bg-teal-50 flex items-center justify-center text-2xl">💉</div>
+            <div class="w-16 h-16 rounded-full bg-teal-50 flex items-center justify-center"><Syringe class="w-7 h-7 text-teal-700" /></div>
             <div>
               <p class="text-base font-bold text-slate-900">{{ selectedVaccine.vaccineName }}</p>
-              <p class="text-xs text-slate-400 font-mono mt-0.5">ID: {{ selectedVaccine.vaccineID }}</p>
               <span :class="[getStatusMeta(selectedVaccine.status).tint, getStatusMeta(selectedVaccine.status).text]" class="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full">
                 <span :class="getStatusMeta(selectedVaccine.status).dot" class="w-1.5 h-1.5 rounded-full"></span>
                 {{ getStatusMeta(selectedVaccine.status).label }}

@@ -6,7 +6,7 @@ import {
   Syringe, FileText, Search, QrCode, UserPlus, CalendarDays,
   Clock, CheckCircle2, AlertTriangle, Activity, MoreHorizontal,
   Eye, UserCog, DoorOpen, TrendingUp, TrendingDown, RefreshCw,
-  ClipboardCheck, X, Megaphone, Undo2, Check, Loader2,
+  ClipboardCheck, X, Megaphone, Undo2, Check, Loader2, Trash2,
 } from "lucide-vue-next";
 import StaffSidebar from "./StaffSidebar.vue";
 import StaffTopbar from "./StaffTopbar.vue";
@@ -14,6 +14,7 @@ import { getToken } from "@/utils/auth";
 import { withRelationship } from "@/utils/format";
 import { visitProgress, unfinishedChildren } from "@/utils/visitProgress";
 import { askConfirm, showAlert } from "@/utils/dialog";
+import { useFloatingMenu } from "@/utils/floatingMenu";
 
 const router = useRouter();
 
@@ -102,7 +103,7 @@ const summaryCards = computed(() => [
 // QR" has no scanning feature built anywhere yet, so it's disabled rather
 // than pretending to work.
 const quickActions = [
-  // New children are registered with Add Walk-in Patient (here today) or
+  // New children are registered with Add Patient (here today) or
   // from Patient Records; this one registers the parent/guardian first.
   { icon: UserPlus, label: "Register Parent", action: () => router.push("/staff/patient-records?tab=parents&openRegister=1") },
   { icon: QrCode, label: "Check-in QR", action: () => router.push("/staff/checkin-qr") },
@@ -112,10 +113,11 @@ const quickActions = [
   // routing to registration (which is for brand-new patients). If someone
   // else brought the child, staff type their name and relationship there.
   { icon: ClipboardCheck, label: "Check-In Patient", action: () => openCheckInModal() },
-  { icon: UserPlus, label: "Add Walk-in Patient", action: () => router.push("/staff/patient-records?tab=children&openRegister=1&walkin=1") },
+  { icon: UserPlus, label: "Add Patient", action: () => router.push("/staff/patient-records?tab=children&openRegister=1&walkin=1") },
   { icon: Search, label: "Search Patient", action: () => router.push("/staff/patient-records?tab=parents") },
   { icon: CalendarDays, label: "View Today's Queue", action: () => scrollToQueue() },
-  { icon: Megaphone, label: "Vaccination Room", action: () => roomSectionRef.value?.scrollIntoView({ behavior: "smooth", block: "start" }) },
+  // (The Vaccination Room card sits right under these buttons, so it needs
+  // no shortcut.)
 ];
 
 const queueSectionRef = ref(null);
@@ -435,28 +437,21 @@ const submitCheckIn = async () => {
 };
 
 const expandedRow = ref(null);
-const assignMenuOpen = ref(null); // `${queueID}-more` | null
-const menuPosition = ref({ top: "0px", left: "0px" });
 
 const toggleExpand = (q) => {
   expandedRow.value = expandedRow.value === q.queueID ? null : q.queueID;
 };
 
-// Popovers are teleported to <body> (see template) so the table's
-// overflow-x-auto and the card's overflow-hidden don't clip them —
-// position is computed from the trigger button's own screen position.
-const toggleMenu = (key, event) => {
-  if (assignMenuOpen.value === key) {
-    assignMenuOpen.value = null;
-    return;
-  }
-  const rect = event.currentTarget.getBoundingClientRect();
-  menuPosition.value = {
-    top: `${rect.bottom + window.scrollY + 6}px`,
-    left: `${rect.right + window.scrollX - 256}px`, // 256px = popover width (w-64)
-  };
-  assignMenuOpen.value = key;
-};
+// The row "⋯" menu is teleported to <body> (see template) so the table's
+// overflow-x-auto and the card's overflow-hidden don't clip it, and placed
+// right under its button (utils/floatingMenu.js, same as the other pages).
+// It used to add the page's scroll offset to a fixed-position menu, so once
+// the page was scrolled the menu showed up far below its button.
+const {
+  openMenuId: assignMenuOpen, // `${queueID}-more` | null
+  menuStyle: menuPosition,
+  toggleMenu,
+} = useFloatingMenu(60);
 
 const activeMoreQueue = computed(() => {
   const key = assignMenuOpen.value;
@@ -820,6 +815,114 @@ onUnmounted(() => {
           </div>
         </div>
 
+        <!-- Vaccination Room: one room, one vaccinator. Call Next alerts the
+             parent's phone (banner + sound + SMS). Placed right under the
+             quick actions: it's the Nurse's main work, so no scrolling. -->
+        <div ref="roomSectionRef" class="rounded-2xl border shadow-sm overflow-hidden"
+          :class="nowServing ? 'border-violet-200 bg-violet-50/30' : 'border-emerald-200 bg-white'">
+          <div class="flex items-center justify-between gap-4 px-5 py-4 border-b" :class="nowServing ? 'border-violet-100' : 'border-stone-200'">
+            <div class="flex items-center gap-3">
+              <div class="flex h-10 w-10 items-center justify-center rounded-xl" :class="nowServing ? 'bg-violet-100' : 'bg-emerald-50'">
+                <DoorOpen :size="18" :class="nowServing ? 'text-violet-700' : 'text-emerald-700'" />
+              </div>
+              <div>
+                <p class="text-[14px] font-semibold">Vaccination Room</p>
+                <p class="text-[11.5px] text-stone-500">
+                  <template v-if="nowServing">A family is inside. Record their vaccines, then Complete Visit.</template>
+                  <template v-else-if="waitingList.length">{{ waitingList.length }} waiting. Call Next alerts the next parent's phone.</template>
+                  <template v-else>Nobody is waiting right now.</template>
+                </p>
+              </div>
+            </div>
+            <button
+              @click="callNext"
+              :disabled="roomBusy || !!nowServing || waitingList.length === 0"
+              class="flex items-center gap-2 rounded-xl bg-emerald-700 px-5 py-3 text-[14px] font-semibold text-white shadow-sm hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-40"
+              :title="nowServing ? 'Complete the visit in the room first' : waitingList.length === 0 ? 'Nobody is waiting' : ''"
+            >
+              <Loader2 v-if="roomBusy" :size="17" class="animate-spin" />
+              <Megaphone v-else :size="17" />
+              Call Next<span v-if="!nowServing && waitingList.length"> · #{{ waitingList[0].queueNumber }}</span>
+            </button>
+          </div>
+
+          <div v-if="roomMessage" class="px-5 py-2.5 text-[12.5px] border-b"
+            :class="roomError ? 'bg-rose-50 text-rose-800 border-rose-100' : 'bg-sky-50 text-sky-800 border-sky-100'">
+            {{ roomMessage }}
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-0">
+            <!-- Inside the room now -->
+            <div class="lg:col-span-8 p-5">
+              <p class="text-[11px] font-semibold uppercase tracking-wide text-stone-500 mb-2">Inside the room</p>
+              <div v-if="!nowServing" class="rounded-xl border border-dashed border-stone-200 px-4 py-8 text-center text-[12.5px] text-stone-500">
+                The room is free.
+                <span v-if="waitingList.length" class="block mt-1 text-stone-400">Press <span class="font-semibold text-emerald-700">Call Next</span> to bring in {{ waitingList[0].no }}.</span>
+                <span v-else class="block mt-1 text-stone-400">Families appear here after they check in.</span>
+              </div>
+              <div v-else class="rounded-xl border border-violet-200 bg-white p-4">
+                <div class="flex items-start justify-between gap-3">
+                  <div>
+                    <p class="text-[22px] font-bold leading-none">{{ nowServing.no }}</p>
+                    <p class="text-[12px] text-stone-500 mt-1">Brought by {{ nowServing.parent }} · checked in {{ nowServing.time }}</p>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <button @click="callVisit(nowServing)" :disabled="roomBusy"
+                      class="flex items-center gap-1.5 rounded-lg border border-stone-200 px-3 py-1.5 text-[12px] font-medium text-stone-600 hover:bg-stone-50 disabled:opacity-40"
+                      title="Alert the parent's phone again (no second SMS)">
+                      <Megaphone :size="13" /> Call Again
+                    </button>
+                    <button @click="backToWaiting(nowServing)" :disabled="roomBusy"
+                      class="flex items-center gap-1.5 rounded-lg border border-stone-200 px-3 py-1.5 text-[12px] font-medium text-stone-600 hover:bg-stone-50 disabled:opacity-40"
+                      title="They didn't come in: back to waiting, same number">
+                      <Undo2 :size="13" /> Not Here
+                    </button>
+                  </div>
+                </div>
+                <div class="mt-3 divide-y divide-stone-100">
+                  <div v-for="c in nowServing.children" :key="c.childID" class="flex items-center justify-between py-2.5">
+                    <div class="flex items-center gap-2">
+                      <span class="text-[13.5px] font-medium">{{ c.name }}</span>
+                      <span v-if="roomProgress[c.childID]?.state === 'done'" class="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+                        <Check :size="11" /> Done
+                      </span>
+                      <span v-else-if="roomProgress[c.childID]" class="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                        {{ roomProgress[c.childID].due }} vaccine{{ roomProgress[c.childID].due === 1 ? '' : 's' }} due
+                      </span>
+                    </div>
+                    <button @click="startVaccinating(nowServing, c)"
+                      class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-semibold"
+                      :class="roomProgress[c.childID]?.state === 'done' ? 'border border-stone-200 text-stone-600 hover:bg-stone-50' : 'bg-emerald-700 text-white hover:bg-emerald-800'">
+                      <Syringe :size="13" /> {{ roomProgress[c.childID]?.state === 'done' ? 'Open' : 'Start Vaccinating' }}
+                    </button>
+                  </div>
+                </div>
+                <div class="mt-3 flex justify-end">
+                  <button @click="completeVisit(nowServing)" :disabled="roomBusy"
+                    class="flex items-center gap-1.5 rounded-lg bg-stone-800 px-4 py-2 text-[12.5px] font-semibold text-white hover:bg-stone-900 disabled:opacity-40">
+                    <Check :size="14" /> Complete Visit
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Next in line -->
+            <div class="lg:col-span-4 border-t lg:border-t-0 lg:border-l border-stone-200 p-5">
+              <p class="text-[11px] font-semibold uppercase tracking-wide text-stone-500 mb-2">Next in line</p>
+              <p v-if="waitingList.length === 0" class="text-[12.5px] text-stone-400">Nobody is waiting.</p>
+              <div class="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                <div v-for="(q, i) in waitingList" :key="q.queueID" class="flex items-center justify-between rounded-xl bg-stone-50 px-3 py-2">
+                  <div class="min-w-0">
+                    <p class="text-[12.5px] font-semibold">{{ q.no }} <span v-if="i === 0" class="ml-1 text-[10.5px] font-medium text-emerald-700">next</span></p>
+                    <p class="text-[11px] text-stone-500 truncate">{{ q.child }}</p>
+                  </div>
+                  <span class="text-[11px] text-stone-400 shrink-0">{{ q.time }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Queue + side column -->
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
           <!-- Today's Queue -->
@@ -855,21 +958,26 @@ onUnmounted(() => {
                     <th
                       v-for="h in ['Queue No.', 'Child', 'Parent', 'Checked In', 'Status', '']"
                       :key="h"
-                      class="text-left font-semibold px-5 py-3 whitespace-nowrap text-[11px] uppercase tracking-wide text-stone-500"
+                      class="text-left font-semibold px-3 py-3 first:pl-5 whitespace-nowrap text-[11px] uppercase tracking-wide text-stone-500"
                     >
                       {{ h }}
                     </th>
                   </tr>
                 </thead>
                 <tbody>
+                  <tr v-if="visibleQueue.length === 0 && !loadingQueue" class="border-t border-stone-200">
+                    <td colspan="6" class="px-5 py-10 text-center text-[12.5px] text-stone-400">
+                      Nobody is in the queue yet. Families join by scanning the Check-in QR, or use Check-In Patient above.
+                    </td>
+                  </tr>
                   <template v-for="q in visibleQueue" :key="q.queueID">
                    <tr class="border-t border-stone-200">
-                    <td class="px-5 py-3 font-medium whitespace-nowrap">{{ q.no }}</td>
+                    <td class="pl-5 pr-3 py-3 font-medium whitespace-nowrap">{{ q.no }}</td>
                     <!-- names wrap, so the action buttons stay on screen -->
-                    <td class="px-5 py-3 min-w-[140px]">{{ q.child }}</td>
-                    <td class="px-5 py-3 min-w-[140px] text-stone-500">{{ q.parent }}</td>
-                    <td class="px-5 py-3 whitespace-nowrap text-stone-500">{{ q.time }}</td>
-                    <td class="px-5 py-3 whitespace-nowrap">
+                    <td class="px-3 py-3 min-w-[120px]">{{ q.child }}</td>
+                    <td class="px-3 py-3 min-w-[120px] text-stone-500">{{ q.parent }}</td>
+                    <td class="px-3 py-3 whitespace-nowrap text-stone-500">{{ q.time }}</td>
+                    <td class="px-3 py-3 whitespace-nowrap">
                       <span
                         class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium"
                         :class="statusStyle[q.status]"
@@ -878,21 +986,22 @@ onUnmounted(() => {
                         {{ q.status }}
                       </span>
                     </td>
-                    <td class="px-5 py-3 whitespace-nowrap relative">
-                      <div class="flex items-center gap-1">
-                        <button @click="toggleExpand(q)" class="p-1.5 rounded-lg hover:bg-stone-100" title="View Patient">
-                          <Eye :size="15" class="text-stone-500" />
-                        </button>
+                    <td class="pl-3 pr-5 py-3 whitespace-nowrap relative">
+                      <div class="flex items-center justify-end gap-1">
+                        <!-- Labeled, so it's clear what each button does -->
                         <button
                           v-if="q.status === 'Waiting'"
                           @click="callVisit(q)"
                           :disabled="roomBusy || !!nowServing"
-                          class="p-1.5 rounded-lg hover:bg-emerald-50 disabled:opacity-30 disabled:cursor-not-allowed"
-                          :title="nowServing ? 'Complete the visit in the room first' : 'Call this family into the vaccination room (out of turn)'"
+                          class="flex items-center gap-1 rounded-lg border border-emerald-200 px-2 py-1 text-[12px] font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                          :title="nowServing ? 'Complete the visit in the room first' : 'Call this family into the vaccination room now (out of turn)'"
                         >
-                          <Megaphone :size="15" class="text-emerald-700" />
+                          <Megaphone :size="13" /> Call
                         </button>
-                        <button @click="toggleMenu(`${q.queueID}-more`, $event)" class="menu-trigger p-1.5 rounded-lg hover:bg-stone-100" title="More">
+                        <button @click="toggleExpand(q)" class="p-1.5 rounded-lg hover:bg-stone-100" :title="expandedRow === q.queueID ? 'Hide details' : 'Show details'" :aria-expanded="expandedRow === q.queueID">
+                          <Eye :size="15" class="text-stone-500" />
+                        </button>
+                        <button @click="toggleMenu(`${q.queueID}-more`, $event)" class="menu-trigger p-1.5 rounded-lg hover:bg-stone-100" title="More actions (Remove from Queue)" aria-haspopup="menu">
                           <MoreHorizontal :size="15" class="text-stone-500" />
                         </button>
                       </div>
@@ -964,111 +1073,6 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <!-- Vaccination Room: one room, one vaccinator. Call Next alerts the
-             parent's phone (banner + sound + SMS). -->
-        <div ref="roomSectionRef" class="rounded-2xl border shadow-sm overflow-hidden"
-          :class="nowServing ? 'border-violet-200 bg-violet-50/30' : 'border-emerald-200 bg-white'">
-          <div class="flex items-center justify-between gap-4 px-5 py-4 border-b" :class="nowServing ? 'border-violet-100' : 'border-stone-200'">
-            <div class="flex items-center gap-3">
-              <div class="flex h-10 w-10 items-center justify-center rounded-xl" :class="nowServing ? 'bg-violet-100' : 'bg-emerald-50'">
-                <DoorOpen :size="18" :class="nowServing ? 'text-violet-700' : 'text-emerald-700'" />
-              </div>
-              <div>
-                <p class="text-[14px] font-semibold">Vaccination Room</p>
-                <p class="text-[11.5px] text-stone-500">
-                  <template v-if="nowServing">A family is inside. Record their vaccines, then Complete Visit.</template>
-                  <template v-else-if="waitingList.length">{{ waitingList.length }} waiting. Call Next alerts the next parent's phone.</template>
-                  <template v-else>Nobody is waiting right now.</template>
-                </p>
-              </div>
-            </div>
-            <button
-              @click="callNext"
-              :disabled="roomBusy || !!nowServing || waitingList.length === 0"
-              class="flex items-center gap-2 rounded-xl bg-emerald-700 px-5 py-3 text-[14px] font-semibold text-white shadow-sm hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-40"
-              :title="nowServing ? 'Complete the visit in the room first' : waitingList.length === 0 ? 'Nobody is waiting' : ''"
-            >
-              <Loader2 v-if="roomBusy" :size="17" class="animate-spin" />
-              <Megaphone v-else :size="17" />
-              Call Next<span v-if="!nowServing && waitingList.length"> · #{{ waitingList[0].queueNumber }}</span>
-            </button>
-          </div>
-
-          <div v-if="roomMessage" class="px-5 py-2.5 text-[12.5px] border-b"
-            :class="roomError ? 'bg-rose-50 text-rose-800 border-rose-100' : 'bg-sky-50 text-sky-800 border-sky-100'">
-            {{ roomMessage }}
-          </div>
-
-          <div class="grid grid-cols-1 lg:grid-cols-12 gap-0">
-            <!-- Inside the room now -->
-            <div class="lg:col-span-8 p-5">
-              <p class="text-[11px] font-semibold uppercase tracking-wide text-stone-500 mb-2">Inside the room</p>
-              <div v-if="!nowServing" class="rounded-xl border border-dashed border-stone-200 px-4 py-8 text-center text-[12.5px] text-stone-400">
-                The room is free.
-              </div>
-              <div v-else class="rounded-xl border border-violet-200 bg-white p-4">
-                <div class="flex items-start justify-between gap-3">
-                  <div>
-                    <p class="text-[22px] font-bold leading-none">{{ nowServing.no }}</p>
-                    <p class="text-[12px] text-stone-500 mt-1">Brought by {{ nowServing.parent }} · checked in {{ nowServing.time }}</p>
-                  </div>
-                  <div class="flex items-center gap-2">
-                    <button @click="callVisit(nowServing)" :disabled="roomBusy"
-                      class="flex items-center gap-1.5 rounded-lg border border-stone-200 px-3 py-1.5 text-[12px] font-medium text-stone-600 hover:bg-stone-50 disabled:opacity-40"
-                      title="Alert the parent's phone again (no second SMS)">
-                      <Megaphone :size="13" /> Call Again
-                    </button>
-                    <button @click="backToWaiting(nowServing)" :disabled="roomBusy"
-                      class="flex items-center gap-1.5 rounded-lg border border-stone-200 px-3 py-1.5 text-[12px] font-medium text-stone-600 hover:bg-stone-50 disabled:opacity-40"
-                      title="They didn't come in: back to waiting, same number">
-                      <Undo2 :size="13" /> Not Here
-                    </button>
-                  </div>
-                </div>
-                <div class="mt-3 divide-y divide-stone-100">
-                  <div v-for="c in nowServing.children" :key="c.childID" class="flex items-center justify-between py-2.5">
-                    <div class="flex items-center gap-2">
-                      <span class="text-[13.5px] font-medium">{{ c.name }}</span>
-                      <span v-if="roomProgress[c.childID]?.state === 'done'" class="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
-                        <Check :size="11" /> Done
-                      </span>
-                      <span v-else-if="roomProgress[c.childID]" class="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
-                        {{ roomProgress[c.childID].due }} vaccine{{ roomProgress[c.childID].due === 1 ? '' : 's' }} due
-                      </span>
-                    </div>
-                    <button @click="startVaccinating(nowServing, c)"
-                      class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-semibold"
-                      :class="roomProgress[c.childID]?.state === 'done' ? 'border border-stone-200 text-stone-600 hover:bg-stone-50' : 'bg-emerald-700 text-white hover:bg-emerald-800'">
-                      <Syringe :size="13" /> {{ roomProgress[c.childID]?.state === 'done' ? 'Open' : 'Start Vaccinating' }}
-                    </button>
-                  </div>
-                </div>
-                <div class="mt-3 flex justify-end">
-                  <button @click="completeVisit(nowServing)" :disabled="roomBusy"
-                    class="flex items-center gap-1.5 rounded-lg bg-stone-800 px-4 py-2 text-[12.5px] font-semibold text-white hover:bg-stone-900 disabled:opacity-40">
-                    <Check :size="14" /> Complete Visit
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <!-- Next in line -->
-            <div class="lg:col-span-4 border-t lg:border-t-0 lg:border-l border-stone-200 p-5">
-              <p class="text-[11px] font-semibold uppercase tracking-wide text-stone-500 mb-2">Next in line</p>
-              <p v-if="waitingList.length === 0" class="text-[12.5px] text-stone-400">Nobody is waiting.</p>
-              <div class="space-y-1.5 max-h-56 overflow-y-auto pr-1">
-                <div v-for="(q, i) in waitingList" :key="q.queueID" class="flex items-center justify-between rounded-xl bg-stone-50 px-3 py-2">
-                  <div class="min-w-0">
-                    <p class="text-[12.5px] font-semibold">{{ q.no }} <span v-if="i === 0" class="ml-1 text-[10.5px] font-medium text-emerald-700">next</span></p>
-                    <p class="text-[11px] text-stone-500 truncate">{{ q.child }}</p>
-                  </div>
-                  <span class="text-[11px] text-stone-400 shrink-0">{{ q.time }}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
         <!-- Stock alerts + activities -->
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
           <div class="lg:col-span-4 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
@@ -1126,8 +1130,8 @@ onUnmounted(() => {
       class="menu-popover fixed z-50 w-48 rounded-xl border border-stone-200 bg-white shadow-lg p-2"
       :style="menuPosition"
     >
-      <button @click="removeFromQueue(activeMoreQueue)" class="flex w-full items-center rounded-lg px-2 py-1.5 text-[12.5px] text-rose-700 hover:bg-rose-50">
-        Remove from Queue
+      <button @click="removeFromQueue(activeMoreQueue)" class="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-[12.5px] text-rose-700 hover:bg-rose-50">
+        <Trash2 :size="14" /> Remove from Queue
       </button>
     </div>
 
@@ -1167,7 +1171,7 @@ onUnmounted(() => {
                   </span>
                 </button>
                 <p v-if="filteredParents.length === 0" class="px-3 py-2.5 text-[12.5px] text-stone-400">
-                  No registered child or parent found. A new patient is added with Add Walk-in Patient.
+                  No registered child or parent found. A new patient is added with Add Patient.
                 </p>
               </div>
             </div>

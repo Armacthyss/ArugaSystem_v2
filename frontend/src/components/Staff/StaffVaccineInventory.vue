@@ -6,8 +6,8 @@
     <!-- MAIN SECTION -->
     <div class="flex-1 flex flex-col overflow-hidden">
       <StaffTopbar title="Vaccine Inventory" breadcrumb="Aruga / Inventory">
-        <button @click="openAddModal" :disabled="isLoading" class="bg-emerald-600 text-white px-5 py-2.5 rounded-lg text-xs font-bold hover:bg-emerald-700 transition-all flex items-center gap-2 shadow-sm disabled:opacity-50">
-          <Plus class="w-4 h-4" /> ADD NEW BATCH
+        <button @click="openAddModal" :disabled="isLoading" class="bg-emerald-600 text-white px-5 py-2.5 rounded-lg text-[13px] font-semibold hover:bg-emerald-700 transition-all flex items-center gap-2 shadow-sm disabled:opacity-50">
+          <Plus class="w-4 h-4" /> Add New Batch
         </button>
       </StaffTopbar>
 
@@ -17,7 +17,7 @@
           <div class="flex items-center justify-between mb-2">
             <div></div>
             <button
-              @click="fetchAll"
+              @click="fetchAll" title="Refresh" aria-label="Refresh"
               class="text-slate-400 hover:text-emerald-600 transition-colors p-2 rounded-full hover:bg-slate-100"
             >
               <RefreshCw class="w-5 h-5" :class="{ 'animate-spin': isLoading }" />
@@ -119,6 +119,7 @@
                   <th class="px-6 py-4">Expiry Date</th>
                   <th class="px-6 py-4">Stock Level</th>
                   <th class="px-6 py-4 text-right">Status</th>
+                  <th class="px-4 py-4"><span class="sr-only">Actions</span></th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-100">
@@ -148,9 +149,15 @@
                       {{ statusLabel(batch) }}
                     </span>
                   </td>
+                  <td class="px-4 py-4 text-right">
+                    <button @click="adjusting = batch" class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-[12px] font-medium text-slate-600 hover:bg-slate-50"
+                      title="Broken, spoiled or lost doses, or a recount">
+                      <SlidersHorizontal class="w-3.5 h-3.5" /> Adjust
+                    </button>
+                  </td>
                 </tr>
                 <tr v-if="inventory.length === 0 && !isLoading">
-                  <td colspan="6" class="px-6 py-20 text-center">
+                  <td colspan="7" class="px-6 py-20 text-center">
                     <div class="flex flex-col items-center">
                       <Package class="w-12 h-12 text-slate-200 mb-2" />
                       <p class="text-slate-400 font-medium">No inventory batches found.</p>
@@ -203,6 +210,9 @@
       </main>
 
       <!-- ADD BATCH MODAL -->
+      <StockAdjustModal v-if="adjusting" :batch="adjusting" :vaccine-name="vaccineName(adjusting.vaccineID)"
+        @close="adjusting = null" @saved="onAdjusted" />
+
       <div v-if="showAddModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
         <div class="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden border border-slate-200">
           <div class="p-6 border-b border-slate-100 flex justify-between items-center">
@@ -245,7 +255,7 @@
 
             <div>
               <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Manufacturing Date (optional)</label>
-              <input v-model="batchForm.ManufacturingDate" type="date" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:border-emerald-500 outline-none">
+              <input v-model="batchForm.ManufacturingDate" type="date" :max="toISODate()" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:border-emerald-500 outline-none">
             </div>
 
             <div class="grid grid-cols-2 gap-3">
@@ -261,9 +271,9 @@
           </div>
 
           <div class="p-4 bg-slate-50 border-t border-slate-100 flex gap-2">
-             <button @click="showAddModal = false" class="flex-1 py-2.5 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-lg">CANCEL</button>
-             <button @click="handleSaveBatch" :disabled="isSaving" class="flex-1 py-2.5 text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700 rounded-lg shadow-sm transition-all disabled:opacity-50">
-               {{ isSaving ? 'SAVING…' : 'ADD TO INVENTORY' }}
+             <button @click="showAddModal = false" class="flex-1 py-2.5 text-[13px] font-semibold text-slate-500 hover:bg-slate-100 rounded-lg">Cancel</button>
+             <button @click="handleSaveBatch" :disabled="isSaving" class="flex-1 py-2.5 text-[13px] font-semibold bg-emerald-600 text-white hover:bg-emerald-700 rounded-lg shadow-sm transition-all disabled:opacity-50">
+               {{ isSaving ? 'Saving…' : 'Add to Inventory' }}
              </button>
           </div>
         </div>
@@ -278,10 +288,11 @@ import { API_ORIGIN } from '@/utils/apiBase'
 import { toISODate } from '@/utils/format'
 import { ref, reactive, computed, onMounted } from 'vue'
 import axios from 'axios'
-import { Plus, Package, AlertTriangle, Trash2, X, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-vue-next'
+import { Plus, Package, AlertTriangle, Trash2, X, RefreshCw, ChevronLeft, ChevronRight, SlidersHorizontal } from 'lucide-vue-next'
 import StaffSidebar from './StaffSidebar.vue'
 import StaffTopbar from './StaffTopbar.vue'
 import InventorySummary from '@/components/Shared/InventorySummary.vue'
+import StockAdjustModal from '@/components/Shared/StockAdjustModal.vue'
 import { showAlert } from '@/utils/dialog'
 
 // Same API_BASE convention as the rest of the project.
@@ -385,6 +396,18 @@ const sendStockCheck = async () => {
 const fetchAll = () => {
   fetchInventory()
   fetchVaccineCatalog()
+  fetchStockCheck()
+}
+
+// ── ADJUST STOCK (broken / spoiled / lost doses, recount) ─────────
+const adjusting = ref(null)   // the batch being adjusted
+const onAdjusted = (res) => {
+  showAlert({
+    title: 'Stock adjusted',
+    message: `${vaccineName(adjusting.value?.vaccineID)} lot ${adjusting.value?.lotNumber} now has ${res.currentQuantity} dose${res.currentQuantity === 1 ? '' : 's'} on file.`,
+    tone: 'primary',
+  })
+  fetchInventory()
   fetchStockCheck()
 }
 

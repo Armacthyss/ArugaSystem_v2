@@ -5,7 +5,8 @@ namespace AndroidWebAPI.Services
 {
     // Inventory summary per vaccine, for the Inventory pages and the
     // Inventory Reports (beneficiary request, Sep 2026):
-    //   on hand, minimum, doses received and used in the period, expiring
+    //   on hand, minimum, doses received, used and removed (broken, spoiled,
+    //   lost, recount; see StockAdjustment.cs) in the period, expiring
     //   within 30 days, expired doses still on the shelf, the average doses
     //   used per week (last 8 weeks) and about how many weeks the stock lasts.
     // "Used" counts vaccinations recorded from a clinic batch (a historical
@@ -21,6 +22,7 @@ namespace AndroidWebAPI.Services
             int ActiveBatches,
             int ReceivedInPeriod,
             int UsedInPeriod,
+            int RemovedInPeriod,
             int ExpiringSoon,
             int ExpiredOnShelf,
             DateTime? NextExpiry,
@@ -42,6 +44,13 @@ namespace AndroidWebAPI.Services
             var given = await context.VaccinationRecords.AsNoTracking()
                 .Where(r => r.Status == "Completed" && r.InventoryID != null)
                 .Select(r => new { r.VaccineID, r.VaccinationDate })
+                .ToListAsync();
+
+            // Doses taken off in the period without being given (broken,
+            // spoiled, expired, lost, or a lower recount), per vaccine
+            var removed = await context.StockAdjustments.AsNoTracking()
+                .Where(a => a.Change < 0 && a.AdjustedAt >= start && a.AdjustedAt < end)
+                .Select(a => new { a.Inventory!.VaccineID, a.Change })
                 .ToListAsync();
 
             var lines = new List<Line>();
@@ -69,6 +78,7 @@ namespace AndroidWebAPI.Services
                     usable.Count(b => b.CurrentQuantity > 0),
                     mine.Where(b => b.ReceivedDate >= start && b.ReceivedDate < end).Sum(b => b.InitialQuantity),
                     given.Count(g => g.VaccineID == v.VaccineID && g.VaccinationDate >= start && g.VaccinationDate < end),
+                    -removed.Where(a => a.VaccineID == v.VaccineID).Sum(a => a.Change),
                     usable.Where(b => b.CurrentQuantity > 0 && (b.ExpirationDate.Date - today).TotalDays <= 30).Sum(b => b.CurrentQuantity),
                     mine.Where(b => b.Status && b.ExpirationDate.Date < today).Sum(b => b.CurrentQuantity),
                     usable.Where(b => b.CurrentQuantity > 0).Select(b => (DateTime?)b.ExpirationDate).Min(),

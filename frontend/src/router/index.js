@@ -32,8 +32,6 @@ import SystemAdminInventory from '@/components/SystemAdmin/SysAd-Inventory.vue'
 import SystemAdminNotification from '@/components/SystemAdmin/SysAd-Notification.vue'
 import SystemAdminReports from '@/components/SystemAdmin/SysAd-Reports.vue'
 import SystemAuditlogs from '@/components/SystemAdmin/SysAd-Auditlogs.vue'
-import TestAPI from '@/components/SystemAdmin/TestAPI.vue'
-import VaccineSchedule from '@/components/SystemAdmin/VaccineSchedule.vue'
 import SystemOperatingHours from '@/components/SystemAdmin/SysAd-Operating_hours.vue'
 
 // ── Super Admin (the development team) ─────────────────────
@@ -307,23 +305,12 @@ const routes = [
   // The audit logs moved to the Super Admin (technical adviser, Oct 2026)
   { path: '/admin/audit-logs', redirect: '/admin/home' },
 
-  {
-    path: '/admin/test-api',
-    component: TestAPI,
-    meta: {
-      requiresAuth: true,
-      role: 'SystemAdmin'
-    }
-  },
-
-  {
-    path: '/admin/vaccine-schedule',
-    component: VaccineSchedule,
-    meta: {
-      requiresAuth: true,
-      role: 'SystemAdmin'
-    }
-  },
+  // Two developer test pages (TestAPI.vue, VaccineSchedule.vue) were still
+  // open to any Admin by typing the address; one asked for a child's internal
+  // ID. Nothing links to them, so they go to the dashboard (Oct 2026). The
+  // files are kept in components/SystemAdmin in case the team needs them.
+  { path: '/admin/test-api', redirect: '/admin/home' },
+  { path: '/admin/vaccine-schedule', redirect: '/admin/home' },
 
   // One vaccination room only (beneficiary revision), so the room list is gone
   { path: '/admin/rooms', redirect: '/admin/home' },

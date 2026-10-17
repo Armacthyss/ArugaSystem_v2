@@ -1,4 +1,5 @@
 <script setup>
+import { AlertTriangle, Baby, CalendarDays, CircleCheck, Search, Syringe, UserPlus } from 'lucide-vue-next'
 import { ref, computed, reactive, onMounted, watch } from 'vue'
 import { useFloatingMenu } from '@/utils/floatingMenu'
 import axios from 'axios'
@@ -398,16 +399,16 @@ const saveLink = async () => {
         <!-- Summary cards -->
         <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
           <div v-for="card in [
-              { label: 'Total Registered', value: summary.total, icon: '🧒', tint: 'bg-teal-50' },
-              { label: 'Fully Vaccinated', value: summary.full, icon: '✅', tint: 'bg-emerald-50' },
-              { label: 'In Progress', value: summary.partial, icon: '💉', tint: 'bg-sky-50' },
-              { label: 'New This Month', value: summary.newThisMonth, icon: '🆕', tint: 'bg-violet-50' },
-              { label: 'Due This Week', value: summary.dueThisWeek, icon: '📅', tint: 'bg-amber-50' },
-              { label: 'Delayed Vaccinations', value: summary.delayed, icon: '⚠️', tint: 'bg-rose-50' },
+              { label: 'Total Registered', value: summary.total, icon: Baby, tint: 'bg-teal-50 text-teal-700' },
+              { label: 'Fully Vaccinated', value: summary.full, icon: CircleCheck, tint: 'bg-emerald-50 text-emerald-700' },
+              { label: 'In Progress', value: summary.partial, icon: Syringe, tint: 'bg-sky-50 text-sky-700' },
+              { label: 'New This Month', value: summary.newThisMonth, icon: UserPlus, tint: 'bg-violet-50 text-violet-700' },
+              { label: 'Due This Week', value: summary.dueThisWeek, icon: CalendarDays, tint: 'bg-amber-50 text-amber-700' },
+              { label: 'Delayed Vaccinations', value: summary.delayed, icon: AlertTriangle, tint: 'bg-rose-50 text-rose-700' },
             ]" :key="card.label" class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
             <div class="flex items-start justify-between gap-2">
               <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ card.label }}</p>
-              <div :class="card.tint" class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm">{{ card.icon }}</div>
+              <div :class="card.tint" class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"><component :is="card.icon" class="w-4 h-4" /></div>
             </div>
             <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ card.value }}</p>
           </div>
@@ -417,7 +418,7 @@ const saveLink = async () => {
         <section class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
           <div class="flex flex-col lg:flex-row lg:items-center gap-3">
             <div class="relative flex-1 min-w-0">
-              <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm" aria-hidden="true">🔍</span>
+              <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" aria-hidden="true" />
               <input v-model="searchQuery" type="text" placeholder="Search by child name, Family No., barangay, or parent name..."
                 class="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-slate-200 bg-slate-50 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-colors" />
             </div>
@@ -487,7 +488,7 @@ const saveLink = async () => {
                   </td>
                   <td class="px-3 py-3 text-slate-500 whitespace-nowrap">{{ patient.lastVaccination }}</td>
                   <td class="px-5 py-3 text-right relative">
-                    <button @click.stop="toggleMenu(patient.id, $event)" class="text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg w-8 h-8 inline-flex items-center justify-center transition-colors">⋮</button>
+                    <button @click.stop="toggleMenu(patient.id, $event)" title="More actions" aria-label="More actions" class="text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg w-8 h-8 inline-flex items-center justify-center text-lg font-bold transition-colors">⋮</button>
                     <Teleport to="body">
                     <div v-if="openMenuId === patient.id" @click.stop :style="menuStyle" class="fixed z-50 w-56 bg-white border border-slate-200 rounded-lg shadow-md py-1 text-left">
                       <button @click="openDrawer(patient)" class="w-full text-left px-3.5 py-2 text-sm text-slate-700 hover:bg-slate-50">View Patient Profile</button>

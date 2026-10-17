@@ -1,4 +1,5 @@
 <script setup>
+import { CircleCheck, KeyRound, Search, UserX, Users } from 'lucide-vue-next'
 import { API_ORIGIN } from '@/utils/apiBase'
 import { ref, computed, reactive, onMounted, watch } from 'vue'
 import { useFloatingMenu } from '@/utils/floatingMenu'
@@ -430,28 +431,28 @@ texted = !!response.data.texted
           <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
             <div class="flex items-start justify-between gap-2">
               <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Total Users</p>
-              <div class="bg-teal-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm">👥</div>
+              <div class="bg-teal-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0"><Users class="w-4 h-4 text-teal-700" /></div>
             </div>
             <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.total }}</p>
           </div>
           <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
             <div class="flex items-start justify-between gap-2">
               <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Active Users</p>
-              <div class="bg-emerald-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm">✅</div>
+              <div class="bg-emerald-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0"><CircleCheck class="w-4 h-4 text-emerald-700" /></div>
             </div>
             <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.active }}</p>
           </div>
           <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
             <div class="flex items-start justify-between gap-2">
               <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Inactive Users</p>
-              <div class="bg-slate-100 w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm">💤</div>
+              <div class="bg-slate-100 w-8 h-8 rounded-lg flex items-center justify-center shrink-0"><UserX class="w-4 h-4 text-slate-500" /></div>
             </div>
             <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.inactive }}</p>
           </div>
           <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
             <div class="flex items-start justify-between gap-2">
               <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Awaiting Password Change</p>
-              <div class="bg-amber-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm">🔑</div>
+              <div class="bg-amber-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0"><KeyRound class="w-4 h-4 text-amber-700" /></div>
             </div>
             <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.pendingPasswordChange }}</p>
           </div>
@@ -461,7 +462,7 @@ texted = !!response.data.texted
         <section class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
           <div class="flex flex-col lg:flex-row lg:items-center gap-3">
             <div class="relative flex-1 min-w-0">
-              <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm" aria-hidden="true">🔍</span>
+              <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" aria-hidden="true" />
               <input
                 v-model="searchQuery"
                 type="text"
@@ -553,7 +554,7 @@ texted = !!response.data.texted
                   <td class="px-5 py-3 text-right relative">
                     <button
                       @click.stop="toggleMenu(user.id, $event)"
-                      class="text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg w-8 h-8 inline-flex items-center justify-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                      title="More actions" aria-label="More actions" class="text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg w-8 h-8 inline-flex items-center justify-center text-lg font-bold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                     >
                       ⋮
                     </button>
@@ -803,7 +804,7 @@ texted = !!response.data.texted
     <transition name="fade">
       <div v-if="showTempPasswordModal" class="fixed inset-0 bg-slate-900/40 z-50 flex items-center justify-center p-4" @click.self="closeTempPasswordModal">
         <div class="bg-white rounded-xl shadow-lg w-full max-w-sm p-6">
-          <div class="w-12 h-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl mb-4">🔑</div>
+          <div class="w-12 h-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mb-4"><KeyRound class="w-6 h-6" /></div>
           <h2 class="text-base font-bold text-slate-900 mb-1">Temporary password ready</h2>
           <p class="text-sm text-slate-500 mb-4">
             Share this with <span class="font-semibold text-slate-700">{{ tempPasswordResult?.name }}</span> — it's shown only once here, so copy it now.
