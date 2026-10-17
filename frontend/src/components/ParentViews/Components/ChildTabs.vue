@@ -6,21 +6,38 @@
 -->
 <template>
   <div v-if="children.length" class="mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 sm:mb-6">
-    <div class="no-scrollbar -mx-1 flex min-w-0 max-w-full gap-2 overflow-x-auto px-1 py-1">
-      <button
-        v-for="child in children"
-        :key="child.childID"
-        type="button"
-        @click="$emit('select-child', child)"
-        :aria-pressed="isSelected(child)"
-        class="flex shrink-0 items-center gap-2 rounded-full border-2 px-4 py-2 text-sm transition-colors sm:px-5 sm:text-base"
-        :class="isSelected(child)
-          ? 'border-emerald-700 bg-white font-bold text-slate-900 shadow-sm'
-          : 'border-transparent bg-white/70 font-medium text-slate-500 hover:bg-white hover:text-slate-700'"
-      >
-        <span aria-hidden="true">{{ child.sex === 'Female' ? '👧' : '👶' }}</span>
-        {{ child.firstName }}
-      </button>
+    <!-- One row that scrolls sideways when there are more children than fit:
+         arrows at the ends and a soft fade show there's more, and the mouse
+         wheel scrolls it too. (The "Search children" box finds anyone.) -->
+    <div class="relative -mx-1 min-w-0 max-w-full">
+      <div ref="rowRef" @scroll="updateEdges" @wheel="onWheel"
+        class="no-scrollbar flex min-w-0 max-w-full gap-2 overflow-x-auto scroll-smooth px-1 py-1">
+        <button
+          v-for="child in children"
+          :key="child.childID"
+          :data-child="child.childID"
+          type="button"
+          @click="$emit('select-child', child)"
+          :aria-pressed="isSelected(child)"
+          class="flex shrink-0 items-center gap-2 rounded-full border-2 px-4 py-2 text-sm transition-colors sm:px-5 sm:text-base"
+          :class="isSelected(child)
+            ? 'border-emerald-700 bg-white font-bold text-slate-900 shadow-sm'
+            : 'border-transparent bg-white/70 font-medium text-slate-500 hover:bg-white hover:text-slate-700'"
+        >
+          <span aria-hidden="true">{{ child.sex === 'Female' ? '👧' : '👶' }}</span>
+          {{ child.firstName }}
+        </button>
+      </div>
+      <template v-if="canLeft">
+        <div class="pointer-events-none absolute inset-y-0 left-0 w-12 bg-gradient-to-r from-slate-50 to-transparent"></div>
+        <button type="button" @click="scrollRow(-1)" aria-label="Show earlier children"
+          class="absolute left-0 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200 bg-white text-lg text-slate-600 shadow-md hover:bg-slate-50">‹</button>
+      </template>
+      <template v-if="canRight">
+        <div class="pointer-events-none absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-slate-50 to-transparent"></div>
+        <button type="button" @click="scrollRow(1)" aria-label="Show more children"
+          class="absolute right-0 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200 bg-white text-lg text-slate-600 shadow-md hover:bg-slate-50">›</button>
+      </template>
     </div>
 
     <p v-if="selectedChild" class="shrink-0 text-sm text-slate-500">
@@ -70,7 +87,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { format } from 'date-fns'
 import { ageParts } from '@/utils/format'
 import { barangayLabel } from '@/utils/barangays'
@@ -83,6 +100,34 @@ const props = defineProps({
 defineEmits(['select-child'])
 
 const isSelected = child => props.selectedChild?.childID === child.childID
+
+// ── Scrolling the row of children ──
+const rowRef = ref(null)
+const canLeft = ref(false)   // more names hidden on the left
+const canRight = ref(false)  // more names hidden on the right
+function updateEdges() {
+  const el = rowRef.value
+  if (!el) return
+  canLeft.value = el.scrollLeft > 4
+  canRight.value = el.scrollLeft + el.clientWidth < el.scrollWidth - 4
+}
+const scrollRow = dir => rowRef.value?.scrollBy({ left: dir * rowRef.value.clientWidth * 0.8 })
+// A normal (up/down) mouse wheel scrolls the row sideways
+function onWheel(e) {
+  const el = rowRef.value
+  if (!el || el.scrollWidth <= el.clientWidth || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return
+  e.preventDefault()
+  el.scrollLeft += e.deltaY
+}
+// The chosen child (also when picked with "Search children") is scrolled into view
+watch(() => [props.selectedChild?.childID, props.children.length], async () => {
+  await nextTick()
+  rowRef.value?.querySelector(`[data-child="${props.selectedChild?.childID}"]`)
+    ?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  updateEdges()
+}, { immediate: true })
+onMounted(() => { window.addEventListener('resize', updateEdges); updateEdges() })
+onUnmounted(() => window.removeEventListener('resize', updateEdges))
 
 // "6 days", "3 months", "1 year 2 months"
 const ageText = computed(() => {
