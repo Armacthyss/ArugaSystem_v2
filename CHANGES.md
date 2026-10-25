@@ -16,6 +16,7 @@ From the ISO 25010 survey. Respondents said some features were hard to navigate 
 - **Staff / Nurse Dashboard**
   - The **Vaccination Room** card (Call Next) now sits right under Quick Actions, so the Nurse's main work needs no scrolling. The "Vaccination Room" quick action was removed since the card is right there.
   - The out-of-turn call button on a queue row now says **Call** instead of being an icon only.
+  - The six number boxes at the top are shortcuts. Click one to jump to what it counts: Due for Vaccination → Expected Patients, Patients Waiting / Late Patients → Today's Queue, In Progress / Vaccination Room → the Vaccination Room (which glows briefly). Completed Today opens Queue Management, since finished families aren't listed on the Dashboard.
   - **Add Walk-in Patient** is now just **Add Patient** (the quick action and the window it opens).
   - When the room is free, the card says what to do next ("Press Call Next to bring in Q-003").
   - Today's Queue says so when nobody has checked in yet, instead of showing an empty table.

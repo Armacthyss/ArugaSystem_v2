@@ -17,7 +17,7 @@ const GUIDES = {
       { title: 'Record vaccines', text: 'Press Start Vaccinating for each child and record every dose you give.' },
       { title: 'Complete Visit', text: 'When every child is done, press Complete Visit, then Call Next for the next family.' },
     ],
-    tip: "Family didn't come in? Press Not Here: they keep their number. To take a family off the list, use ⋯ on their row.",
+    tip: "Click a number box at the top to jump to that list. Family didn't come in? Press Not Here: they keep their number. To take a family off the list, use ⋯ on their row.",
   },
   '/staff/vaccination/': {
     subtitle: 'Record the vaccines given to this child during the visit.',

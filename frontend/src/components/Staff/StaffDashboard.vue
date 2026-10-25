@@ -122,9 +122,31 @@ const quickActions = [
 
 const queueSectionRef = ref(null);
 const roomSectionRef = ref(null);
-const scrollToQueue = () => {
-  queueSectionRef.value?.scrollIntoView({ behavior: "smooth", block: "start" });
+const expectedSectionRef = ref(null);
+const scrollToQueue = () => goToSection("queue");
+
+// The summary cards at the top are shortcuts: each one scrolls to the part of
+// the page it counts, which glows for a moment so it's easy to spot.
+// Completed families aren't listed on the Dashboard, so that card opens
+// Queue Management (today's full record).
+const SECTION_REFS = { queue: queueSectionRef, room: roomSectionRef, expected: expectedSectionRef };
+const highlighted = ref(null);
+let highlightTimer = null;
+function goToSection(key) {
+  SECTION_REFS[key].value?.scrollIntoView({ behavior: "smooth", block: "start" });
+  highlighted.value = key;
+  clearTimeout(highlightTimer);
+  highlightTimer = setTimeout(() => { highlighted.value = null; }, 1800);
+}
+const CARD_TARGETS = {
+  "Due for Vaccination": { go: () => goToSection("expected"), hint: "Show Expected Patients" },
+  "Patients Waiting": { go: () => goToSection("queue"), hint: "Show Today's Queue" },
+  "In Progress": { go: () => goToSection("room"), hint: "Show the Vaccination Room" },
+  "Completed Today": { go: () => router.push("/staff/queue-management"), hint: "Open today's record in Queue Management" },
+  "Late Patients": { go: () => goToSection("queue"), hint: "Show Today's Queue" },
+  "Vaccination Room": { go: () => goToSection("room"), hint: "Show the Vaccination Room" },
 };
+const glow = (key) => (highlighted.value === key ? "ring-4 ring-emerald-400/60" : "");
 
 const statusStyle = {
   Waiting: "bg-amber-50 text-amber-700",
@@ -771,10 +793,13 @@ onUnmounted(() => {
       <div class="px-4 md:px-8 py-6 space-y-6">
         <!-- Summary cards -->
         <div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-4">
-          <div
+          <button
             v-for="c in summaryCards"
             :key="c.label"
-            class="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm"
+            type="button"
+            @click="CARD_TARGETS[c.label]?.go()"
+            :title="CARD_TARGETS[c.label]?.hint"
+            class="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm text-left transition hover:border-emerald-300 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
           >
             <div class="flex items-center justify-between">
               <p class="text-[10.5px] font-semibold uppercase tracking-wide text-stone-500">{{ c.label }}</p>
@@ -793,7 +818,7 @@ onUnmounted(() => {
                 {{ c.trend }}
               </span>
             </div>
-          </div>
+          </button>
         </div>
 
         <!-- Quick actions -->
@@ -818,8 +843,8 @@ onUnmounted(() => {
         <!-- Vaccination Room: one room, one vaccinator. Call Next alerts the
              parent's phone (banner + sound + SMS). Placed right under the
              quick actions: it's the Nurse's main work, so no scrolling. -->
-        <div ref="roomSectionRef" class="rounded-2xl border shadow-sm overflow-hidden"
-          :class="nowServing ? 'border-violet-200 bg-violet-50/30' : 'border-emerald-200 bg-white'">
+        <div ref="roomSectionRef" class="rounded-2xl border shadow-sm overflow-hidden scroll-mt-4 transition-shadow"
+          :class="[nowServing ? 'border-violet-200 bg-violet-50/30' : 'border-emerald-200 bg-white', glow('room')]">
           <div class="flex items-center justify-between gap-4 px-5 py-4 border-b" :class="nowServing ? 'border-violet-100' : 'border-stone-200'">
             <div class="flex items-center gap-3">
               <div class="flex h-10 w-10 items-center justify-center rounded-xl" :class="nowServing ? 'bg-violet-100' : 'bg-emerald-50'">
@@ -926,7 +951,7 @@ onUnmounted(() => {
         <!-- Queue + side column -->
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
           <!-- Today's Queue -->
-          <div ref="queueSectionRef" class="lg:col-span-8 rounded-2xl border border-stone-200 bg-white shadow-sm overflow-hidden">
+          <div ref="queueSectionRef" class="lg:col-span-8 rounded-2xl border border-stone-200 bg-white shadow-sm overflow-hidden scroll-mt-4 transition-shadow" :class="glow('queue')">
             
             <div class="flex items-center justify-between px-5 py-4 border-b border-stone-200">
   <div>
@@ -1045,7 +1070,7 @@ onUnmounted(() => {
               </div>
             </div>
 
-            <div class="rounded-2xl border border-stone-200 bg-white p-5 shadow-sm flex-1">
+            <div ref="expectedSectionRef" class="rounded-2xl border border-stone-200 bg-white p-5 shadow-sm flex-1 scroll-mt-4 transition-shadow" :class="glow('expected')">
               <div class="flex items-center justify-between mb-3">
                 <p class="text-[14px] font-semibold">Expected Patients</p>
                 <span class="text-[11px] text-stone-500">{{ expected.length }} today</span>
