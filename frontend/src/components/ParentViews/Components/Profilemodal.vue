@@ -89,44 +89,6 @@
             </div>
           </section>
 
-          <!-- SURVEY MODE ONLY: send this account's reminder to the tester's own email/phone -->
-          <section v-if="surveyMode && children.length">
-            <h3 class="text-[15px] font-bold text-slate-800 mb-3">Try the notifications</h3>
-            <div class="rounded-2xl border border-amber-300 bg-amber-50 p-4">
-              <p class="flex items-start gap-2 text-[13.5px] font-semibold text-amber-900">
-                <Send class="w-4 h-4 mt-0.5 shrink-0" /> Get a reminder on your own phone and email
-              </p>
-              <p class="text-[12.5px] text-amber-900/80 mt-1">
-                Type your email and/or mobile number. You'll get {{ notifyChildName }}'s next vaccine reminder by
-                <b>email</b>, <b>text message</b> and here in the <b>app (🔔)</b>. Your details are used once and are not saved.
-              </p>
-              <div class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <input v-model="notify.email" type="email" placeholder="Your email (optional)" aria-label="Your email"
-                  class="w-full px-3.5 py-2.5 text-[14px] bg-white border border-amber-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400" />
-                <input v-model="notify.phone" type="tel" placeholder="Your mobile no., e.g. 0917 123 4567" aria-label="Your mobile number"
-                  class="w-full px-3.5 py-2.5 text-[14px] bg-white border border-amber-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400" />
-              </div>
-              <select v-if="children.length > 1" v-model="notify.childId" aria-label="Which child's reminder"
-                class="mt-3 w-full px-3.5 py-2.5 text-[14px] bg-white border border-amber-200 rounded-xl">
-                <option v-for="c in children" :key="c.childID" :value="c.childID">Reminder for {{ c.firstName }} {{ c.lastName }}</option>
-              </select>
-              <button @click="sendNotifyMe" :disabled="notify.loading || (!notify.email.trim() && !notify.phone.trim())"
-                class="mt-3 w-full py-3 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-[14px] font-semibold transition-colors">
-                {{ notify.loading ? 'Sending…' : 'Send the reminder to me' }}
-              </button>
-              <p v-if="notify.error" class="mt-2 flex items-start gap-2 text-[13px] text-rose-700" role="alert"><AlertCircle class="w-4 h-4 mt-0.5 shrink-0" /> {{ notify.error }}</p>
-              <ul v-if="notify.result" class="mt-2 text-[13px] font-medium space-y-0.5" role="status">
-                <li class="text-emerald-700">✓ In the app: check the 🔔 bell</li>
-                <li v-if="notify.result.email" :class="notify.result.email === 'sent' ? 'text-emerald-700' : 'text-rose-700'">
-                  {{ notify.result.email === 'sent' ? '✓ Email sent: check your inbox (and Spam)' : '✗ Email: ' + notify.result.email }}
-                </li>
-                <li v-if="notify.result.sms" :class="notify.result.sms === 'sent' ? 'text-emerald-700' : 'text-rose-700'">
-                  {{ notify.result.sms === 'sent' ? '✓ Text sent: it may take a minute to arrive' : '✗ Text: ' + notify.result.sms }}
-                </li>
-              </ul>
-            </div>
-          </section>
-
           <!-- PASSWORD -->
           <section>
             <h3 class="text-[15px] font-bold text-slate-800 mb-3">Password</h3>
@@ -213,7 +175,7 @@ import { API_ORIGIN } from '@/utils/apiBase'
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import axios from 'axios'
 import { format } from 'date-fns'
-import { X, Mail, Phone, MapPin, Info, KeyRound, ChevronDown, CircleCheck, Circle, AlertCircle, Send } from 'lucide-vue-next'
+import { X, Mail, Phone, MapPin, Info, KeyRound, ChevronDown, CircleCheck, Circle, AlertCircle } from 'lucide-vue-next'
 
 const API_BASE_URL = API_ORIGIN
 
@@ -280,36 +242,6 @@ function calculateAge(birthDate) {
 const ageLabel = (birthDate) => {
   const age = calculateAge(birthDate)
   return age === '—' ? 'Age unknown' : `${age} old`
-}
-
-// ── Survey mode only: "Send the reminder to me" ─────────────────────────
-// (POST /api/survey/notify-me; the section is hidden when survey mode is off)
-const surveyMode = ref(false)
-axios.get(`${API_BASE_URL}/api/auth/survey`).then(r => { surveyMode.value = !!r.data?.enabled }).catch(() => {})
-
-const notify = ref({ email: '', phone: '', childId: props.children[0]?.childID ?? null, loading: false, error: '', result: null })
-const notifyChildName = computed(() => {
-  const c = props.children.find(x => x.childID === notify.value.childId) ?? props.children[0]
-  return c ? c.firstName : 'your child'
-})
-
-async function sendNotifyMe() {
-  const n = notify.value
-  n.error = ''
-  n.result = null
-  n.loading = true
-  try {
-    const token = localStorage.getItem('authToken')
-    n.result = (await axios.post(`${API_BASE_URL}/api/survey/notify-me`, {
-      childId: n.childId ?? props.children[0]?.childID,
-      email: n.email.trim() || null,
-      phone: n.phone.trim() || null,
-    }, { headers: token ? { Authorization: `Bearer ${token}` } : {} })).data
-  } catch (err) {
-    n.error = err.response?.data?.message || 'Could not send. Please try again.'
-  } finally {
-    n.loading = false
-  }
 }
 
 // ── Change Password ──────────────────────────────────────────────────────
