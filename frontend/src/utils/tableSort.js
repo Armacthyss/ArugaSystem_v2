@@ -2,7 +2,9 @@ import { ref, computed, unref } from 'vue'
 
 // Click a column heading to sort a table. The first click goes A–Z (or
 // earliest / smallest first), the second reverses it, and the third puts the
-// page's own order back. Blank cells stay at the bottom either way.
+// page's own order back. Blank cells stay at the bottom either way. Statuses
+// sort by meaning, not by spelling: what needs attention comes first, so the
+// second click gives Fully Vaccinated, Partially Vaccinated, Delayed.
 //
 //   const sort = useTableSort(filteredRows, { age: r => r.birthDate }, () => { page.value = 1 })
 //   <SortableTh :sort="sort" column="name">Name</SortableTh>
@@ -12,12 +14,24 @@ import { ref, computed, unref } from 'vue'
 // date or number there, not the text on screen ("Nov 03, 2026", "1 yr 2 mos").
 const collator = new Intl.Collator('en', { numeric: true, sensitivity: 'base' })
 
+// Worst to best, one list per kind of status
+const STATUS_ORDER = [
+  'Delayed', 'Overdue', 'Not served', 'Not checked in', 'Late', 'Waiting', 'Ready', 'Upcoming', 'Scheduled',
+  'Partially Vaccinated', 'In Progress', 'Fully Vaccinated', 'Completed',
+  'Expired', 'Out of Stock', 'Not enough this week', 'Low Stock', 'Low', 'In Stock', 'Good', 'Healthy', 'OK',
+  'Failed', 'Warning', 'Success',
+  'Inactive', 'No Login', 'Active',
+]
+const statusRank = new Map(STATUS_ORDER.map((status, i) => [status.toLowerCase(), i]))
+
 const isBlank = (v) => v === null || v === undefined || v === '' || v === '—' || Number.isNaN(v)
 
 function compareValues(a, b) {
   const x = a instanceof Date ? a.getTime() : a
   const y = b instanceof Date ? b.getTime() : b
   if (typeof x === 'number' && typeof y === 'number') return x - y
+  const rankX = statusRank.get(String(x).toLowerCase()), rankY = statusRank.get(String(y).toLowerCase())
+  if (rankX !== undefined && rankY !== undefined) return rankX - rankY
   return collator.compare(String(x), String(y))
 }
 
