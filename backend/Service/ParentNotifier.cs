@@ -90,8 +90,11 @@ namespace AndroidWebAPI.Services
                 tally.Texts++;
         }
 
+        // a2b2…: the Nov 3, 2026 full implementation's family. It keeps a team
+        // member's real contact details, but only gets in-app notices now.
         public static bool IsDemo(Parent parent) =>
             parent.ParentID.ToString().StartsWith("a2a20000-", StringComparison.OrdinalIgnoreCase) ||
+            parent.ParentID.ToString().StartsWith("a2b20000-", StringComparison.OrdinalIgnoreCase) ||
             MessageSender.IsTestAddress(parent.Email);
 
         // Notifications.Title holds 200 characters and Message 500; a longer

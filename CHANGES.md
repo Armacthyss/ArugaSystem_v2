@@ -17,6 +17,7 @@ Feedback from the full implementation.
 - **Removed "Send to Doctor & Nurses now"** from the Staff / Nurse Inventory page. The Weekly Stock Check already goes out by itself every Wednesday at 8:00 AM, and the Doctor is the one who tells the Nurses what to order (Alert Staff on the Admin Inventory page). Nurses still see the Weekly Stock Check list.
 - **Admin Inventory:** the "Use next" label stays on the batch that expires first, however the table is sorted.
 - **Same page numbers and "Show 10 / 20 / 30 / 50 entries" under every list.** Reports and Admin Inventory only had "Page 1 of 12", and these had no pages at all: Queue Management, Vaccine Management, Operating Hours exceptions, Notification History, Admin Accounts, the parent's Records page and a child's vaccination history in Patient Records. Printing or exporting a report still includes every row. Reports now start at 10 rows per page (was 15).
+- **The full implementation's parent account (Ana Mendoza)** now only gets in-app notices. It keeps its contact details, but no more real texts or emails go out for it.
 - **Fixed:** on Vaccine Schedule, the page controls disappeared when the whole list fit on one page, so after choosing 20 you couldn't go back to 10. They now stay visible.
 
 ---
