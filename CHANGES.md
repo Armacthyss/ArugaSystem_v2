@@ -6,6 +6,21 @@ the beneficiary revision below is on `Aruga-Revision`.
 
 ---
 
+## Sorting, clickable number cards (Nov 4, 2026)
+
+Feedback from the full implementation.
+
+- **Click a column heading to sort.** Every list in the system now works this way: the first click goes A to Z (or earliest / smallest first), the second click reverses it, and the third puts the list back in its usual order. A small arrow shows which column is sorted. Blank cells stay at the bottom. Dates, ages and numbers sort as dates, ages and numbers, not as text, and sorting covers the whole list, not just the page on screen. It is on: Patient Records (parents, children and a child's vaccination history), My Vaccination Records, Vaccine Schedule, Queue Management, the Dashboard queue, Inventory (batches, Inventory Summary and the Weekly Stock Check), Patient Management, User Management, Vaccine Management, Notifications, Operating Hours exceptions, Reports, Audit Logs, Admin Accounts, and the parent's Records page. On a phone, the parent's Records page has a **Sort by** box instead, because the phone view has no column headings. Printing or exporting a report to Excel keeps the sorted order.
+- **Click a number card to list what it counts.** Click Active Parents, Inactive Parents or Pending Accounts and the list shows only those; the card is outlined in green. Click it again (or the Total card) to see everyone. This works on Patient Records, My Vaccination Records, Queue Management, Inventory and its summary, Patient Management, User Management, Vaccine Management, Notifications and Audit Logs. On Admin Inventory, the numbers in the summary strip set the filters and open the batches.
+- **Cards that open a page.** On the Admin / Doctor home, each card opens its page (e.g. Low Stock Vaccines opens Inventory). In Reports, each card opens the report behind that number.
+- **Pending Accounts** now counts parents who were registered without a portal login. It used to look for a status the system never uses, so it always said 0 and the cards didn't add up to Total Parents.
+- **Removed "Send to Doctor & Nurses now"** from the Staff / Nurse Inventory page. The Weekly Stock Check already goes out by itself every Wednesday at 8:00 AM, and the Doctor is the one who tells the Nurses what to order (Alert Staff on the Admin Inventory page). Nurses still see the Weekly Stock Check list.
+- **Admin Inventory:** the "Use next" label stays on the batch that expires first, however the table is sorted.
+- **Same page numbers and "Show 10 / 20 / 30 / 50 entries" under every list.** Reports and Admin Inventory only had "Page 1 of 12", and these had no pages at all: Queue Management, Vaccine Management, Operating Hours exceptions, Notification History, Admin Accounts, the parent's Records page and a child's vaccination history in Patient Records. Printing or exporting a report still includes every row. Reports now start at 10 rows per page (was 15).
+- **Fixed:** on Vaccine Schedule, the page controls disappeared when the whole list fit on one page, so after choosing 20 you couldn't go back to 10. They now stay visible.
+
+---
+
 ## Clearer pages with built-in instructions (Oct 17, 2026)
 
 From the ISO 25010 survey. Respondents said some features were hard to navigate or understand, asked for instructions on screen ("add helper"), and asked for a cleaner, more organized interface. These changes are to the Staff / Nurse and Admin / Doctor portals, plus the parent's **View Profile** window (the rest of the parent portal was already simplified on Oct 9).

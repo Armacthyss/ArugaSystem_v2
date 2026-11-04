@@ -5,6 +5,8 @@ import axios from 'axios'
 import AppSidebar from './Components/AppSidebar.vue'
 import AppHeader from './Components/AppHeader.vue'
 import TablePager from '@/components/Shared/TablePager.vue'
+import SortableTh from '@/components/Shared/SortableTh.vue'
+import { useTableSort, useCardFilter, cardClass } from '@/utils/tableSort'
 import { API_BASE, formatDateTime, toISODate, downloadCSV } from '@/utils/format'
 
 /* -------------------------------- Status meta -------------------------------- */
@@ -79,8 +81,18 @@ const applyFilters = () => {
   fetchLogs()
 }
 
+// Click a number card to list only those logs, a heading to sort
+const isSignIn = (l, status) => l.action === 'Login' && l.status === status
+const { activeCard, pickCard, applyCard } = useCardFilter({
+  loginsOk: (l) => isSignIn(l, 'Success'),
+  loginsFailed: (l) => isSignIn(l, 'Failed'),
+  users: (l) => l.module === 'User Management',
+  patients: (l) => l.module === 'Patient Management',
+  inventory: (l) => l.module === 'Inventory',
+}, () => { page.value = 1 })
+
 const filteredLogs = computed(() =>
-  logs.value.filter((l) => {
+  applyCard(logs.value).filter((l) => {
     const q = searchQuery.value.trim().toLowerCase()
     const matchesSearch =
       !q || l.user.toLowerCase().includes(q) || l.module.toLowerCase().includes(q) ||
@@ -94,8 +106,9 @@ const filteredLogs = computed(() =>
 
 const page = ref(1)
 const pageSize = ref(10)
+const logSort = useTableSort(filteredLogs, { timestamp: (l) => l.rawTimestamp }, () => { page.value = 1 })
 const pagedLogs = computed(() =>
-  filteredLogs.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value))
+  logSort.sortedRows.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value))
 watch(() => [searchQuery.value, appliedFilters.role, appliedFilters.module, appliedFilters.action, logs.value], () => { page.value = 1 })
 
 /* -------------------------------- Summary ---------------------------------- */
@@ -142,48 +155,48 @@ const timeline = computed(() => logs.value.slice(0, 6))
       <main class="p-6 space-y-6">
         <!-- Summary cards -->
         <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-          <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+          <button type="button" @click="pickCard('all')" class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm" :class="cardClass(activeCard === 'all')">
             <div class="flex items-start justify-between gap-2">
               <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Total Logs · {{ appliedFilters.dateRange }}</p>
               <div class="bg-teal-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0"><ClipboardList class="w-4 h-4 text-teal-700" /></div>
             </div>
             <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.total }}</p>
-          </div>
-          <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+          </button>
+          <button type="button" @click="pickCard('loginsOk')" class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm" :class="cardClass(activeCard === 'loginsOk')">
             <div class="flex items-start justify-between gap-2">
               <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Successful Logins</p>
               <div class="bg-emerald-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0"><CircleCheck class="w-4 h-4 text-emerald-700" /></div>
             </div>
             <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.successfulLogins }}</p>
-          </div>
-          <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+          </button>
+          <button type="button" @click="pickCard('loginsFailed')" class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm" :class="cardClass(activeCard === 'loginsFailed')">
             <div class="flex items-start justify-between gap-2">
               <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Failed Logins</p>
               <div class="bg-rose-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0"><ShieldX class="w-4 h-4 text-rose-700" /></div>
             </div>
             <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.failedLogins }}</p>
-          </div>
-          <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+          </button>
+          <button type="button" @click="pickCard('users')" class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm" :class="cardClass(activeCard === 'users')">
             <div class="flex items-start justify-between gap-2">
               <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">User Account Changes</p>
               <div class="bg-sky-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0"><Users class="w-4 h-4 text-sky-700" /></div>
             </div>
             <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.userChanges }}</p>
-          </div>
-          <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+          </button>
+          <button type="button" @click="pickCard('patients')" class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm" :class="cardClass(activeCard === 'patients')">
             <div class="flex items-start justify-between gap-2">
               <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Patient Record Updates</p>
               <div class="bg-amber-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0"><Baby class="w-4 h-4 text-amber-700" /></div>
             </div>
             <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.patientUpdates }}</p>
-          </div>
-          <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+          </button>
+          <button type="button" @click="pickCard('inventory')" class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm" :class="cardClass(activeCard === 'inventory')">
             <div class="flex items-start justify-between gap-2">
               <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Inventory Transactions</p>
               <div class="bg-violet-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0"><Package class="w-4 h-4 text-violet-700" /></div>
             </div>
             <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.inventoryTx }}</p>
-          </div>
+          </button>
         </section>
 
         <!-- Toolbar -->
@@ -256,14 +269,14 @@ const timeline = computed(() => logs.value.slice(0, 6))
             <table class="w-full text-sm">
               <thead>
                 <tr class="border-b border-slate-200 bg-slate-50/60">
-                  <th class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-5 py-3">Date &amp; Time</th>
-                  <th class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">User</th>
-                  <th class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Role</th>
-                  <th class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Module</th>
-                  <th class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Action</th>
-                  <th class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Affected Record</th>
-                  <th class="hidden 2xl:table-cell text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">IP Address</th>
-                  <th class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Status</th>
+                  <SortableTh :sort="logSort" column="timestamp" class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-5 py-3">Date &amp; Time</SortableTh>
+                  <SortableTh :sort="logSort" column="user" class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">User</SortableTh>
+                  <SortableTh :sort="logSort" column="role" class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Role</SortableTh>
+                  <SortableTh :sort="logSort" column="module" class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Module</SortableTh>
+                  <SortableTh :sort="logSort" column="action" class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Action</SortableTh>
+                  <SortableTh :sort="logSort" column="affectedRecord" class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Affected Record</SortableTh>
+                  <SortableTh :sort="logSort" column="ipAddress" class="hidden 2xl:table-cell text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">IP Address</SortableTh>
+                  <SortableTh :sort="logSort" column="status" class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Status</SortableTh>
                   <th class="text-right font-semibold text-slate-500 text-xs uppercase tracking-wide px-5 py-3">Actions</th>
                 </tr>
               </thead>

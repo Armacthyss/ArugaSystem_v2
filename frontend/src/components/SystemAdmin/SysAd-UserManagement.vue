@@ -12,6 +12,8 @@ import { barangayChoices, BARANGAY_HINT } from '@/utils/barangays'
 import { askConfirm } from '@/utils/dialog'
 import { phMobileError } from '@/utils/phone'
 import TablePager from '@/components/Shared/TablePager.vue'
+import SortableTh from '@/components/Shared/SortableTh.vue'
+import { useTableSort, useCardFilter, cardClass } from '@/utils/tableSort'
 
 const API_BASE_URL = `${API_ORIGIN}/api`
 
@@ -69,7 +71,9 @@ function mapAccount(a) {
     status: a.status, // "Active" | "Inactive" from the API
     mustChangePassword: !!a.mustChangePassword,
     lastLogin: formatDate(a.lastLogin),
+    lastLoginRaw: a.lastLogin,
     created: formatDate(a.createdAt),
+    createdRaw: a.createdAt,
   }
 }
 
@@ -99,11 +103,18 @@ const statusFilter = ref('All')
 const page = ref(1)
 const pageSize = ref(10)
 const pagedUsers = computed(() =>
-  filteredUsers.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value))
+  userSort.sortedRows.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value))
 watch([searchQuery, roleFilter, statusFilter], () => { page.value = 1 })
 
+// Click a number card to list only those users, a heading to sort
+const { activeCard, pickCard, applyCard } = useCardFilter({
+  active: (u) => u.status === 'Active',
+  inactive: (u) => u.status === 'Inactive',
+  password: (u) => u.mustChangePassword,
+}, () => { page.value = 1 })
+
 const filteredUsers = computed(() =>
-  users.value.filter((u) => {
+  applyCard(users.value).filter((u) => {
     const q = searchQuery.value.trim().toLowerCase()
     const matchesSearch =
       !q ||
@@ -115,6 +126,12 @@ const filteredUsers = computed(() =>
     return matchesSearch && matchesRole && matchesStatus
   })
 )
+const userSort = useTableSort(filteredUsers, {
+  name: (u) => `${u.firstName} ${u.lastName}`,
+  level: (u) => userLevel(u.role),
+  lastLogin: (u) => u.lastLoginRaw,
+  created: (u) => u.createdRaw,
+}, () => { page.value = 1 })
 
 /* -------------------------------- Summary ---------------------------------- */
 const summary = computed(() => ({
@@ -428,34 +445,34 @@ texted = !!response.data.texted
 
         <!-- Summary cards -->
         <section class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-          <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+          <button type="button" @click="pickCard('all')" class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm" :class="cardClass(activeCard === 'all')">
             <div class="flex items-start justify-between gap-2">
               <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Total Users</p>
               <div class="bg-teal-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0"><Users class="w-4 h-4 text-teal-700" /></div>
             </div>
             <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.total }}</p>
-          </div>
-          <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+          </button>
+          <button type="button" @click="pickCard('active')" class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm" :class="cardClass(activeCard === 'active')">
             <div class="flex items-start justify-between gap-2">
               <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Active Users</p>
               <div class="bg-emerald-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0"><CircleCheck class="w-4 h-4 text-emerald-700" /></div>
             </div>
             <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.active }}</p>
-          </div>
-          <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+          </button>
+          <button type="button" @click="pickCard('inactive')" class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm" :class="cardClass(activeCard === 'inactive')">
             <div class="flex items-start justify-between gap-2">
               <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Inactive Users</p>
               <div class="bg-slate-100 w-8 h-8 rounded-lg flex items-center justify-center shrink-0"><UserX class="w-4 h-4 text-slate-500" /></div>
             </div>
             <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.inactive }}</p>
-          </div>
-          <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+          </button>
+          <button type="button" @click="pickCard('password')" class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm" :class="cardClass(activeCard === 'password')">
             <div class="flex items-start justify-between gap-2">
               <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Awaiting Password Change</p>
               <div class="bg-amber-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0"><KeyRound class="w-4 h-4 text-amber-700" /></div>
             </div>
             <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.pendingPasswordChange }}</p>
-          </div>
+          </button>
         </section>
 
         <!-- Toolbar -->
@@ -511,12 +528,12 @@ texted = !!response.data.texted
               <thead>
                 <tr class="border-b border-slate-200 bg-slate-50/60">
                   <th class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-5 py-3">Profile</th>
-                  <th class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Full Name</th>
-                  <th class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Username</th>
-                  <th class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Role</th>
-                  <th class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Status</th>
-                  <th class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Last Login</th>
-                  <th class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Created Date</th>
+                  <SortableTh :sort="userSort" column="name" class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Full Name</SortableTh>
+                  <SortableTh :sort="userSort" column="username" class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Username</SortableTh>
+                  <SortableTh :sort="userSort" column="level" class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Role</SortableTh>
+                  <SortableTh :sort="userSort" column="status" class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Status</SortableTh>
+                  <SortableTh :sort="userSort" column="lastLogin" class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Last Login</SortableTh>
+                  <SortableTh :sort="userSort" column="created" class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Created Date</SortableTh>
                   <th class="text-right font-semibold text-slate-500 text-xs uppercase tracking-wide px-5 py-3">Actions</th>
                 </tr>
               </thead>

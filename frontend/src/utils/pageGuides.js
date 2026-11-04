@@ -31,7 +31,7 @@ const GUIDES = {
   '/staff/patient-records': {
     subtitle: 'Find, register and update parents and their children.',
     steps: [
-      { title: 'Find', text: 'Pick Parents or Children, then search by name, Family No. or barangay.' },
+      { title: 'Find', text: 'Pick Parents or Children, then search by name, Family No. or barangay. Click a number card to list only those, or a column heading to sort.' },
       { title: 'View or edit', text: 'Use the eye to see details and the pencil to edit.' },
       { title: 'More actions', text: 'Use ⋯ to register or link a child, add old vaccination records, or reset a login.' },
       { title: 'New family', text: 'Press Register Child. Parent not on file yet? Use Register a new parent inside the same form.' },
@@ -41,7 +41,7 @@ const GUIDES = {
     subtitle: 'Every dose you have given, with its batch number and remarks.',
     steps: [
       { title: 'Search', text: 'Type a child’s name, a vaccine or a batch number.' },
-      { title: 'Filter', text: 'Choose a vaccine or a date range to narrow the list.' },
+      { title: 'Filter', text: 'Choose a vaccine or a date range, or click a number card. Click a column heading to sort.' },
       { title: 'Details', text: 'Use the eye on a row to read the full remarks.' },
     ],
   },
@@ -59,7 +59,7 @@ const GUIDES = {
       { title: 'Check the summary', text: 'Low Stock or Expiring numbers in red need attention first.' },
       { title: 'New stock arrived', text: 'Press Add New Batch and type the lot number, quantity and dates from the box.' },
       { title: 'Broken or spoiled doses?', text: 'Press Adjust on that batch, say how many and why. A recount works the same way.' },
-      { title: 'Weekly stock check', text: 'Every Wednesday the system suggests how much to order. Call the pharmacy the same day.' },
+      { title: 'Weekly stock check', text: 'Every Wednesday the system sends this list to the Doctor and Nurses by itself. The Doctor tells you what to order.' },
     ],
   },
   '/staff/calendar': {
@@ -77,6 +77,7 @@ const GUIDES = {
       { title: 'Search', text: 'Find a child, parent or the person who brought them.' },
       { title: 'Details', text: 'Use the eye on a row to see the children and times.' },
     ],
+    tip: 'Click a number card to list only those, or a column heading to sort.',
   },
   '/staff/checkin-qr': {
     subtitle: "Print today's code for the entrance. Parents scan it to get a queue number.",
@@ -96,7 +97,7 @@ const GUIDES = {
   '/admin/home': {
     subtitle: "A summary of the whole clinic and what needs attention.",
     steps: [
-      { title: 'Read the cards', text: 'Totals for users, patients, this month’s vaccinations and low stock.' },
+      { title: 'Read the cards', text: 'Totals for users, patients, this month’s vaccinations and low stock. Click one to open that page.' },
       { title: 'Needs attention', text: 'The Notifications box lists low stock, expiring batches and overdue children.' },
       { title: 'Quick Actions', text: 'Shortcuts on the right to add a user, patient or vaccine.' },
     ],
@@ -108,6 +109,7 @@ const GUIDES = {
       { title: 'Find someone', text: 'Search by name, username or email, or filter by role and status.' },
       { title: 'Manage', text: 'Use ⋮ on a row to view, edit, reset a password or deactivate.' },
     ],
+    tip: 'Click a number card to list only those, or a column heading to sort.',
   },
   '/admin/patients': {
     subtitle: "Every registered child and how far along their vaccinations are.",
@@ -116,6 +118,7 @@ const GUIDES = {
       { title: 'See what’s missing', text: 'Hover over (or tap) the progress bar to list the vaccines not yet given.' },
       { title: 'Manage', text: 'Use ⋮ on a row to view, edit, print the vaccination card or link a guardian.' },
     ],
+    tip: 'Click a number card to list only those, or a column heading to sort.',
   },
   '/admin/vaccines': {
     subtitle: 'The vaccines the clinic gives and the days between doses.',
@@ -124,6 +127,7 @@ const GUIDES = {
       { title: 'Add or edit', text: 'Press Add Vaccine, or use ⋮ on a row to edit it.' },
       { title: 'Stop using one', text: 'Deactivate a vaccine instead of deleting it, so past records stay.' },
     ],
+    tip: 'Click a number card to list only those, or a column heading to sort.',
   },
   '/admin/inventory': {
     subtitle: 'Vaccine stock by batch: what is on hand, low or expiring.',
@@ -133,6 +137,7 @@ const GUIDES = {
       { title: 'See batches', text: 'Click a vaccine to open its batches. Use ⋮ to edit one, adjust its stock (broken, spoiled, recount) or deactivate it.' },
       { title: 'Tell the Nurses', text: 'Press Alert Staff to tell every Nurse what to order.' },
     ],
+    tip: 'Click a number in the summary to list those batches, or a column heading to sort.',
   },
   '/admin/notifications': {
     subtitle: 'Reminders and announcements sent to parents.',
@@ -141,6 +146,7 @@ const GUIDES = {
       { title: 'Announce', text: 'Press Create Announcement to message every parent.' },
       { title: 'Reminders', text: 'They go out by themselves every morning at 8:00 AM. Reminder Schedule shows when each one is sent.' },
     ],
+    tip: 'Click a number card to list only those, or a column heading to sort.',
   },
   '/admin/operating-hours': {
     subtitle: 'Vaccination days and hours, plus closures and extra days.',
@@ -157,6 +163,7 @@ const GUIDES = {
       { title: 'Set filters', text: 'Choose the period, barangay or vaccine, then press Refresh Report.' },
       { title: 'Save it', text: 'Use Print, Export PDF or Export Excel at the top of the report.' },
     ],
+    tip: 'Click a number card to open its report, or a column heading to sort it.',
   },
 }
 

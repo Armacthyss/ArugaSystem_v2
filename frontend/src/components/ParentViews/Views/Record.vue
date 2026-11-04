@@ -39,9 +39,18 @@
         <div v-else-if="filteredRecords.length === 0" class="py-16 text-center text-slate-400"><p class="mb-2 text-2xl">📋</p><p class="text-sm font-bold">No {{ recordFilter === 'All' ? '' : recordFilter.toLowerCase() + ' ' }}vaccination records found.</p></div>
 
         <template v-else>
-          <!-- Phone: one card per dose -->
+          <!-- Phone: one card per dose (no headings to click, so a Sort by box) -->
+          <div class="flex items-center gap-3 border-b border-slate-100 px-5 py-3 sm:hidden">
+            <label for="record-sort" class="shrink-0 text-xs font-semibold text-slate-500">Sort by</label>
+            <select id="record-sort" v-model="phoneSort" class="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-700">
+              <option value="">Earliest first</option>
+              <option value="date:desc">Latest first</option>
+              <option value="vaccineName:asc">Vaccine name</option>
+              <option value="status:asc">Status</option>
+            </select>
+          </div>
           <ul class="divide-y divide-slate-100 sm:hidden">
-            <li v-for="(rec, i) in filteredRecords" :key="'m' + i" class="px-5 py-4">
+            <li v-for="(rec, i) in pagedRecords" :key="'m' + i" class="px-5 py-4">
               <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0">
                   <p class="font-bold text-slate-900">{{ rec.vaccineName }} · Dose {{ rec.doseNumber }}</p>
@@ -61,16 +70,16 @@
           <div class="hidden overflow-x-auto sm:block">
             <table class="w-full border-collapse text-left text-sm">
               <thead><tr class="bg-slate-50 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                <th class="px-6 py-3">Date</th>
-                <th class="px-6 py-3">Vaccine</th>
-                <th class="px-6 py-3">Dose</th>
-                <th class="px-6 py-3">Status</th>
-                <th class="px-6 py-3">Site</th>
-                <th class="px-6 py-3">Vaccinated by</th>
-                <th class="px-6 py-3">Lot #</th>
+                <SortableTh :sort="recordSort" column="date" class="px-6 py-3">Date</SortableTh>
+                <SortableTh :sort="recordSort" column="vaccineName" class="px-6 py-3">Vaccine</SortableTh>
+                <SortableTh :sort="recordSort" column="doseNumber" class="px-6 py-3">Dose</SortableTh>
+                <SortableTh :sort="recordSort" column="status" class="px-6 py-3">Status</SortableTh>
+                <SortableTh :sort="recordSort" column="injectionSite" class="px-6 py-3">Site</SortableTh>
+                <SortableTh :sort="recordSort" column="administeredByName" class="px-6 py-3">Vaccinated by</SortableTh>
+                <SortableTh :sort="recordSort" column="lotNumber" class="px-6 py-3">Lot #</SortableTh>
               </tr></thead>
               <tbody>
-                <tr v-for="(rec, i) in filteredRecords" :key="i" class="border-t border-slate-100 transition-colors hover:bg-slate-50">
+                <tr v-for="(rec, i) in pagedRecords" :key="i" class="border-t border-slate-100 transition-colors hover:bg-slate-50">
                   <td class="whitespace-nowrap px-6 py-4 text-slate-500">{{ recordDate(rec) }}</td>
                   <td class="px-6 py-4 font-bold text-slate-900">{{ rec.vaccineName }}</td>
                   <td class="whitespace-nowrap px-6 py-4 text-slate-500">Dose {{ rec.doseNumber }}</td>
@@ -82,6 +91,7 @@
               </tbody>
             </table>
           </div>
+          <TablePager :total="filteredRecords.length" v-model:page="recordPage" v-model:page-size="recordPageSize" />
         </template>
 
         <div class="flex flex-col gap-3 border-t border-slate-100 bg-slate-50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8 sm:py-5">
@@ -97,7 +107,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { format } from 'date-fns'
 import HeaderNav from '../Components/Headernav.vue'
@@ -109,6 +119,9 @@ import NotificationPanel from '../Components/Notificationpanel.vue'
 import { getAccount, logout as authLogout } from '@/utils/auth'
 import api from '../Composables/api.js'
 import { fetchChildSchedule, buildSchedule } from '../Composables/childSchedule.js'
+import SortableTh from '@/components/Shared/SortableTh.vue'
+import TablePager from '@/components/Shared/TablePager.vue'
+import { useTableSort } from '@/utils/tableSort'
 
 const router = useRouter()
 
@@ -163,6 +176,18 @@ const filteredRecords = computed(() => {
   if (recordFilter.value === 'All') return vaccinationHistory.value
   return vaccinationHistory.value.filter(r => r.status === recordFilter.value)
 })
+const recordSort = useTableSort(filteredRecords, {
+  date: (r) => new Date(r.dateAdministered || r.scheduledDate),
+}, () => { recordPage.value = 1 })
+const recordPage = ref(1)
+const recordPageSize = ref(10)
+const pagedRecords = computed(() =>
+  recordSort.sortedRows.value.slice((recordPage.value - 1) * recordPageSize.value, recordPage.value * recordPageSize.value))
+watch(recordFilter, () => { recordPage.value = 1 })
+const phoneSort = computed({
+  get: () => (recordSort.sortKey.value ? `${recordSort.sortKey.value}:${recordSort.sortDir.value}` : ''),
+  set: (value) => recordSort.setSort(...value.split(':')),
+})
 
 // ── Actions ────────────────────────────────────────────────────────────────
 function handleLogout() {
@@ -173,6 +198,7 @@ function handleLogout() {
 function handleSelectChild(child) {
   selectedChild.value = child
   localStorage.setItem('selectedParentChild', JSON.stringify(child))
+  recordPage.value = 1
   fetchRecords(child.childID)
 }
 

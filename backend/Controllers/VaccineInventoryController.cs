@@ -162,25 +162,6 @@ namespace AndroidWebAPI.Controllers
             });
         }
 
-        // POST: api/VaccineInventory/stock-check/send
-        // Sends the check to every Doctor and Nurse now
-        // (it also goes out by itself every check day at 8:00 AM).
-        [Microsoft.AspNetCore.Authorization.Authorize(Roles = AndroidWebAPI.Services.Roles.StaffOrAdmin)]
-        [HttpPost("stock-check/send")]
-        public async Task<IActionResult> SendStockCheck(
-            [FromServices] AppDbContext context,
-            [FromServices] AndroidWebAPI.Services.MessageSender sender)
-        {
-            int sent = await AndroidWebAPI.Services.StockCheck.SendAsync(context, sender);
-            return Ok(new
-            {
-                sent,
-                message = sent == 0
-                    ? "Today's stock check was already sent."
-                    : $"Stock check sent to {sent} staff/admin account(s).",
-            });
-        }
-
         // POST: api/VaccineInventory/alert-staff   { message }
         // The Admin / Doctor tells the Staff / Nurses to request or order
         // stock. Goes to every active Nurse's bell (low-stock alerts reach

@@ -16,6 +16,9 @@ import PrivacyConsentCheckbox from "@/components/Shared/PrivacyConsentCheckbox.v
 import { barangayChoices, barangayLabel, isServedBarangay, BARANGAY_HINT } from "@/utils/barangays";
 import { toISODate, ageParts } from "@/utils/format";
 import { showAlert } from "@/utils/dialog";
+import SortableTh from "@/components/Shared/SortableTh.vue";
+import TablePager from "@/components/Shared/TablePager.vue"
+import { useTableSort, useCardFilter, cardClass, pageList } from "@/utils/tableSort";
 import { phMobileError } from "@/utils/phone";
 
 const route = useRoute();
@@ -309,28 +312,41 @@ async function setNotifyMode(child, mode) {
 /* ============================= Summary cards (per tab) ============================= */
 const count = (arr, pred) => arr.filter(pred).length;
 const parentSummary = computed(() => [
-  { label:"Total Parents", value:parents.value.length, tint:"text-emerald-700", tintBg:"bg-emerald-50", icon:Users },
-  { label:"Active Parents", value:count(parents.value,p=>p.status==="Active"), tint:"text-emerald-700", tintBg:"bg-emerald-50", icon:Check },
-  { label:"Inactive Parents", value:count(parents.value,p=>p.status==="Inactive"), tint:"text-stone-500", tintBg:"bg-stone-100", icon:Ban },
-  { label:"Pending Accounts", value:count(parents.value,p=>p.status==="Pending"), tint:"text-amber-700", tintBg:"bg-amber-50", icon:UserPlus },
+  { key:"allParents", label:"Total Parents", value:parents.value.length, tint:"text-emerald-700", tintBg:"bg-emerald-50", icon:Users },
+  { key:"active", label:"Active Parents", value:count(parents.value,p=>p.status==="Active"), tint:"text-emerald-700", tintBg:"bg-emerald-50", icon:Check },
+  { key:"inactive", label:"Inactive Parents", value:count(parents.value,p=>p.status==="Inactive"), tint:"text-stone-500", tintBg:"bg-stone-100", icon:Ban },
+  { key:"pending", label:"Pending Accounts", value:count(parents.value,p=>p.status==="No Login"), tint:"text-amber-700", tintBg:"bg-amber-50", icon:UserPlus },
 ]);
 const childSummary = computed(() => [
-  { label:"Total Children", value:children.value.length, tint:"text-emerald-700", tintBg:"bg-emerald-50", icon:Baby },
-  { label:"Fully Vaccinated", value:count(children.value,c=>c.vaccStatus==="Fully Vaccinated"), tint:"text-emerald-700", tintBg:"bg-emerald-50", icon:Syringe },
-  { label:"In Progress", value:count(children.value,c=>c.vaccStatus==="In Progress"), tint:"text-amber-700", tintBg:"bg-amber-50", icon:Syringe },
-  { label:"Delayed", value:count(children.value,c=>c.vaccStatus==="Delayed"), tint:"text-rose-700", tintBg:"bg-rose-50", icon:AlertTriangle },
+  { key:"allChildren", label:"Total Children", value:children.value.length, tint:"text-emerald-700", tintBg:"bg-emerald-50", icon:Baby },
+  { key:"full", label:"Fully Vaccinated", value:count(children.value,c=>c.vaccStatus==="Fully Vaccinated"), tint:"text-emerald-700", tintBg:"bg-emerald-50", icon:Syringe },
+  { key:"progress", label:"In Progress", value:count(children.value,c=>c.vaccStatus==="In Progress"), tint:"text-amber-700", tintBg:"bg-amber-50", icon:Syringe },
+  { key:"delayed", label:"Delayed", value:count(children.value,c=>c.vaccStatus==="Delayed"), tint:"text-rose-700", tintBg:"bg-rose-50", icon:AlertTriangle },
 ]);
+
+// Click a card to list only what it counts. Pending = registered, no portal login yet.
+const { activeCard, pickCard, applyCard } = useCardFilter({
+  active: p=>p.status==="Active",
+  inactive: p=>p.status==="Inactive",
+  pending: p=>p.status==="No Login",
+  full: c=>c.vaccStatus==="Fully Vaccinated",
+  progress: c=>c.vaccStatus==="In Progress",
+  delayed: c=>c.vaccStatus==="Delayed",
+}, () => { currentPage.value = 1; });
+watch(activeTab, () => { activeCard.value = ""; });
 
 /* ============================= Search ============================= */
 const searchQuery = ref("");
 const searchTerm = () => searchQuery.value.trim().toLowerCase();
 const filteredParents = computed(() => {
   const q = searchTerm();
-  return q ? parents.value.filter(p=>p.name.toLowerCase().includes(q)||p.id.toLowerCase().includes(q)||(p.contact||"").includes(q)||(p.email||"").toLowerCase().includes(q)||String(p.barangay||"").toLowerCase().includes(q)) : parents.value;
+  const list = applyCard(parents.value);
+  return q ? list.filter(p=>p.name.toLowerCase().includes(q)||p.id.toLowerCase().includes(q)||(p.contact||"").includes(q)||(p.email||"").toLowerCase().includes(q)||String(p.barangay||"").toLowerCase().includes(q)) : list;
 });
 const filteredChildren = computed(() => {
   const q = searchTerm();
-  return q ? children.value.filter(c=>c.name.toLowerCase().includes(q)||c.familyNo.toLowerCase().includes(q)||String(c.barangay).toLowerCase().includes(q)||c.id.toLowerCase().includes(q)) : children.value;
+  const list = applyCard(children.value);
+  return q ? list.filter(c=>c.name.toLowerCase().includes(q)||c.familyNo.toLowerCase().includes(q)||String(c.barangay).toLowerCase().includes(q)||c.id.toLowerCase().includes(q)) : list;
 });
 
 /* ============================= Pagination ============================= */
@@ -347,13 +363,22 @@ const totalPages = computed(() => Math.max(1, Math.ceil(activeFilteredCount.valu
 // the user on a page number that no longer has any rows.
 watch([searchQuery, activeTab, pageSize], () => { currentPage.value = 1; });
 
+// Click a column heading to sort (see utils/tableSort.js)
+const parentSort = useTableSort(filteredParents, {
+  childrenCount: (p) => relationshipsOfParent(p).length,
+}, () => { currentPage.value = 1; });
+const childSort = useTableSort(filteredChildren, {
+  age: (c) => -new Date(c.birthDateRaw),   // youngest first
+  linked: (c) => linkedAccountsOf(c).length,
+}, () => { currentPage.value = 1; });
+
 const paginatedParents = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value;
-  return filteredParents.value.slice(start, start + pageSize.value);
+  return parentSort.sortedRows.value.slice(start, start + pageSize.value);
 });
 const paginatedChildren = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value;
-  return filteredChildren.value.slice(start, start + pageSize.value);
+  return childSort.sortedRows.value.slice(start, start + pageSize.value);
 });
 
 const paginationRangeLabel = computed(() => {
@@ -363,27 +388,7 @@ const paginationRangeLabel = computed(() => {
   return `${start}–${end} of ${activeFilteredCount.value}`;
 });
 
-// Compact page list with ellipses, e.g. [1, 2, '...', 8, 9] — always keeps
-// first, last, and a small window around the current page.
-function getPageNumbers(total, current) {
-  const delta = 1;
-  const range = [];
-  for (let i = 1; i <= total; i++) {
-    if (i === 1 || i === total || (i >= current - delta && i <= current + delta)) range.push(i);
-  }
-  const withDots = [];
-  let last = null;
-  for (const i of range) {
-    if (last !== null) {
-      if (i - last === 2) withDots.push(last + 1);
-      else if (i - last > 2) withDots.push("...");
-    }
-    withDots.push(i);
-    last = i;
-  }
-  return withDots;
-}
-const pageNumbers = computed(() => getPageNumbers(totalPages.value, currentPage.value));
+const pageNumbers = computed(() => pageList(currentPage.value, totalPages.value));
 
 function goToPage(n) {
   if (n === "...") return;
@@ -548,6 +553,14 @@ const removeConfirmId = ref(null); // relationship id currently showing the "rem
 const vaccinationRecordsByChild = ref({}); // { [childId]: VaccinationRecordDTO[] }
 const vaccinationLoading = ref(false);
 const selectedChildVaccinations = computed(() => vaccinationRecordsByChild.value[selectedChild.value?.id] || []);
+const historySort = useTableSort(selectedChildVaccinations, {
+  vaccine: (v) => v.vaccineName || vaccineNameById(v.vaccineID),
+}, () => { historyPage.value = 1; });
+const historyPage = ref(1);
+const historyPageSize = ref(10);
+const pagedHistory = computed(() =>
+  historySort.sortedRows.value.slice((historyPage.value - 1) * historyPageSize.value, historyPage.value * historyPageSize.value));
+watch(() => selectedChild.value?.id, () => { historyPage.value = 1; });
 
 function formatVaccDate(iso) {
   if (!iso) return "—";
@@ -1268,13 +1281,15 @@ async function submitChildRegister() {
       <div class="px-4 md:px-8 py-6 space-y-6">
         <!-- Summary cards -->
         <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <div v-for="c in (activeTab === 'parents' ? parentSummary : childSummary)" :key="c.label" class="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
+          <button v-for="c in (activeTab === 'parents' ? parentSummary : childSummary)" :key="c.key" type="button" @click="pickCard(c.key)"
+            :title="c.key.startsWith('all') ? 'Show everyone' : `Show only: ${c.label}`"
+            class="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm" :class="cardClass(activeCard === c.key)">
             <div class="flex items-center justify-between">
               <p class="text-[10.5px] font-semibold uppercase tracking-wide text-stone-500 leading-tight">{{ c.label }}</p>
               <div class="flex h-7 w-7 items-center justify-center rounded-lg shrink-0" :class="c.tintBg"><component :is="c.icon" :size="14" :class="c.tint" /></div>
             </div>
             <p class="text-[24px] font-bold mt-2">{{ c.value }}</p>
-          </div>
+          </button>
         </div>
 
         <!-- Tabs + toolbar -->
@@ -1296,14 +1311,18 @@ async function submitChildRegister() {
 
         <!-- ============== PARENTS TABLE (columns driven by parentColumns) ============== -->
         <div v-if="activeTab === 'parents'" class="rounded-2xl border border-stone-200 bg-white shadow-sm overflow-visible">
-          <div class="flex items-center justify-between px-5 py-4 border-b border-stone-200"><p class="text-[14px] font-semibold">Parent Directory</p><span class="text-[12px] text-stone-500">{{ filteredParents.length }} parents</span></div>
+          <div class="flex items-center justify-between px-5 py-4 border-b border-stone-200"><p class="text-[14px] font-semibold">Parent Directory</p><span class="text-[12px] text-stone-500">{{ filteredParents.length }} {{ filteredParents.length === 1 ? 'parent' : 'parents' }}</span></div>
           <div class="overflow-x-auto">
             <table class="w-full text-[13px]">
               <thead><tr class="bg-stone-50">
-                <th v-for="col in parentColumns" :key="col.key" class="text-left font-semibold px-3 py-3 whitespace-nowrap text-[11px] uppercase tracking-wide text-stone-500">{{ col.label }}</th>
+                <template v-for="col in parentColumns" :key="col.key">
+                  <SortableTh v-if="col.label" :sort="parentSort" :column="col.key" class="text-left font-semibold px-3 py-3 whitespace-nowrap text-[11px] uppercase tracking-wide text-stone-500">{{ col.label }}</SortableTh>
+                  <th v-else></th>
+                </template>
                 <th></th>
               </tr></thead>
               <tbody>
+                <tr v-if="filteredParents.length === 0" class="border-t border-stone-200"><td :colspan="parentColumns.length + 1" class="px-5 py-10 text-center text-[12.5px] text-stone-400">No parents to show.</td></tr>
                 <tr v-for="p in paginatedParents" :key="p.id" class="border-t border-stone-200">
                   <td v-for="col in parentColumns" :key="col.key" class="whitespace-nowrap" :class="[col.muted && 'text-stone-500', col.badge==='avatar' ? 'pl-5 pr-2 py-3' : 'px-3 py-3']">
                     <Avatar v-if="col.badge==='avatar'" :text="p.initials" size="sm" />
@@ -1338,14 +1357,18 @@ async function submitChildRegister() {
 
         <!-- ============== CHILDREN TABLE (columns driven by childColumns) ============== -->
         <div v-else class="rounded-2xl border border-stone-200 bg-white shadow-sm overflow-visible">
-          <div class="flex items-center justify-between px-5 py-4 border-b border-stone-200"><p class="text-[14px] font-semibold">Child Directory</p><span class="text-[12px] text-stone-500">{{ filteredChildren.length }} children</span></div>
+          <div class="flex items-center justify-between px-5 py-4 border-b border-stone-200"><p class="text-[14px] font-semibold">Child Directory</p><span class="text-[12px] text-stone-500">{{ filteredChildren.length }} {{ filteredChildren.length === 1 ? 'child' : 'children' }}</span></div>
           <div class="overflow-x-auto">
             <table class="w-full text-[13px]">
               <thead><tr class="bg-stone-50">
-                <th v-for="col in childColumns" :key="col.key" class="text-left font-semibold px-3 py-3 whitespace-nowrap text-[11px] uppercase tracking-wide text-stone-500">{{ col.label }}</th>
+                <template v-for="col in childColumns" :key="col.key">
+                  <SortableTh v-if="col.label" :sort="childSort" :column="col.key" class="text-left font-semibold px-3 py-3 whitespace-nowrap text-[11px] uppercase tracking-wide text-stone-500">{{ col.label }}</SortableTh>
+                  <th v-else></th>
+                </template>
                 <th></th>
               </tr></thead>
               <tbody>
+                <tr v-if="filteredChildren.length === 0" class="border-t border-stone-200"><td :colspan="childColumns.length + 1" class="px-5 py-10 text-center text-[12.5px] text-stone-400">No children to show.</td></tr>
                 <tr v-for="ch in paginatedChildren" :key="ch.id" class="border-t border-stone-200">
                   <td v-for="col in childColumns" :key="col.key" class="whitespace-nowrap" :class="[col.muted && 'text-stone-500', col.badge==='childIcon' ? 'pl-5 pr-2 py-3' : 'px-3 py-3']">
                     <div v-if="col.badge==='childIcon'" class="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-50"><Baby :size="16" class="text-emerald-700" /></div>
@@ -1396,7 +1419,7 @@ async function submitChildRegister() {
           </select>
           <span>entries · {{ paginationRangeLabel }}</span>
         </div>
-        <div class="flex items-center gap-1">
+        <div class="flex flex-wrap items-center gap-1">
           <button @click="goToPage(currentPage - 1)" :disabled="currentPage === 1" class="px-2.5 py-1.5 rounded-lg text-[12.5px] font-medium text-stone-500 hover:bg-stone-100 disabled:opacity-40 disabled:hover:bg-transparent">Prev</button>
           <template v-for="(n, i) in pageNumbers" :key="i">
             <span v-if="n === '...'" class="px-2 text-[12.5px] text-stone-400">...</span>
@@ -1551,14 +1574,14 @@ async function submitChildRegister() {
             <div v-else-if="selectedChildVaccinations.length" class="rounded-xl border border-stone-200 overflow-hidden">
               <table class="w-full text-[12.5px]">
                 <thead><tr class="bg-stone-50">
-                  <th class="text-left font-semibold px-3 py-2 text-[10.5px] uppercase tracking-wide text-stone-500">Vaccine</th>
-                  <th class="text-left font-semibold px-3 py-2 text-[10.5px] uppercase tracking-wide text-stone-500">Dose</th>
-                  <th class="text-left font-semibold px-3 py-2 text-[10.5px] uppercase tracking-wide text-stone-500">Date</th>
-                  <th class="text-left font-semibold px-3 py-2 text-[10.5px] uppercase tracking-wide text-stone-500">Site</th>
-                  <th class="text-left font-semibold px-3 py-2 text-[10.5px] uppercase tracking-wide text-stone-500">Status</th>
+                  <SortableTh :sort="historySort" column="vaccine" class="text-left font-semibold px-3 py-2 text-[10.5px] uppercase tracking-wide text-stone-500">Vaccine</SortableTh>
+                  <SortableTh :sort="historySort" column="doseNumber" class="text-left font-semibold px-3 py-2 text-[10.5px] uppercase tracking-wide text-stone-500">Dose</SortableTh>
+                  <SortableTh :sort="historySort" column="vaccinationDate" class="text-left font-semibold px-3 py-2 text-[10.5px] uppercase tracking-wide text-stone-500">Date</SortableTh>
+                  <SortableTh :sort="historySort" column="injectionSite" class="text-left font-semibold px-3 py-2 text-[10.5px] uppercase tracking-wide text-stone-500">Site</SortableTh>
+                  <SortableTh :sort="historySort" column="status" class="text-left font-semibold px-3 py-2 text-[10.5px] uppercase tracking-wide text-stone-500">Status</SortableTh>
                 </tr></thead>
                 <tbody>
-                  <tr v-for="v in selectedChildVaccinations" :key="v.vaccinationRecordID" class="border-t border-stone-200">
+                  <tr v-for="v in pagedHistory" :key="v.vaccinationRecordID" class="border-t border-stone-200">
                     <td class="px-3 py-2">{{ v.vaccineName || vaccineNameById(v.vaccineID) }}</td>
                     <td class="px-3 py-2">{{ v.doseNumber }}</td>
                     <td class="px-3 py-2">{{ formatVaccDate(v.vaccinationDate) }}</td>
@@ -1567,6 +1590,7 @@ async function submitChildRegister() {
                   </tr>
                 </tbody>
               </table>
+              <TablePager :total="selectedChildVaccinations.length" v-model:page="historyPage" v-model:page-size="historyPageSize" />
             </div>
             <p v-else class="rounded-xl bg-stone-50 p-3.5 text-[12.5px] text-stone-500">No vaccination records yet.</p>
           </div>

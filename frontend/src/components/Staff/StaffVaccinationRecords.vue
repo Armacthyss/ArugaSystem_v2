@@ -24,34 +24,34 @@
 
         <!-- STAT CARDS -->
         <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <div class="bg-white rounded-xl border border-slate-200 p-5">
+          <button type="button" @click="pickCard('all')" class="bg-white rounded-xl border border-slate-200 p-5" :class="cardClass(activeCard === 'all')">
             <div class="flex items-center justify-between mb-3">
               <Syringe class="w-5 h-5 text-emerald-600" />
             </div>
             <p class="text-3xl font-bold text-slate-800">{{ stats.total }}</p>
             <p class="text-xs text-slate-400 mt-1">Doses I Gave (all time)</p>
-          </div>
-          <div class="bg-white rounded-xl border border-slate-200 p-5">
+          </button>
+          <button type="button" @click="pickCard('today')" class="bg-white rounded-xl border border-slate-200 p-5" :class="cardClass(activeCard === 'today')">
             <div class="flex items-center justify-between mb-3">
               <CheckCircle class="w-5 h-5 text-emerald-500" />
             </div>
             <p class="text-3xl font-bold text-slate-800">{{ stats.today }}</p>
             <p class="text-xs text-slate-400 mt-1">Today</p>
-          </div>
-          <div class="bg-white rounded-xl border border-slate-200 p-5">
+          </button>
+          <button type="button" @click="pickCard('month')" class="bg-white rounded-xl border border-slate-200 p-5" :class="cardClass(activeCard === 'month')">
             <div class="flex items-center justify-between mb-3">
               <Clock class="w-5 h-5 text-amber-500" />
             </div>
             <p class="text-3xl font-bold text-slate-800">{{ stats.month }}</p>
             <p class="text-xs text-slate-400 mt-1">This Month</p>
-          </div>
-          <div class="bg-white rounded-xl border border-slate-200 p-5">
+          </button>
+          <button type="button" @click="pickCard('remarks')" class="bg-white rounded-xl border border-slate-200 p-5" :class="cardClass(activeCard === 'remarks')">
             <div class="flex items-center justify-between mb-3">
               <AlertCircle class="w-5 h-5 text-amber-500" />
             </div>
             <p class="text-3xl font-bold text-slate-800">{{ stats.withRemarks }}</p>
             <p class="text-xs text-slate-400 mt-1">With Remarks / Reactions</p>
-          </div>
+          </button>
         </div>
 
         <!-- FILTER ROW -->
@@ -108,14 +108,14 @@
             <table class="w-full text-sm">
               <thead class="bg-slate-50 border-b border-slate-200">
                 <tr class="text-xs text-slate-500 uppercase tracking-wide whitespace-nowrap">
-                  <th class="px-4 py-3.5 text-left font-medium">Child Name</th>
-                  <th class="px-4 py-3.5 text-left font-medium">Parent</th>
-                  <th class="px-4 py-3.5 text-left font-medium">Vaccine Name</th>
-                  <th class="px-4 py-3.5 text-left font-medium">Dose</th>
-                  <th class="px-4 py-3.5 text-left font-medium">Date Given</th>
-                  <th class="px-4 py-3.5 text-left font-medium">Batch No.</th>
-                  <th class="px-4 py-3.5 text-left font-medium">Status</th>
-                  <th class="px-4 py-3.5 text-left font-medium">Remarks</th>
+                  <SortableTh :sort="recordSort" column="childName" class="px-4 py-3.5 text-left font-medium">Child Name</SortableTh>
+                  <SortableTh :sort="recordSort" column="parentName" class="px-4 py-3.5 text-left font-medium">Parent</SortableTh>
+                  <SortableTh :sort="recordSort" column="vaccineName" class="px-4 py-3.5 text-left font-medium">Vaccine Name</SortableTh>
+                  <SortableTh :sort="recordSort" column="doseNumber" class="px-4 py-3.5 text-left font-medium">Dose</SortableTh>
+                  <SortableTh :sort="recordSort" column="dateAdministered" class="px-4 py-3.5 text-left font-medium">Date Given</SortableTh>
+                  <SortableTh :sort="recordSort" column="lotNumber" class="px-4 py-3.5 text-left font-medium">Batch No.</SortableTh>
+                  <SortableTh :sort="recordSort" column="status" class="px-4 py-3.5 text-left font-medium">Status</SortableTh>
+                  <SortableTh :sort="recordSort" column="remarks" class="px-4 py-3.5 text-left font-medium">Remarks</SortableTh>
                   <th class="px-4 py-3.5 text-left font-medium">Actions</th>
                 </tr>
               </thead>
@@ -209,12 +209,12 @@
               </p>
             </div>
             <!-- Right: numbered pages -->
-            <div class="flex items-center gap-1">
+            <div class="flex flex-wrap items-center gap-1">
               <button @click="currentPage--" :disabled="currentPage === 1"
                 class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
                 <ChevronLeft class="w-4 h-4" />
               </button>
-              <template v-for="p in paginationPages" :key="p">
+              <template v-for="(p, i) in paginationPages" :key="i">
                 <span v-if="p === '...'" class="px-1 text-xs text-slate-400">…</span>
                 <button v-else @click="currentPage = p"
                   class="min-w-[28px] h-7 rounded-lg text-xs font-medium transition-colors"
@@ -432,6 +432,8 @@ import { API_ORIGIN } from '@/utils/apiBase'
 import { getUser } from '@/utils/auth'
 import StaffSidebar from './StaffSidebar.vue'
 import StaffTopbar from './StaffTopbar.vue'
+import SortableTh from '@/components/Shared/SortableTh.vue'
+import { useTableSort, useCardFilter, cardClass, pageList } from '@/utils/tableSort'
 import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import axios from 'axios'
@@ -517,16 +519,25 @@ async function fetchRecords() {
 }
 
 // ── STATS ─────────────────────────────────────────────────────────
-const stats = computed(() => {
-  const now = new Date()
-  const given = records.value.filter(r => r.dateAdministered).map(r => new Date(r.dateAdministered))
-  return {
-    total: records.value.length,
-    today: given.filter(d => d.toDateString() === now.toDateString()).length,
-    month: given.filter(d => d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()).length,
-    withRemarks: records.value.filter(r => r.remarks && !/no (adverse )?reaction/i.test(r.remarks)).length,
-  }
-})
+const givenToday = (r) => !!r.dateAdministered && new Date(r.dateAdministered).toDateString() === new Date().toDateString()
+const givenThisMonth = (r) => {
+  if (!r.dateAdministered) return false
+  const d = new Date(r.dateAdministered), now = new Date()
+  return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
+}
+const hasRemarks = (r) => !!r.remarks && !/no (adverse )?reaction/i.test(r.remarks)
+
+const stats = computed(() => ({
+  total: records.value.length,
+  today: records.value.filter(givenToday).length,
+  month: records.value.filter(givenThisMonth).length,
+  withRemarks: records.value.filter(hasRemarks).length,
+}))
+
+// Click a number card to list only those records
+const { activeCard, pickCard, applyCard } = useCardFilter(
+  { today: givenToday, month: givenThisMonth, remarks: hasRemarks },
+  () => { currentPage.value = 1 })
 
 // ── FILTERS ───────────────────────────────────────────────────────
 const searchQuery   = ref('')
@@ -540,7 +551,7 @@ const vaccineOptions = computed(() =>
 )
 
 const hasActiveFilters = computed(() =>
-  searchQuery.value || statusFilter.value || vaccineFilter.value || dateFrom.value || dateTo.value
+  searchQuery.value || statusFilter.value || vaccineFilter.value || dateFrom.value || dateTo.value || activeCard.value
 )
 
 function clearFilters() {
@@ -549,10 +560,11 @@ function clearFilters() {
   vaccineFilter.value = ''
   dateFrom.value     = ''
   dateTo.value       = ''
+  activeCard.value   = ''
 }
 
 const filteredRecords = computed(() => {
-  let list = records.value
+  let list = applyCard(records.value)
   if (searchQuery.value) {
     const q = searchQuery.value.toLowerCase()
     list = list.filter(r =>
@@ -581,25 +593,17 @@ const currentPage = ref(1)
 const pageSize    = ref(10)
 
 
+// Click a column heading to sort
+const recordSort = useTableSort(filteredRecords, {}, () => { currentPage.value = 1 })
+
 const totalPages = computed(() =>
   Math.max(1, Math.ceil(filteredRecords.value.length / pageSize.value))
 )
 const paginatedRecords = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
-  return filteredRecords.value.slice(start, start + pageSize.value)
+  return recordSort.sortedRows.value.slice(start, start + pageSize.value)
 })
-const paginationPages = computed(() => {
-  const total = totalPages.value
-  const cur = currentPage.value
-  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
-  const pages = []
-  pages.push(1)
-  if (cur > 3) pages.push('...')
-  for (let p = Math.max(2, cur - 1); p <= Math.min(total - 1, cur + 1); p++) pages.push(p)
-  if (cur < total - 2) pages.push('...')
-  pages.push(total)
-  return pages
-})
+const paginationPages = computed(() => pageList(currentPage.value, totalPages.value))
 
 // ── VACCINATE MODAL ───────────────────────────────────────────────
 const showVaccinateModal = ref(false)

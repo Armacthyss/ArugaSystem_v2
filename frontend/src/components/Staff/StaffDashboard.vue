@@ -15,6 +15,8 @@ import { withRelationship } from "@/utils/format";
 import { visitProgress, unfinishedChildren } from "@/utils/visitProgress";
 import { askConfirm, showAlert } from "@/utils/dialog";
 import { useFloatingMenu } from "@/utils/floatingMenu";
+import SortableTh from "@/components/Shared/SortableTh.vue";
+import { useTableSort } from "@/utils/tableSort";
 
 const router = useRouter();
 
@@ -173,6 +175,7 @@ const queueError = ref(null);
 const visibleQueue = computed(() =>
   queue.value.filter((q) => q.status !== "Completed")
 );
+const queueSort = useTableSort(visibleQueue, { no: (q) => q.queueNumber, time: (q) => q.checkedInAt });
 
 // Confirmed from the real ParentsController.cs ([Route("api/[controller]")],
 // GetAllParents action mapped to "all") — GetAllParents lives at
@@ -733,6 +736,7 @@ queue.value = data.map((q) => ({
     withRelationship(q.requestBy, q.requestByRelationship),
 
   // Check-in time
+  checkedInAt: q.checkedInAt,
   time: q.checkedInAt
     ? new Date(q.checkedInAt).toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" })
     : "—",
@@ -980,13 +984,16 @@ onUnmounted(() => {
               <table class="w-full text-[13px]">
                 <thead>
                   <tr class="bg-stone-50">
-                    <th
-                      v-for="h in ['Queue No.', 'Child', 'Parent', 'Checked In', 'Status', '']"
-                      :key="h"
+                    <SortableTh
+                      v-for="h in [['no', 'Queue No.'], ['child', 'Child'], ['parent', 'Parent'], ['time', 'Checked In'], ['status', 'Status']]"
+                      :key="h[0]"
+                      :sort="queueSort"
+                      :column="h[0]"
                       class="text-left font-semibold px-3 py-3 first:pl-5 whitespace-nowrap text-[11px] uppercase tracking-wide text-stone-500"
                     >
-                      {{ h }}
-                    </th>
+                      {{ h[1] }}
+                    </SortableTh>
+                    <th class="text-left font-semibold px-3 py-3 first:pl-5 whitespace-nowrap text-[11px] uppercase tracking-wide text-stone-500"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -995,7 +1002,7 @@ onUnmounted(() => {
                       Nobody is in the queue yet. Families join by scanning the Check-in QR, or use Check-In Patient above.
                     </td>
                   </tr>
-                  <template v-for="q in visibleQueue" :key="q.queueID">
+                  <template v-for="q in queueSort.sortedRows.value" :key="q.queueID">
                    <tr class="border-t border-stone-200">
                     <td class="pl-5 pr-3 py-3 font-medium whitespace-nowrap">{{ q.no }}</td>
                     <!-- names wrap, so the action buttons stay on screen -->

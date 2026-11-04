@@ -30,31 +30,31 @@
 
     <!-- Totals -->
     <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 border-b border-slate-100">
-      <div v-for="t in tiles" :key="t.label" class="px-5 py-3 border-r border-slate-100 last:border-r-0">
+      <button v-for="t in tiles" :key="t.key" type="button" @click="pickCard(t.key)" class="px-5 py-3 border-r border-slate-100 last:border-r-0" :class="cardClass(activeCard === t.key)">
         <p class="text-[10.5px] font-semibold uppercase tracking-wide text-slate-500">{{ t.label }}</p>
         <p class="text-xl font-extrabold mt-0.5" :class="t.tone">{{ loading ? '…' : t.value }}</p>
-      </div>
+      </button>
     </div>
 
     <div class="overflow-x-auto">
       <table class="w-full text-sm">
         <thead>
           <tr class="bg-slate-50/60 text-[11px] uppercase tracking-wide text-slate-500">
-            <th class="text-left font-semibold px-5 py-2.5">Vaccine</th>
-            <th class="text-right font-semibold px-3 py-2.5">On Hand</th>
-            <th class="text-right font-semibold px-3 py-2.5">Minimum</th>
-            <th class="text-right font-semibold px-3 py-2.5">Received</th>
-            <th class="text-right font-semibold px-3 py-2.5">Used</th>
-            <th v-if="anyRemoved" class="text-right font-semibold px-3 py-2.5" title="Broken, spoiled, expired and thrown away, lost, or a lower recount">Removed</th>
-            <th class="text-right font-semibold px-3 py-2.5">Expiring ≤30d</th>
-            <th class="text-right font-semibold px-3 py-2.5">Expired</th>
-            <th class="text-right font-semibold px-3 py-2.5" title="Average doses given per week over the last 8 weeks">Avg / Week</th>
-            <th class="text-right font-semibold px-3 py-2.5" title="On hand ÷ average weekly use">Lasts About</th>
-            <th class="text-left font-semibold px-5 py-2.5">Status</th>
+            <SortableTh :sort="lineSort" column="vaccineName" class="text-left font-semibold px-5 py-2.5">Vaccine</SortableTh>
+            <SortableTh :sort="lineSort" column="onHand" class="text-right font-semibold px-3 py-2.5">On Hand</SortableTh>
+            <SortableTh :sort="lineSort" column="minimumStock" class="text-right font-semibold px-3 py-2.5">Minimum</SortableTh>
+            <SortableTh :sort="lineSort" column="receivedInPeriod" class="text-right font-semibold px-3 py-2.5">Received</SortableTh>
+            <SortableTh :sort="lineSort" column="usedInPeriod" class="text-right font-semibold px-3 py-2.5">Used</SortableTh>
+            <SortableTh v-if="anyRemoved" :sort="lineSort" column="removedInPeriod" class="text-right font-semibold px-3 py-2.5" title="Broken, spoiled, expired and thrown away, lost, or a lower recount">Removed</SortableTh>
+            <SortableTh :sort="lineSort" column="expiringSoon" class="text-right font-semibold px-3 py-2.5">Expiring ≤30d</SortableTh>
+            <SortableTh :sort="lineSort" column="expiredOnShelf" class="text-right font-semibold px-3 py-2.5">Expired</SortableTh>
+            <SortableTh :sort="lineSort" column="averageWeeklyUse" class="text-right font-semibold px-3 py-2.5" title="Average doses given per week over the last 8 weeks">Avg / Week</SortableTh>
+            <SortableTh :sort="lineSort" column="weeksLeft" class="text-right font-semibold px-3 py-2.5" title="On hand ÷ average weekly use">Lasts About</SortableTh>
+            <SortableTh :sort="lineSort" column="status" class="text-left font-semibold px-5 py-2.5">Status</SortableTh>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="l in lines" :key="l.vaccineID" class="border-t border-slate-100">
+          <tr v-for="l in lineSort.sortedRows.value" :key="l.vaccineID" class="border-t border-slate-100">
             <td class="px-5 py-2.5">
               <p class="font-semibold text-slate-800">{{ l.vaccineName }}</p>
               <p class="text-[11px] text-slate-400">{{ l.activeBatches }} batch{{ l.activeBatches === 1 ? '' : 'es' }} in stock<span v-if="l.nextExpiry"> · next expiry {{ formatDate(l.nextExpiry) }}</span></p>
@@ -92,6 +92,8 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import axios from 'axios'
 import { API_BASE, formatDate, toISODate, downloadCSV } from '@/utils/format'
+import SortableTh from '@/components/Shared/SortableTh.vue'
+import { useTableSort, useCardFilter, cardClass } from '@/utils/tableSort'
 
 const props = defineProps({
   // Bump this after receiving or editing a batch to reload the summary
@@ -140,13 +142,23 @@ onMounted(load)
 watch([period, customFrom, customTo, () => props.refreshKey], load)
 
 const tiles = computed(() => [
-  { label: 'Doses On Hand', value: totals.value.onHand ?? 0, tone: 'text-slate-900' },
-  { label: 'Received', value: totals.value.received ?? 0, tone: 'text-slate-900' },
-  { label: 'Used', value: totals.value.used ?? 0, tone: 'text-slate-900' },
-  { label: 'Expiring ≤30 Days', value: totals.value.expiringSoon ?? 0, tone: totals.value.expiringSoon ? 'text-orange-700' : 'text-slate-900' },
-  { label: 'Expired on Shelf', value: totals.value.expiredOnShelf ?? 0, tone: totals.value.expiredOnShelf ? 'text-red-700' : 'text-slate-900' },
-  { label: 'Low / Out of Stock', value: totals.value.lowOrOut ?? 0, tone: totals.value.lowOrOut ? 'text-amber-700' : 'text-slate-900' },
+  { key: 'all', label: 'Doses On Hand', value: totals.value.onHand ?? 0, tone: 'text-slate-900' },
+  { key: 'received', label: 'Received', value: totals.value.received ?? 0, tone: 'text-slate-900' },
+  { key: 'used', label: 'Used', value: totals.value.used ?? 0, tone: 'text-slate-900' },
+  { key: 'expiring', label: 'Expiring ≤30 Days', value: totals.value.expiringSoon ?? 0, tone: totals.value.expiringSoon ? 'text-orange-700' : 'text-slate-900' },
+  { key: 'expired', label: 'Expired on Shelf', value: totals.value.expiredOnShelf ?? 0, tone: totals.value.expiredOnShelf ? 'text-red-700' : 'text-slate-900' },
+  { key: 'low', label: 'Low / Out of Stock', value: totals.value.lowOrOut ?? 0, tone: totals.value.lowOrOut ? 'text-amber-700' : 'text-slate-900' },
 ])
+
+// Click a total to list only those vaccines, a heading to sort
+const { activeCard, pickCard, applyCard } = useCardFilter({
+  received: (l) => l.receivedInPeriod > 0,
+  used: (l) => l.usedInPeriod > 0,
+  expiring: (l) => l.expiringSoon > 0,
+  expired: (l) => l.expiredOnShelf > 0,
+  low: (l) => l.status !== 'Good',
+})
+const lineSort = useTableSort(computed(() => applyCard(lines.value)))
 
 // The Removed column only shows when Adjust Stock was used in the period
 const anyRemoved = computed(() => lines.value.some(l => l.removedInPeriod > 0))

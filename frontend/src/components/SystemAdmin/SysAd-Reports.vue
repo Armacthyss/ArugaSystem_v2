@@ -5,6 +5,9 @@ import axios from 'axios'
 import AppSidebar from './Components/AppSidebar.vue'
 import AppHeader from './Components/AppHeader.vue'
 import { barangayLabel } from '@/utils/barangays'
+import TablePager from '@/components/Shared/TablePager.vue'
+import SortableTh from '@/components/Shared/SortableTh.vue'
+import { useTableSort, cellValue, cardClass } from '@/utils/tableSort'
 import {
   API_BASE, ageLabel, formatDate, formatDateTime, toISODate, downloadCSV, summarizeStock, userLevel,
 } from '@/utils/format'
@@ -60,12 +63,12 @@ const summary = computed(() => {
   const onTrack = withSchedule.filter(c => c.vaccinationStatus !== 'Delayed').length
   const stock = summarizeStock(data.inventory, data.vaccines)
   return [
-    { label: 'Vaccinations This Month', value: thisMonth, icon: Syringe, tint: 'bg-emerald-50 text-emerald-700' },
-    { label: 'Total Registered Children', value: data.children.length, icon: Baby, tint: 'bg-teal-50 text-teal-700' },
-    { label: 'On-Schedule Rate', value: withSchedule.length ? `${Math.round(onTrack * 100 / withSchedule.length)}%` : '—', icon: TrendingUp, tint: 'bg-sky-50 text-sky-700' },
-    { label: 'Delayed Vaccinations', value: data.children.reduce((s, c) => s + (c.overdueDoses || 0), 0), icon: AlertTriangle, tint: 'bg-rose-50 text-rose-700' },
-    { label: 'Available Doses', value: stock.reduce((s, v) => s + v.stock, 0), icon: Package, tint: 'bg-amber-50 text-amber-700' },
-    { label: 'Fully Vaccinated', value: fully, icon: CircleCheck, tint: 'bg-violet-50 text-violet-700' },
+    { report: 'Vaccinations Performed', label: 'Vaccinations This Month', value: thisMonth, icon: Syringe, tint: 'bg-emerald-50 text-emerald-700' },
+    { report: 'Registered Children', label: 'Total Registered Children', value: data.children.length, icon: Baby, tint: 'bg-teal-50 text-teal-700' },
+    { report: 'Children by Vaccination Status', label: 'On-Schedule Rate', value: withSchedule.length ? `${Math.round(onTrack * 100 / withSchedule.length)}%` : '—', icon: TrendingUp, tint: 'bg-sky-50 text-sky-700' },
+    { report: 'Delayed Vaccinations', label: 'Delayed Vaccinations', value: data.children.reduce((s, c) => s + (c.overdueDoses || 0), 0), icon: AlertTriangle, tint: 'bg-rose-50 text-rose-700' },
+    { report: 'Current Inventory', label: 'Available Doses', value: stock.reduce((s, v) => s + v.stock, 0), icon: Package, tint: 'bg-amber-50 text-amber-700' },
+    { report: 'Children Fully Vaccinated', label: 'Fully Vaccinated', value: fully, icon: CircleCheck, tint: 'bg-violet-50 text-violet-700' },
   ]
 })
 
@@ -86,6 +89,11 @@ const toggleCategory = (name) => (expandedCategory.value = expandedCategory.valu
 const selectedReport = ref('Vaccinations by Month')
 const selectReport = (name) => {
   selectedReport.value = name
+}
+// The number cards at the top open the report behind each number
+const openReport = (name) => {
+  expandedCategory.value = categories.find(c => c.reports.includes(name))?.name ?? expandedCategory.value
+  selectReport(name)
 }
 
 /* -------------------------------- Filters -------------------------------- */
@@ -377,7 +385,7 @@ function buildReport(name, range) {
 const generatedReport = ref(null)
 const isGenerating = ref(false)
 const page = ref(1)
-const pageSize = 15
+const pageSize = ref(10)
 
 const preparedBy = (() => {
   try {
@@ -423,15 +431,17 @@ const generateReport = () => {
 watch([selectedReport, () => JSON.stringify(filters)], generateReport)
 
 const maxChartValue = computed(() => Math.max(1, ...(generatedReport.value?.chart?.points || []).map(p => p.value)))
-const totalPages = computed(() => Math.max(1, Math.ceil((generatedReport.value?.rows.length || 0) / pageSize)))
-const pagedRows = computed(() => (generatedReport.value?.rows || []).slice((page.value - 1) * pageSize, page.value * pageSize))
+// Click a column heading to sort; printing and Export Excel keep that order
+const reportSort = useTableSort(computed(() => generatedReport.value?.rows || []), (row, column) => cellValue(row[column]), () => { page.value = 1 })
+watch(generatedReport, () => reportSort.setSort(''))
+const pagedRows = computed(() => reportSort.sortedRows.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value))
 
 const exportExcel = () => {
   const r = generatedReport.value
   downloadCSV(`${r.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${toISODate()}.csv`, [
     [r.name], [`Period: ${r.dateRange}`], [`Generated: ${r.dateGenerated} by ${r.preparedBy}`], [],
     ...(r.tiles?.length ? [...r.tiles.map(t => [t.label, t.value]), []] : []),
-    r.columns, ...r.rows,
+    r.columns, ...reportSort.sortedRows.value,
   ])
 }
 // Printing shows the full report (all rows) on its own page; "Export PDF"
@@ -457,13 +467,13 @@ const printReport = () => {
 
         <!-- Summary cards -->
         <section class="print:hidden grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-          <div v-for="card in summary" :key="card.label" class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+          <button v-for="card in summary" :key="card.label" type="button" @click="openReport(card.report)" :title="`Open the ${card.report} report`" class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm" :class="cardClass(selectedReport === card.report)">
             <div class="flex items-start justify-between gap-2">
               <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ card.label }}</p>
               <div :class="card.tint" class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"><component :is="card.icon" class="w-4 h-4" /></div>
             </div>
             <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ loading ? '…' : card.value }}</p>
-          </div>
+          </button>
         </section>
 
         <section class="grid grid-cols-1 xl:grid-cols-4 gap-6 items-start">
@@ -588,11 +598,11 @@ const printReport = () => {
                   <table class="w-full text-sm">
                     <thead>
                       <tr class="border-b border-slate-200 bg-slate-50/60">
-                        <th v-for="c in generatedReport.columns" :key="c" class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-4 py-2.5 whitespace-nowrap">{{ c }}</th>
+                        <SortableTh v-for="(c, ci) in generatedReport.columns" :key="c" :sort="reportSort" :column="String(ci)" class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-4 py-2.5 whitespace-nowrap">{{ c }}</SortableTh>
                       </tr>
                     </thead>
                     <tbody>
-                      <tr v-for="(row, idx) in (printing ? generatedReport.rows : pagedRows)" :key="idx" class="border-b border-slate-100 last:border-0 hover:bg-slate-50">
+                      <tr v-for="(row, idx) in (printing ? reportSort.sortedRows.value : pagedRows)" :key="idx" class="border-b border-slate-100 last:border-0 hover:bg-slate-50">
                         <td v-for="(cell, ci) in row" :key="ci" class="px-4 py-2.5 whitespace-nowrap" :class="ci === 0 ? 'font-medium text-slate-900' : 'text-slate-500'">{{ cell }}</td>
                       </tr>
                       <tr v-if="!generatedReport.rows.length">
@@ -601,16 +611,7 @@ const printReport = () => {
                     </tbody>
                   </table>
                 </div>
-                <div v-if="generatedReport.rows.length > pageSize" class="flex items-center justify-between mt-3 print:hidden">
-                  <p class="text-xs text-slate-400">
-                    Showing {{ (page - 1) * pageSize + 1 }}–{{ Math.min(page * pageSize, generatedReport.rows.length) }} of {{ generatedReport.rows.length }} records
-                  </p>
-                  <div class="flex items-center gap-1">
-                    <button @click="page = Math.max(1, page - 1)" :disabled="page === 1" class="w-7 h-7 rounded-lg border border-slate-200 text-slate-500 text-xs hover:bg-slate-50 disabled:opacity-40">‹</button>
-                    <span class="text-xs text-slate-500 px-2">Page {{ page }} of {{ totalPages }}</span>
-                    <button @click="page = Math.min(totalPages, page + 1)" :disabled="page === totalPages" class="w-7 h-7 rounded-lg border border-slate-200 text-slate-500 text-xs hover:bg-slate-50 disabled:opacity-40">›</button>
-                  </div>
-                </div>
+                <TablePager class="print:hidden px-0! border-t-0!" :total="generatedReport.rows.length" v-model:page="page" v-model:page-size="pageSize" />
               </div>
             </div>
           </div>
