@@ -37,25 +37,21 @@
                   Suggested orders cover two weeks plus the minimum stock, in case the pharmacy can only deliver next week.
                 </p>
               </div>
-              <button @click="sendStockCheck" :disabled="sendingCheck" class="shrink-0 text-xs font-bold px-3.5 py-2 rounded-lg border border-emerald-200 text-emerald-700 hover:bg-emerald-50 disabled:opacity-50">
-                {{ sendingCheck ? 'Sending…' : 'Send to Doctor & Nurses now' }}
-              </button>
             </div>
-            <p v-if="stockCheckMessage" class="px-6 pt-3 text-xs font-semibold text-emerald-700">{{ stockCheckMessage }}</p>
             <div class="overflow-x-auto">
             <table class="w-full text-left text-sm">
               <thead class="text-[10px] uppercase font-bold text-slate-400">
                 <tr>
-                  <th class="px-6 py-3">Vaccine</th>
-                  <th class="px-3 py-3 text-right">On hand</th>
-                  <th class="px-3 py-3 text-right">Due this week</th>
-                  <th class="px-3 py-3 text-right">Next 2 weeks</th>
-                  <th class="px-3 py-3">Status</th>
-                  <th class="px-6 py-3 text-right">Order</th>
+                  <SortableTh :sort="stockSort" column="vaccine" class="px-6 py-3">Vaccine</SortableTh>
+                  <SortableTh :sort="stockSort" column="onHand" class="px-3 py-3 text-right">On hand</SortableTh>
+                  <SortableTh :sort="stockSort" column="dueThisWeek" class="px-3 py-3 text-right">Due this week</SortableTh>
+                  <SortableTh :sort="stockSort" column="dueTwoWeeks" class="px-3 py-3 text-right">Next 2 weeks</SortableTh>
+                  <SortableTh :sort="stockSort" column="status" class="px-3 py-3">Status</SortableTh>
+                  <SortableTh :sort="stockSort" column="order" class="px-6 py-3 text-right">Order</SortableTh>
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-100">
-                <tr v-for="l in stockCheck.lines" :key="l.vaccineID" :class="l.restock ? 'bg-rose-50/40' : ''">
+                <tr v-for="l in stockSort.sortedRows.value" :key="l.vaccineID" :class="l.restock ? 'bg-rose-50/40' : ''">
                   <td class="px-6 py-2.5">
                     <p class="font-semibold text-slate-800">{{ l.vaccine }}</p>
                     <p v-if="l.expiringSoon" class="text-[11px] text-amber-700">{{ l.expiringSoon }} doses expire by {{ formatDate(l.nextExpiry) }}: use these first</p>
@@ -84,27 +80,27 @@
 
           <!-- SUMMARY STATS (computed from real inventory data) -->
           <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-            <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
+            <button type="button" @click="pickCard('all')" class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4" :class="cardClass(activeCard === 'all')">
               <div class="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center"><Package class="w-6 h-6" /></div>
               <div>
                 <p class="text-[10px] font-bold text-slate-400 uppercase">Total Doses</p>
                 <p class="text-xl font-bold text-slate-800">{{ totalDoses.toLocaleString() }}</p>
               </div>
-            </div>
-            <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
+            </button>
+            <button type="button" @click="pickCard('expiring')" class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4" :class="cardClass(activeCard === 'expiring')">
               <div class="w-12 h-12 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center"><AlertTriangle class="w-6 h-6" /></div>
               <div>
                 <p class="text-[10px] font-bold text-slate-400 uppercase">Expiring Soon</p>
-                <p class="text-xl font-bold text-slate-800">{{ expiringSoonCount }} Batches</p>
+                <p class="text-xl font-bold text-slate-800">{{ expiringSoonCount }} {{ expiringSoonCount === 1 ? 'Batch' : 'Batches' }}</p>
               </div>
-            </div>
-            <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
+            </button>
+            <button type="button" @click="pickCard('expired')" class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4" :class="cardClass(activeCard === 'expired')">
               <div class="w-12 h-12 bg-rose-50 text-rose-600 rounded-xl flex items-center justify-center"><Trash2 class="w-6 h-6" /></div>
               <div>
                 <p class="text-[10px] font-bold text-slate-400 uppercase">Expired Stocks</p>
                 <p class="text-xl font-bold text-slate-800">{{ expiredCount }}</p>
               </div>
-            </div>
+            </button>
           </div>
 
           <!-- INVENTORY TABLE -->
@@ -113,12 +109,12 @@
             <table class="w-full text-left text-sm">
               <thead class="bg-slate-50/50 border-b border-slate-200 text-[11px] uppercase font-bold text-slate-500">
                 <tr>
-                  <th class="px-6 py-4">Vaccine Name</th>
-                  <th class="px-6 py-4">Lot Number</th>
-                  <th class="px-6 py-4">Received</th>
-                  <th class="px-6 py-4">Expiry Date</th>
-                  <th class="px-6 py-4">Stock Level</th>
-                  <th class="px-6 py-4 text-right">Status</th>
+                  <SortableTh :sort="batchSort" column="vaccine" class="px-6 py-4">Vaccine Name</SortableTh>
+                  <SortableTh :sort="batchSort" column="lotNumber" class="px-6 py-4">Lot Number</SortableTh>
+                  <SortableTh :sort="batchSort" column="receivedDate" class="px-6 py-4">Received</SortableTh>
+                  <SortableTh :sort="batchSort" column="expirationDate" class="px-6 py-4">Expiry Date</SortableTh>
+                  <SortableTh :sort="batchSort" column="currentQuantity" class="px-6 py-4">Stock Level</SortableTh>
+                  <SortableTh :sort="batchSort" column="status" class="px-6 py-4 text-right">Status</SortableTh>
                   <th class="px-4 py-4"><span class="sr-only">Actions</span></th>
                 </tr>
               </thead>
@@ -156,7 +152,7 @@
                     </button>
                   </td>
                 </tr>
-                <tr v-if="inventory.length === 0 && !isLoading">
+                <tr v-if="visibleInventory.length === 0 && !isLoading">
                   <td colspan="7" class="px-6 py-20 text-center">
                     <div class="flex flex-col items-center">
                       <Package class="w-12 h-12 text-slate-200 mb-2" />
@@ -168,7 +164,7 @@
             </table>
             </div>
             <!-- PAGINATION -->
-            <div v-if="inventory.length > 0" class="flex items-center justify-between px-6 py-3.5 border-t border-slate-100 flex-wrap gap-3">
+            <div v-if="visibleInventory.length > 0" class="flex items-center justify-between px-6 py-3.5 border-t border-slate-100 flex-wrap gap-3">
               <div class="flex items-center gap-3">
                 <div class="flex items-center gap-2 text-xs text-slate-500">
                   <span>Show</span>
@@ -182,16 +178,16 @@
                   <span>entries</span>
                 </div>
                 <p class="text-xs text-slate-400">
-                  Showing {{ Math.min((currentPage - 1) * pageSize + 1, inventory.length) }}–{{ Math.min(currentPage * pageSize, inventory.length) }}
-                  of {{ inventory.length }} batches
+                  Showing {{ Math.min((currentPage - 1) * pageSize + 1, visibleInventory.length) }}–{{ Math.min(currentPage * pageSize, visibleInventory.length) }}
+                  of {{ visibleInventory.length }} batches
                 </p>
               </div>
-              <div class="flex items-center gap-1">
+              <div class="flex flex-wrap items-center gap-1">
                 <button @click="currentPage--" :disabled="currentPage === 1"
                   class="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
                   <ChevronLeft class="w-4 h-4" />
                 </button>
-                <template v-for="p in paginationPages" :key="p">
+                <template v-for="(p, i) in paginationPages" :key="i">
                   <span v-if="p === '...'" class="px-1 text-xs text-slate-400">…</span>
                   <button v-else @click="currentPage = p"
                     class="min-w-[28px] h-7 rounded-lg text-xs font-medium transition-colors"
@@ -294,6 +290,8 @@ import StaffTopbar from './StaffTopbar.vue'
 import InventorySummary from '@/components/Shared/InventorySummary.vue'
 import StockAdjustModal from '@/components/Shared/StockAdjustModal.vue'
 import { showAlert } from '@/utils/dialog'
+import SortableTh from '@/components/Shared/SortableTh.vue'
+import { useTableSort, useCardFilter, cardClass, pageList } from '@/utils/tableSort'
 
 // Same API_BASE convention as the rest of the project.
 const API_BASE = `${API_ORIGIN}/api`
@@ -307,23 +305,23 @@ const showAddModal = ref(false)
 // ── PAGINATION ────────────────────────────────────────────────────
 const currentPage = ref(1)
 const pageSize    = ref(10)
-const totalPages  = computed(() => Math.max(1, Math.ceil(inventory.value.length / pageSize.value)))
+// The Expiring Soon / Expired cards filter the table; headings sort it
+const { activeCard, pickCard, applyCard } = useCardFilter({
+  expiring: (b) => isNearExpiry(b.expirationDate),
+  expired: (b) => isExpired(b.expirationDate),
+}, () => { currentPage.value = 1 })
+const visibleInventory = computed(() => applyCard(inventory.value))
+const batchSort = useTableSort(visibleInventory, {
+  vaccine: (b) => vaccineName(b.vaccineID),
+  status: (b) => statusLabel(b),
+}, () => { currentPage.value = 1 })
+
+const totalPages  = computed(() => Math.max(1, Math.ceil(visibleInventory.value.length / pageSize.value)))
 const paginatedInventory = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
-  return inventory.value.slice(start, start + pageSize.value)
+  return batchSort.sortedRows.value.slice(start, start + pageSize.value)
 })
-const paginationPages = computed(() => {
-  const total = totalPages.value
-  const cur   = currentPage.value
-  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
-  const pages = []
-  pages.push(1)
-  if (cur > 3) pages.push('...')
-  for (let p = Math.max(2, cur - 1); p <= Math.min(total - 1, cur + 1); p++) pages.push(p)
-  if (cur < total - 2) pages.push('...')
-  pages.push(total)
-  return pages
-})
+const paginationPages = computed(() => pageList(currentPage.value, totalPages.value))
 
 const batchForm = reactive({
   VaccineID: null, LotNumber: '', InitialQuantity: null,
@@ -370,26 +368,13 @@ const fetchVaccineCatalog = async () => {
 // GET /api/VaccineInventory/stock-check: per vaccine on hand vs. due, and a
 // suggested order. The same check is sent to Staff & Admin every check day.
 const stockCheck = ref({ lines: [] })
-const sendingCheck = ref(false)
-const stockCheckMessage = ref('')
+const stockSort = useTableSort(computed(() => stockCheck.value.lines || []), { order: (l) => (l.restock ? l.suggestedOrder : null) })
 
 const fetchStockCheck = async () => {
   try {
     stockCheck.value = (await axios.get(`${API_BASE}/VaccineInventory/stock-check`)).data
   } catch (err) {
     console.error('Stock check error:', err)
-  }
-}
-
-const sendStockCheck = async () => {
-  sendingCheck.value = true
-  stockCheckMessage.value = ''
-  try {
-    stockCheckMessage.value = (await axios.post(`${API_BASE}/VaccineInventory/stock-check/send`)).data.message
-  } catch (err) {
-    stockCheckMessage.value = err.response?.data?.message || 'Could not send the stock check.'
-  } finally {
-    sendingCheck.value = false
   }
 }
 

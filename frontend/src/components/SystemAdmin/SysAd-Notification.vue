@@ -8,6 +8,8 @@ import AppHeader from './Components/AppHeader.vue'
 import { API_BASE, formatDate, isSameDay, toISODate, downloadCSV } from '@/utils/format'
 import { askConfirm } from '@/utils/dialog'
 import TablePager from '@/components/Shared/TablePager.vue'
+import SortableTh from '@/components/Shared/SortableTh.vue'
+import { useTableSort, useCardFilter, cardClass } from '@/utils/tableSort'
 
 /* -------------------------------- Status meta -------------------------------- */
 // In-app notifications are delivered the moment they're created, so the
@@ -50,6 +52,7 @@ async function fetchNotifications() {
       type: n.category,
       rawType: n.type,
       scheduledDate: n.scheduledDate ? formatDate(n.scheduledDate) : '—',
+      scheduledRaw: n.scheduledDate,
       sentDate: formatDate(n.createdAt),
       createdAt: n.createdAt,
       status: n.isRead ? 'Read' : 'Delivered',
@@ -84,8 +87,18 @@ const searchQuery = ref('')
 const typeFilter = ref('All')
 const statusFilter = ref('All')
 
+// Click a number card to list only those notifications, a heading to sort
+const { activeCard, pickCard, applyCard } = useCardFilter({
+  sentToday: (n) => isSameDay(n.createdAt),
+  reminders: (n) => n.type === 'Vaccination Reminder',
+  unread: (n) => !n.opened,
+  missed: (n) => n.type === 'Missed Vaccination',
+  manual: (n) => n.type === 'Announcement',
+  read: (n) => n.opened,
+}, () => { page.value = 1 })
+
 const filteredNotifications = computed(() =>
-  notifications.value.filter((n) => {
+  applyCard(notifications.value).filter((n) => {
     const q = searchQuery.value.trim().toLowerCase()
     const matchesSearch =
       !q || n.recipient.toLowerCase().includes(q) || n.child.toLowerCase().includes(q) || n.title.toLowerCase().includes(q)
@@ -98,8 +111,20 @@ const filteredNotifications = computed(() =>
 // Pages of the log (Show 10 / 20 / 30 / 50 entries)
 const page = ref(1)
 const pageSize = ref(10)
+const notificationSort = useTableSort(filteredNotifications, {
+  scheduledDate: (n) => n.scheduledRaw,
+  sentDate: (n) => n.createdAt,
+}, () => { page.value = 1 })
 const pagedNotifications = computed(() =>
-  filteredNotifications.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value))
+  notificationSort.sortedRows.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value))
+const historySort = useTableSort(computed(() => notifications.value.slice(0, 20)), {
+  date: (n) => n.createdAt,
+  opened: (n) => (n.opened ? 'Yes' : 'No'),
+}, () => { historyPage.value = 1 })
+const historyPage = ref(1)
+const historyPageSize = ref(10)
+const pagedHistory = computed(() =>
+  historySort.sortedRows.value.slice((historyPage.value - 1) * historyPageSize.value, historyPage.value * historyPageSize.value))
 watch([searchQuery, typeFilter, statusFilter], () => { page.value = 1 })
 
 /* -------------------------------- Summary ---------------------------------- */
@@ -287,48 +312,48 @@ const reminderSchedule = {
         <div v-if="actionMessage" class="bg-emerald-50 border border-emerald-100 text-emerald-800 text-sm rounded-xl px-4 py-3">{{ actionMessage }}</div>
         <!-- Summary cards -->
         <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-          <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+          <button type="button" @click="pickCard('sentToday')" class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm" :class="cardClass(activeCard === 'sentToday')">
             <div class="flex items-start justify-between gap-2">
               <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Sent Today</p>
               <div class="bg-emerald-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0"><Send class="w-4 h-4 text-emerald-700" /></div>
             </div>
             <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.sentToday }}</p>
-          </div>
-          <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+          </button>
+          <button type="button" @click="pickCard('reminders')" class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm" :class="cardClass(activeCard === 'reminders')">
             <div class="flex items-start justify-between gap-2">
               <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Vaccine Reminders</p>
               <div class="bg-sky-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0"><CalendarClock class="w-4 h-4 text-sky-700" /></div>
             </div>
             <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.reminders }}</p>
-          </div>
-          <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+          </button>
+          <button type="button" @click="pickCard('unread')" class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm" :class="cardClass(activeCard === 'unread')">
             <div class="flex items-start justify-between gap-2">
               <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Unread</p>
               <div class="bg-amber-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0"><Hourglass class="w-4 h-4 text-amber-700" /></div>
             </div>
             <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.unread }}</p>
-          </div>
-          <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+          </button>
+          <button type="button" @click="pickCard('missed')" class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm" :class="cardClass(activeCard === 'missed')">
             <div class="flex items-start justify-between gap-2">
               <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Missed-Dose Follow-ups</p>
               <div class="bg-rose-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0"><AlertTriangle class="w-4 h-4 text-rose-700" /></div>
             </div>
             <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.missed }}</p>
-          </div>
-          <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+          </button>
+          <button type="button" @click="pickCard('manual')" class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm" :class="cardClass(activeCard === 'manual')">
             <div class="flex items-start justify-between gap-2">
               <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Announcements</p>
               <div class="bg-teal-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0"><Megaphone class="w-4 h-4 text-teal-700" /></div>
             </div>
             <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.manual }}</p>
-          </div>
-          <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+          </button>
+          <button type="button" @click="pickCard('read')" class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm" :class="cardClass(activeCard === 'read')">
             <div class="flex items-start justify-between gap-2">
               <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Read Rate</p>
               <div class="bg-violet-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0"><TrendingUp class="w-4 h-4 text-violet-700" /></div>
             </div>
             <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.readRate }}%</p>
-          </div>
+          </button>
         </section>
 
         <!-- Toolbar -->
@@ -387,12 +412,12 @@ const reminderSchedule = {
             <table class="w-full text-sm">
               <thead>
                 <tr class="border-b border-slate-200 bg-slate-50/60">
-                  <th class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-5 py-3">Notification Title</th>
-                  <th class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Recipient</th>
-                  <th class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Type</th>
-                  <th class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Scheduled Date</th>
-                  <th class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Sent Date</th>
-                  <th class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Status</th>
+                  <SortableTh :sort="notificationSort" column="title" class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-5 py-3">Notification Title</SortableTh>
+                  <SortableTh :sort="notificationSort" column="recipient" class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Recipient</SortableTh>
+                  <SortableTh :sort="notificationSort" column="type" class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Type</SortableTh>
+                  <SortableTh :sort="notificationSort" column="scheduledDate" class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Scheduled Date</SortableTh>
+                  <SortableTh :sort="notificationSort" column="sentDate" class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Sent Date</SortableTh>
+                  <SortableTh :sort="notificationSort" column="status" class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Status</SortableTh>
                   <th class="text-right font-semibold text-slate-500 text-xs uppercase tracking-wide px-5 py-3">Actions</th>
                 </tr>
               </thead>
@@ -458,16 +483,16 @@ const reminderSchedule = {
             <table class="w-full text-sm">
               <thead>
                 <tr class="border-b border-slate-200 bg-slate-50/60">
-                  <th class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-5 py-3">Recipient</th>
-                  <th class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Title</th>
-                  <th class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Date</th>
-                  <th class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Status</th>
-                  <th class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-5 py-3">Opened</th>
+                  <SortableTh :sort="historySort" column="recipient" class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-5 py-3">Recipient</SortableTh>
+                  <SortableTh :sort="historySort" column="title" class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Title</SortableTh>
+                  <SortableTh :sort="historySort" column="date" class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Date</SortableTh>
+                  <SortableTh :sort="historySort" column="status" class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Status</SortableTh>
+                  <SortableTh :sort="historySort" column="opened" class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-5 py-3">Opened</SortableTh>
                 </tr>
               </thead>
               <tbody>
                 <tr
-                  v-for="n in notifications.slice(0, 20)"
+                  v-for="n in pagedHistory"
                   :key="'h-' + n.id"
                   class="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors"
                 >
@@ -487,6 +512,7 @@ const reminderSchedule = {
               </tbody>
             </table>
           </div>
+          <TablePager :total="Math.min(notifications.length, 20)" v-model:page="historyPage" v-model:page-size="historyPageSize" />
         </section>
       </main>
     </div>

@@ -11,6 +11,8 @@ import PrivacyConsentCheckbox from '@/components/Shared/PrivacyConsentCheckbox.v
 import { askConfirm } from '@/utils/dialog'
 import { phMobileError } from '@/utils/phone'
 import TablePager from '@/components/Shared/TablePager.vue'
+import SortableTh from '@/components/Shared/SortableTh.vue'
+import { useTableSort, useCardFilter, cardClass } from '@/utils/tableSort'
 
 /* -------------------------------- Status meta -------------------------------- */
 const vaccMeta = {
@@ -67,11 +69,27 @@ const sexFilter = ref('All')
 const page = ref(1)
 const pageSize = ref(10)
 const pagedPatients = computed(() =>
-  filteredPatients.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value))
+  patientSort.sortedRows.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value))
 watch([searchQuery, vaccFilter, sexFilter], () => { page.value = 1 })
 
+// Click a number card to list only those children, a heading to sort
+const isFull = (p) => p.vaccinationStatus === 'Fully Vaccinated'
+const isPartial = (p) => p.vaccinationStatus === 'Partially Vaccinated'
+const isDelayed = (p) => p.vaccinationStatus === 'Delayed'
+const isNewThisMonth = (p) => {
+  const d = new Date(p.createdAt), now = new Date()
+  return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
+}
+const isDueThisWeek = (p) => {
+  const inAWeek = new Date(); inAWeek.setDate(inAWeek.getDate() + 7)
+  return !!p.nextDueDate && new Date(p.nextDueDate) <= inAWeek && !isDelayed(p)
+}
+const { activeCard, pickCard, applyCard } = useCardFilter({
+  full: isFull, partial: isPartial, newMonth: isNewThisMonth, dueWeek: isDueThisWeek, delayed: isDelayed,
+}, () => { page.value = 1 })
+
 const filteredPatients = computed(() =>
-  patients.value.filter((p) => {
+  applyCard(patients.value).filter((p) => {
     const q = searchQuery.value.trim().toLowerCase()
     const fullName = `${p.firstName} ${p.lastName}`.toLowerCase()
     const matchesSearch =
@@ -81,23 +99,21 @@ const filteredPatients = computed(() =>
     return matchesSearch && matchesVacc && matchesSex
   })
 )
+const patientSort = useTableSort(filteredPatients, {
+  name: (p) => `${p.firstName} ${p.lastName}`,
+  age: (p) => -new Date(p.birthDate),   // youngest first
+  progress: (p) => (p.totalDoses ? p.completedDoses / p.totalDoses : null),
+}, () => { page.value = 1 })
 
 /* -------------------------------- Summary ---------------------------------- */
-const summary = computed(() => {
-  const inAWeek = new Date(); inAWeek.setDate(inAWeek.getDate() + 7)
-  const now = new Date()
-  return {
-    total: patients.value.length,
-    full: patients.value.filter(p => p.vaccinationStatus === 'Fully Vaccinated').length,
-    partial: patients.value.filter(p => p.vaccinationStatus === 'Partially Vaccinated').length,
-    newThisMonth: patients.value.filter(p => {
-      const d = new Date(p.createdAt)
-      return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
-    }).length,
-    dueThisWeek: patients.value.filter(p => p.nextDueDate && new Date(p.nextDueDate) <= inAWeek && p.vaccinationStatus !== 'Delayed').length,
-    delayed: patients.value.filter(p => p.vaccinationStatus === 'Delayed').length,
-  }
-})
+const summary = computed(() => ({
+  total: patients.value.length,
+  full: patients.value.filter(isFull).length,
+  partial: patients.value.filter(isPartial).length,
+  newThisMonth: patients.value.filter(isNewThisMonth).length,
+  dueThisWeek: patients.value.filter(isDueThisWeek).length,
+  delayed: patients.value.filter(isDelayed).length,
+}))
 
 const initials = (p) => `${p.firstName?.[0] ?? ''}${p.lastName?.[0] ?? ''}`.toUpperCase()
 
@@ -398,20 +414,20 @@ const saveLink = async () => {
 
         <!-- Summary cards -->
         <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-          <div v-for="card in [
-              { label: 'Total Registered', value: summary.total, icon: Baby, tint: 'bg-teal-50 text-teal-700' },
-              { label: 'Fully Vaccinated', value: summary.full, icon: CircleCheck, tint: 'bg-emerald-50 text-emerald-700' },
-              { label: 'In Progress', value: summary.partial, icon: Syringe, tint: 'bg-sky-50 text-sky-700' },
-              { label: 'New This Month', value: summary.newThisMonth, icon: UserPlus, tint: 'bg-violet-50 text-violet-700' },
-              { label: 'Due This Week', value: summary.dueThisWeek, icon: CalendarDays, tint: 'bg-amber-50 text-amber-700' },
-              { label: 'Delayed Vaccinations', value: summary.delayed, icon: AlertTriangle, tint: 'bg-rose-50 text-rose-700' },
-            ]" :key="card.label" class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+          <button v-for="card in [
+              { key: 'all', label: 'Total Registered', value: summary.total, icon: Baby, tint: 'bg-teal-50 text-teal-700' },
+              { key: 'full', label: 'Fully Vaccinated', value: summary.full, icon: CircleCheck, tint: 'bg-emerald-50 text-emerald-700' },
+              { key: 'partial', label: 'In Progress', value: summary.partial, icon: Syringe, tint: 'bg-sky-50 text-sky-700' },
+              { key: 'newMonth', label: 'New This Month', value: summary.newThisMonth, icon: UserPlus, tint: 'bg-violet-50 text-violet-700' },
+              { key: 'dueWeek', label: 'Due This Week', value: summary.dueThisWeek, icon: CalendarDays, tint: 'bg-amber-50 text-amber-700' },
+              { key: 'delayed', label: 'Delayed Vaccinations', value: summary.delayed, icon: AlertTriangle, tint: 'bg-rose-50 text-rose-700' },
+            ]" :key="card.key" type="button" @click="pickCard(card.key)" class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm" :class="cardClass(activeCard === card.key)">
             <div class="flex items-start justify-between gap-2">
               <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ card.label }}</p>
               <div :class="card.tint" class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"><component :is="card.icon" class="w-4 h-4" /></div>
             </div>
             <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ card.value }}</p>
-          </div>
+          </button>
         </section>
 
         <!-- Toolbar -->
@@ -447,14 +463,14 @@ const saveLink = async () => {
             <table class="w-full text-sm">
               <thead>
                 <tr class="border-b border-slate-200 bg-slate-50/60">
-                  <th class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-5 py-3">Family No.</th>
-                  <th class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Child Name</th>
-                  <th class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Age</th>
-                  <th class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Sex</th>
-                  <th class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Parent / Guardian</th>
-                  <th class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Vaccination Status</th>
-                  <th class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Progress</th>
-                  <th class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Last Vaccination</th>
+                  <SortableTh :sort="patientSort" column="familyNo" class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-5 py-3">Family No.</SortableTh>
+                  <SortableTh :sort="patientSort" column="name" class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Child Name</SortableTh>
+                  <SortableTh :sort="patientSort" column="age" class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Age</SortableTh>
+                  <SortableTh :sort="patientSort" column="sex" class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Sex</SortableTh>
+                  <SortableTh :sort="patientSort" column="parentDisplay" class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Parent / Guardian</SortableTh>
+                  <SortableTh :sort="patientSort" column="vaccinationStatus" class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Vaccination Status</SortableTh>
+                  <SortableTh :sort="patientSort" column="progress" class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Progress</SortableTh>
+                  <SortableTh :sort="patientSort" column="lastVaccinationDate" class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Last Vaccination</SortableTh>
                   <th class="text-right font-semibold text-slate-500 text-xs uppercase tracking-wide px-5 py-3">Actions</th>
                 </tr>
               </thead>

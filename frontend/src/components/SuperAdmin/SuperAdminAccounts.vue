@@ -27,21 +27,22 @@
 
         <p v-if="message" class="rounded-xl border px-4 py-3 text-sm" :class="messageError ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-emerald-200 bg-emerald-50 text-emerald-800'">{{ message }}</p>
 
-        <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-x-auto">
+        <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+          <div class="overflow-x-auto">
           <table class="w-full text-sm">
             <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
               <tr>
-                <th class="px-5 py-3 text-left font-semibold">Name</th>
-                <th class="px-3 py-3 text-left font-semibold">Username</th>
-                <th class="px-3 py-3 text-left font-semibold">Level</th>
-                <th class="px-3 py-3 text-left font-semibold">Status</th>
-                <th class="px-3 py-3 text-left font-semibold">Last Sign-in</th>
+                <SortableTh :sort="accountSort" column="name" class="px-5 py-3 text-left font-semibold">Name</SortableTh>
+                <SortableTh :sort="accountSort" column="username" class="px-3 py-3 text-left font-semibold">Username</SortableTh>
+                <SortableTh :sort="accountSort" column="role" class="px-3 py-3 text-left font-semibold">Level</SortableTh>
+                <SortableTh :sort="accountSort" column="status" class="px-3 py-3 text-left font-semibold">Status</SortableTh>
+                <SortableTh :sort="accountSort" column="lastLogin" class="px-3 py-3 text-left font-semibold">Last Sign-in</SortableTh>
                 <th class="px-5 py-3 text-right font-semibold">Actions</th>
               </tr>
             </thead>
             <tbody>
               <tr v-if="loading"><td colspan="6" class="px-5 py-8 text-center text-slate-400">Loading…</td></tr>
-              <tr v-for="a in accounts" :key="a.accountID" class="border-t border-slate-100">
+              <tr v-for="a in pagedAccounts" :key="a.accountID" class="border-t border-slate-100">
                 <td class="px-5 py-3">
                   <p class="font-semibold text-slate-900">{{ fullName(a) }} <span v-if="a.referenceID === myId" class="text-xs font-normal text-slate-400">(you)</span></p>
                   <p class="text-xs text-slate-500">{{ a.prcNo ? `PRC ${a.prcNo}` : (a.email || '—') }}</p>
@@ -68,6 +69,8 @@
               <tr v-if="!loading && !accounts.length"><td colspan="6" class="px-5 py-8 text-center text-slate-400">No accounts.</td></tr>
             </tbody>
           </table>
+          </div>
+          <TablePager :total="accounts.length" v-model:page="page" v-model:page-size="pageSize" />
         </div>
       </main>
     </div>
@@ -122,7 +125,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import axios from 'axios'
 import { UserPlus } from 'lucide-vue-next'
 import AppSidebar from '@/components/SystemAdmin/Components/AppSidebar.vue'
@@ -131,8 +134,16 @@ import { API_BASE, userLevel } from '@/utils/format'
 import { getUser } from '@/utils/auth'
 import { askConfirm } from '@/utils/dialog'
 import { phMobileError } from '@/utils/phone'
+import SortableTh from '@/components/Shared/SortableTh.vue'
+import TablePager from '@/components/Shared/TablePager.vue'
+import { useTableSort } from '@/utils/tableSort'
 
 const accounts = ref([])
+const accountSort = useTableSort(accounts, { name: (a) => fullName(a) }, () => { page.value = 1 })
+const page = ref(1)
+const pageSize = ref(10)
+const pagedAccounts = computed(() =>
+  accountSort.sortedRows.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value))
 const loading = ref(false)
 const message = ref('')
 const messageError = ref(false)

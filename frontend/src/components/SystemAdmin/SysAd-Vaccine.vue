@@ -2,12 +2,15 @@
 import { Baby, Ban, CalendarRange, CircleCheck, Search, Syringe } from 'lucide-vue-next'
 import { API_ORIGIN } from '@/utils/apiBase'
 import axios from "axios"
-import { ref, computed, onMounted } from "vue"
+import { ref, computed, watch, onMounted } from "vue"
 import { useFloatingMenu } from "@/utils/floatingMenu"
 import AppSidebar from "./Components/AppSidebar.vue"
 import AppHeader from "./Components/AppHeader.vue"
 import { downloadCSV, toISODate } from "@/utils/format"
 import { askConfirm, showAlert } from "@/utils/dialog"
+import SortableTh from "@/components/Shared/SortableTh.vue"
+import TablePager from "@/components/Shared/TablePager.vue"
+import { useTableSort, useCardFilter, cardClass } from "@/utils/tableSort"
 
 /* ------------------------------- API config ------------------------------- */
 const api = `${API_ORIGIN}/api/Vaccines`
@@ -216,8 +219,25 @@ const search = ref("")
 const statusFilter = ref("All")
 const ageCategoryFilter = ref("All")
 
+// Click a number card to list only those vaccines, a heading to sort
+const isBirthDose = (v) => /birth/i.test(v.recommendedAge || "")
+const { activeCard, pickCard, applyCard } = useCardFilter({
+  active: (v) => !!v.status,
+  inactive: (v) => !v.status,
+  birth: isBirthDose,
+  infant: (v) => v.ageCategory === "Infant",
+}, () => { page.value = 1 })
+
+// "At birth" -> 0, "6 weeks" -> 42, "9 months" -> 270
+function ageInDays(text) {
+  if (/birth/i.test(text || "")) return 0
+  const m = /(\d+)\s*(day|week|month|year)/i.exec(text || "")
+  if (!m) return text
+  return Number(m[1]) * { day: 1, week: 7, month: 30, year: 365 }[m[2].toLowerCase()]
+}
+
 const filteredVaccines = computed(() => {
-  return vaccines.value.filter((v) => {
+  return applyCard(vaccines.value).filter((v) => {
     const q = search.value.trim().toLowerCase()
     const matchesSearch =
       !q ||
@@ -231,6 +251,17 @@ const filteredVaccines = computed(() => {
     return matchesSearch && matchesStatus && matchesAge
   })
 })
+const vaccineSort = useTableSort(filteredVaccines, {
+  age: (v) => ageInDays(v.recommendedAge),
+  doses: (v) => getDoses(v.vaccineID).length,
+  status: (v) => (v.status ? "Active" : "Inactive"),
+}, () => { page.value = 1 })
+
+const page = ref(1)
+const pageSize = ref(10)
+const pagedVaccines = computed(() =>
+  vaccineSort.sortedRows.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value))
+watch([search, statusFilter, ageCategoryFilter], () => { page.value = 1 })
 
 /* Export — the currently filtered list, one row per vaccine */
 const exportVaccines = () => {
@@ -249,7 +280,7 @@ const summary = computed(() => ({
   active: vaccines.value.filter((v) => v.status).length,
   inactive: vaccines.value.filter((v) => !v.status).length,
   // BCG and Hepatitis B: "At birth"
-  birth: vaccines.value.filter((v) => /birth/i.test(v.recommendedAge || '')).length,
+  birth: vaccines.value.filter(isBirthDose).length,
   infant: vaccines.value.filter((v) => v.ageCategory === 'Infant').length,
 }))
 
@@ -585,41 +616,41 @@ async function save() {
       <main class="p-6 space-y-6">
         <!-- Summary cards -->
         <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-          <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+          <button type="button" @click="pickCard('all')" class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm" :class="cardClass(activeCard === 'all')">
             <div class="flex items-start justify-between gap-2">
               <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Total Vaccines</p>
               <div class="bg-teal-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0"><Syringe class="w-4 h-4 text-teal-700" /></div>
             </div>
             <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.total }}</p>
-          </div>
-          <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+          </button>
+          <button type="button" @click="pickCard('active')" class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm" :class="cardClass(activeCard === 'active')">
             <div class="flex items-start justify-between gap-2">
               <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Active Vaccines</p>
               <div class="bg-emerald-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0"><CircleCheck class="w-4 h-4 text-emerald-700" /></div>
             </div>
             <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.active }}</p>
-          </div>
-          <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+          </button>
+          <button type="button" @click="pickCard('inactive')" class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm" :class="cardClass(activeCard === 'inactive')">
             <div class="flex items-start justify-between gap-2">
               <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Inactive Vaccines</p>
               <div class="bg-slate-100 w-8 h-8 rounded-lg flex items-center justify-center shrink-0"><Ban class="w-4 h-4 text-slate-500" /></div>
             </div>
             <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.inactive }}</p>
-          </div>
-          <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+          </button>
+          <button type="button" @click="pickCard('birth')" class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm" :class="cardClass(activeCard === 'birth')">
             <div class="flex items-start justify-between gap-2">
               <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Given at Birth</p>
               <div class="bg-sky-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0"><Baby class="w-4 h-4 text-sky-700" /></div>
             </div>
             <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.birth }}</p>
-          </div>
-          <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+          </button>
+          <button type="button" @click="pickCard('infant')" class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm" :class="cardClass(activeCard === 'infant')">
             <div class="flex items-start justify-between gap-2">
               <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Infant Vaccines</p>
               <div class="bg-amber-50 w-8 h-8 rounded-lg flex items-center justify-center shrink-0"><CalendarRange class="w-4 h-4 text-amber-700" /></div>
             </div>
             <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ summary.infant }}</p>
-          </div>
+          </button>
         </section>
 
         <!-- Toolbar -->
@@ -672,18 +703,18 @@ async function save() {
             <table class="w-full text-sm">
               <thead>
                 <tr class="border-b border-slate-200 bg-slate-50/60">
-                  <th class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-5 py-3">Vaccine Name</th>
-                  <th class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Abbreviation</th>
-                  <th class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Recommended Age</th>
-                  <th class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">No. of Doses</th>
+                  <SortableTh :sort="vaccineSort" column="vaccineName" class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-5 py-3">Vaccine Name</SortableTh>
+                  <SortableTh :sort="vaccineSort" column="abbreviation" class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Abbreviation</SortableTh>
+                  <SortableTh :sort="vaccineSort" column="age" class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Recommended Age</SortableTh>
+                  <SortableTh :sort="vaccineSort" column="doses" class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">No. of Doses</SortableTh>
                   <th class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Dose Schedule</th>
-                  <th class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Status</th>
+                  <SortableTh :sort="vaccineSort" column="status" class="text-left font-semibold text-slate-500 text-xs uppercase tracking-wide px-3 py-3">Status</SortableTh>
                   <th class="text-right font-semibold text-slate-500 text-xs uppercase tracking-wide px-5 py-3">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 <tr
-                  v-for="vaccine in filteredVaccines"
+                  v-for="vaccine in pagedVaccines"
                   :key="vaccine.vaccineID"
                   class="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors"
                 >
@@ -747,6 +778,7 @@ async function save() {
               </tbody>
             </table>
           </div>
+          <TablePager :total="filteredVaccines.length" v-model:page="page" v-model:page-size="pageSize" />
         </section>
       </main>
     </div>

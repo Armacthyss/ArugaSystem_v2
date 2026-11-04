@@ -12,6 +12,8 @@ import StaffTopbar from "./StaffTopbar.vue";
 import { API_BASE, ageLabel, ageParts, formatDate, toISODate, downloadCSV } from "@/utils/format";
 import { useFloatingMenu } from "@/utils/floatingMenu";
 import { askConfirm } from "@/utils/dialog";
+import SortableTh from "@/components/Shared/SortableTh.vue";
+import { useTableSort, pageList } from "@/utils/tableSort";
 
 /* ---------------------------------------------------------
    Aruga Pediatric System — Vaccine Schedule (Staff / Nurse)
@@ -324,22 +326,17 @@ watch([tab, searchQuery, vaccineFilter, ageGroupFilter], () => { schedPage.value
 const schedTotalPages = computed(() =>
   Math.max(1, Math.ceil(filteredAppointments.value.length / schedPageSize.value))
 )
+// Click a column heading to sort
+const scheduleSort = useTableSort(filteredAppointments, {
+  vaccines: (a) => a.vaccines[0]?.name,
+  due: (a) => a.dueDate,
+  status: (a) => statusLabel[a.status] || a.status,
+}, () => { schedPage.value = 1 })
 const paginatedAppointments = computed(() => {
   const start = (schedPage.value - 1) * schedPageSize.value
-  return filteredAppointments.value.slice(start, start + schedPageSize.value)
+  return scheduleSort.sortedRows.value.slice(start, start + schedPageSize.value)
 })
-const schedPaginationPages = computed(() => {
-  const total = schedTotalPages.value
-  const cur   = schedPage.value
-  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
-  const pages = []
-  pages.push(1)
-  if (cur > 3) pages.push('...')
-  for (let p = Math.max(2, cur - 1); p <= Math.min(total - 1, cur + 1); p++) pages.push(p)
-  if (cur < total - 2) pages.push('...')
-  pages.push(total)
-  return pages
-})
+const schedPaginationPages = computed(() => pageList(schedPage.value, schedTotalPages.value))
 </script>
 
 <template>
@@ -421,9 +418,12 @@ const schedPaginationPages = computed(() => {
               </colgroup>
               <thead>
                 <tr class="bg-stone-50">
-                  <th v-for="(h, i) in ['', 'Child', 'Vaccines', tab === 'done' ? 'Given' : 'Due', 'Status', '']" :key="i"
-                    class="text-left font-semibold px-4 py-3 whitespace-nowrap text-[11px] uppercase tracking-wide text-stone-500"
-                    :class="i === 5 ? 'sticky right-0 z-10 bg-stone-50 shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.15)]' : ''">{{ h }}</th>
+                  <th class="text-left font-semibold px-4 py-3 whitespace-nowrap text-[11px] uppercase tracking-wide text-stone-500"></th>
+                  <SortableTh :sort="scheduleSort" column="child" class="text-left font-semibold px-4 py-3 whitespace-nowrap text-[11px] uppercase tracking-wide text-stone-500">Child</SortableTh>
+                  <SortableTh :sort="scheduleSort" column="vaccines" class="text-left font-semibold px-4 py-3 whitespace-nowrap text-[11px] uppercase tracking-wide text-stone-500">Vaccines</SortableTh>
+                  <SortableTh :sort="scheduleSort" column="due" class="text-left font-semibold px-4 py-3 whitespace-nowrap text-[11px] uppercase tracking-wide text-stone-500">{{ tab === 'done' ? 'Given' : 'Due' }}</SortableTh>
+                  <SortableTh :sort="scheduleSort" column="status" class="text-left font-semibold px-4 py-3 whitespace-nowrap text-[11px] uppercase tracking-wide text-stone-500">Status</SortableTh>
+                  <th class="text-left font-semibold px-4 py-3 whitespace-nowrap text-[11px] uppercase tracking-wide text-stone-500 sticky right-0 z-10 bg-stone-50 shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.15)]"></th>
                 </tr>
               </thead>
               <tbody>
@@ -510,23 +510,23 @@ const schedPaginationPages = computed(() => {
           </div>
 
           <!-- PAGINATION -->
-          <div v-if="filteredAppointments.length > schedPageSize" class="flex items-center justify-between px-5 py-3.5 border-t border-stone-200 flex-wrap gap-3">
+          <div v-if="filteredAppointments.length > 0" class="flex items-center justify-between px-5 py-3.5 border-t border-stone-200 flex-wrap gap-3">
             <div class="flex items-center gap-3">
               <div class="flex items-center gap-2 text-[12px] text-stone-500">
                 <span>Show</span>
                 <select v-model="schedPageSize" @change="schedPage = 1" class="border border-stone-200 rounded-lg px-2 py-1 text-[12px] text-stone-600 outline-none bg-white">
-                  <option :value="10">10</option><option :value="20">20</option><option :value="50">50</option><option :value="100">100</option>
+                  <option :value="10">10</option><option :value="20">20</option><option :value="30">30</option><option :value="50">50</option>
                 </select>
-                <span>per page</span>
+                <span>entries</span>
               </div>
               <p class="text-[12px] text-stone-500">
                 {{ Math.min((schedPage - 1) * schedPageSize + 1, filteredAppointments.length) }}–{{ Math.min(schedPage * schedPageSize, filteredAppointments.length) }}
                 of {{ filteredAppointments.length }}
               </p>
             </div>
-            <div class="flex items-center gap-1">
+            <div class="flex flex-wrap items-center gap-1">
               <button @click="schedPage--" :disabled="schedPage === 1" class="p-1.5 rounded-lg text-stone-400 hover:text-stone-600 hover:bg-stone-100 disabled:opacity-40 disabled:cursor-not-allowed" aria-label="Previous page"><ChevronLeft :size="15" /></button>
-              <template v-for="p in schedPaginationPages" :key="p">
+              <template v-for="(p, i) in schedPaginationPages" :key="i">
                 <span v-if="p === '...'" class="px-1 text-[12px] text-stone-400">…</span>
                 <button v-else @click="schedPage = p" class="min-w-[28px] h-7 rounded-lg text-[12px] font-medium" :class="p === schedPage ? 'bg-emerald-700 text-white' : 'text-stone-600 hover:bg-stone-100'">{{ p }}</button>
               </template>

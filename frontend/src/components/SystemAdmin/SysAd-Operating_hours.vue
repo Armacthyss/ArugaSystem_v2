@@ -6,6 +6,9 @@ import axios from "axios"
 import { ref, computed, onMounted } from "vue"
 import AppSidebar from "./Components/AppSidebar.vue"
 import AppHeader from "./Components/AppHeader.vue"
+import SortableTh from "@/components/Shared/SortableTh.vue"
+import TablePager from "@/components/Shared/TablePager.vue"
+import { useTableSort } from "@/utils/tableSort"
 
 const props = defineProps({
   // "Admin" | "Staff" | "Parent" (Parent should never be routed here)
@@ -199,6 +202,19 @@ async function saveDay() {
    2. SCHEDULE EXCEPTIONS
    ================================================================ */
 const exceptions = ref([])
+// Click a column heading to sort the exceptions
+const timeWhenOpen = (time) => (ex) => (ex.isOpen ? ex[time] : null)
+const exceptionSort = useTableSort(exceptions, {
+  status: (ex) => (ex.isOpen ? "Open" : "Closed"),
+  openingTime: timeWhenOpen("openingTime"),
+  closingTime: timeWhenOpen("closingTime"),
+  queueCutoffTime: timeWhenOpen("queueCutoffTime"),
+  active: (ex) => (ex.isActive ? "Active" : "Inactive"),
+}, () => { exceptionPage.value = 1 })
+const exceptionPage = ref(1)
+const exceptionPageSize = ref(10)
+const pagedExceptions = computed(() =>
+  exceptionSort.sortedRows.value.slice((exceptionPage.value - 1) * exceptionPageSize.value, exceptionPage.value * exceptionPageSize.value))
 const exceptionsLoading = ref(false)
 const exceptionsLoadError = ref("")
 
@@ -690,18 +706,18 @@ onMounted(() => {
             <table class="w-full text-sm">
               <thead>
                 <tr class="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide border-b border-slate-200">
-                  <th class="px-6 py-3">Date</th>
-                  <th class="px-4 py-3">Status</th>
-                  <th class="px-4 py-3">Opening</th>
-                  <th class="px-4 py-3">Closing</th>
-                  <th class="px-4 py-3">Queue Cutoff</th>
-                  <th class="px-4 py-3">Reason</th>
-                  <th class="px-4 py-3">Active</th>
+                  <SortableTh :sort="exceptionSort" column="exceptionDate" class="px-6 py-3">Date</SortableTh>
+                  <SortableTh :sort="exceptionSort" column="status" class="px-4 py-3">Status</SortableTh>
+                  <SortableTh :sort="exceptionSort" column="openingTime" class="px-4 py-3">Opening</SortableTh>
+                  <SortableTh :sort="exceptionSort" column="closingTime" class="px-4 py-3">Closing</SortableTh>
+                  <SortableTh :sort="exceptionSort" column="queueCutoffTime" class="px-4 py-3">Queue Cutoff</SortableTh>
+                  <SortableTh :sort="exceptionSort" column="reason" class="px-4 py-3">Reason</SortableTh>
+                  <SortableTh :sort="exceptionSort" column="active" class="px-4 py-3">Active</SortableTh>
                   <th v-if="isAdmin" class="px-4 py-3 text-right pr-6">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="ex in exceptions" :key="ex.exceptionID" class="border-b border-slate-100 last:border-0">
+                <tr v-for="ex in pagedExceptions" :key="ex.exceptionID" class="border-b border-slate-100 last:border-0">
                   <td class="px-6 py-3.5 font-medium text-slate-900">{{ formatDateLong(ex.exceptionDate.slice(0, 10)) }}</td>
                   <td class="px-4 py-3.5">
                     <span
@@ -753,6 +769,7 @@ onMounted(() => {
               </tbody>
             </table>
           </div>
+          <TablePager :total="exceptions.length" v-model:page="exceptionPage" v-model:page-size="exceptionPageSize" />
         </section>
       </main>
     </div>

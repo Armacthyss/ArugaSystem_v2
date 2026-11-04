@@ -68,17 +68,17 @@
 
           <!-- The day in numbers -->
           <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div class="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
+            <button type="button" @click="pickCard('all')" class="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm" :class="cardClass(activeCard === 'all')">
               <p class="text-[10.5px] font-semibold uppercase tracking-wide text-stone-500">Families</p>
               <p class="text-[24px] font-bold mt-1.5">{{ entries.length }}</p>
               <p class="text-[11.5px] text-stone-500">{{ childCount }} {{ childCount === 1 ? "child" : "children" }}</p>
-            </div>
-            <div class="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
+            </button>
+            <button type="button" @click="pickCard('served')" class="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm" :class="cardClass(activeCard === 'served')">
               <p class="text-[10.5px] font-semibold uppercase tracking-wide text-stone-500">Served</p>
               <p class="text-[24px] font-bold mt-1.5 text-emerald-700">{{ servedCount }}</p>
               <p class="text-[11.5px] text-stone-500">{{ servedCount === 1 ? "visit" : "visits" }} completed</p>
-            </div>
-            <div class="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
+            </button>
+            <button type="button" @click="pickCard('open')" class="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm" :class="cardClass(activeCard === 'open')">
               <template v-if="isToday">
                 <p class="text-[10.5px] font-semibold uppercase tracking-wide text-stone-500">Still in queue</p>
                 <p class="text-[24px] font-bold mt-1.5 text-amber-700">{{ openCount }}</p>
@@ -89,12 +89,12 @@
                 <p class="text-[24px] font-bold mt-1.5 text-rose-700">{{ openCount }}</p>
                 <p class="text-[11.5px] text-stone-500">checked in, visit not finished</p>
               </template>
-            </div>
-            <div class="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
+            </button>
+            <button type="button" @click="pickCard('others')" class="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm" :class="cardClass(activeCard === 'others')">
               <p class="text-[10.5px] font-semibold uppercase tracking-wide text-stone-500">Brought by someone else</p>
               <p class="text-[24px] font-bold mt-1.5 text-sky-700">{{ broughtByOthersCount }}</p>
               <p class="text-[11.5px] text-stone-500">{{ broughtByOthersCount === 1 ? "child" : "children" }}, not the parent</p>
-            </div>
+            </button>
           </div>
 
           <p v-if="isToday" class="text-[12.5px] text-stone-500">
@@ -109,16 +109,16 @@
             <table class="w-full text-left border-collapse text-[13px]">
               <thead>
                 <tr class="bg-stone-50 border-b border-stone-200">
-                  <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-wide text-stone-500">Queue No.</th>
-                  <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-wide text-stone-500">Child(ren)</th>
-                  <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-wide text-stone-500">Brought by</th>
-                  <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-wide text-stone-500">Checked in</th>
-                  <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-wide text-stone-500">Status</th>
+                  <SortableTh :sort="queueSort" column="no" class="px-5 py-3 text-[11px] font-semibold uppercase tracking-wide text-stone-500">Queue No.</SortableTh>
+                  <SortableTh :sort="queueSort" column="childNames" class="px-5 py-3 text-[11px] font-semibold uppercase tracking-wide text-stone-500">Child(ren)</SortableTh>
+                  <SortableTh :sort="queueSort" column="broughtBy" class="px-5 py-3 text-[11px] font-semibold uppercase tracking-wide text-stone-500">Brought by</SortableTh>
+                  <SortableTh :sort="queueSort" column="checkedInAt" class="px-5 py-3 text-[11px] font-semibold uppercase tracking-wide text-stone-500">Checked in</SortableTh>
+                  <SortableTh :sort="queueSort" column="status" class="px-5 py-3 text-[11px] font-semibold uppercase tracking-wide text-stone-500">Status</SortableTh>
                   <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-wide text-stone-500 text-right">Details</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-stone-100">
-                <template v-for="q in filteredEntries" :key="q.queueID">
+                <template v-for="q in pagedEntries" :key="q.queueID">
                   <tr class="hover:bg-stone-50/60 transition-colors">
                     <td class="px-5 py-3 font-medium whitespace-nowrap">{{ q.no }}</td>
                     <td class="px-5 py-3">{{ q.childNames }}</td>
@@ -162,6 +162,7 @@
               </tbody>
             </table>
             </div>
+            <TablePager :total="filteredEntries.length" v-model:page="page" v-model:page-size="pageSize" />
           </div>
 
           <p v-if="loadError" class="text-[12.5px] text-rose-600">{{ loadError }}</p>
@@ -172,13 +173,16 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, watch, onMounted } from "vue";
 import axios from "axios";
 import { RefreshCw, Search, Eye, ClipboardList, ChevronLeft, ChevronRight } from "lucide-vue-next";
 import StaffSidebar from "./StaffSidebar.vue";
 import StaffTopbar from "./StaffTopbar.vue";
 import { API_BASE, toISODate, formatTime, withRelationship } from "@/utils/format";
 import { barangayLabel } from "@/utils/barangays";
+import SortableTh from "@/components/Shared/SortableTh.vue";
+import TablePager from "@/components/Shared/TablePager.vue"
+import { useTableSort, useCardFilter, cardClass } from "@/utils/tableSort";
 
 const today = toISODate();
 const selectedDate = ref(today);
@@ -210,6 +214,8 @@ async function load(date) {
   isLoading.value = true;
   loadError.value = null;
   expandedId.value = null;
+  activeCard.value = "";
+  page.value = 1;
   try {
     const { data } = await axios.get(`${API_BASE}/Queue/day`, { params: { date } });
     selectedDate.value = date;
@@ -237,12 +243,28 @@ async function load(date) {
 
 const withOutcome = computed(() => entries.value.map((q) => ({ ...q, outcome: outcomeOf(q.status) })));
 
+// Click a number card to list only those families, a heading to sort
+const broughtByOther = (q) => q.children.some((c) => c.broughtBy && c.broughtBy !== q.parentName);
+const { activeCard, pickCard, applyCard } = useCardFilter({
+  served: (q) => q.status === "Completed",
+  open: (q) => q.status !== "Completed",
+  others: broughtByOther,
+}, () => { page.value = 1; });
+
 const filteredEntries = computed(() => {
   const term = search.value.trim().toLowerCase();
-  if (!term) return withOutcome.value;
-  return withOutcome.value.filter((q) =>
+  const list = applyCard(withOutcome.value);
+  if (!term) return list;
+  return list.filter((q) =>
     [q.childNames, q.broughtBy, q.parentName].some((s) => (s || "").toLowerCase().includes(term)));
 });
+const queueSort = useTableSort(filteredEntries, { status: (q) => q.outcome.label }, () => { page.value = 1; });
+
+const page = ref(1);
+const pageSize = ref(10);
+const pagedEntries = computed(() =>
+  queueSort.sortedRows.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value));
+watch(search, () => { page.value = 1; });
 
 const childCount = computed(() => entries.value.reduce((n, q) => n + q.children.length, 0));
 const servedCount = computed(() => entries.value.filter((q) => q.status === "Completed").length);

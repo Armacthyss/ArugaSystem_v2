@@ -10,6 +10,7 @@ import {
   CalendarClock, LogIn, Bell, Clock,
 } from 'lucide-vue-next'
 import { API_BASE, isSameDay, relativeTime, summarizeStock } from '@/utils/format'
+import { cardClass } from '@/utils/tableSort'
 
 const router = useRouter()
 const activeNav = ref('Dashboard')
@@ -72,10 +73,10 @@ const summaryCards = computed(() => {
     return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
   }).length
   return [
-    { label: 'Total Users', value: accounts.value.length, description: 'Registered system users', icon: Users, tint: 'bg-teal-50', text: 'text-teal-700' },
-    { label: 'Total Patients', value: children.value.length, description: 'Registered children', icon: Baby, tint: 'bg-emerald-50', text: 'text-emerald-700' },
-    { label: 'Vaccinations This Month', value: thisMonth, description: 'Vaccinations recorded', icon: Syringe, tint: 'bg-sky-50', text: 'text-sky-700' },
-    { label: 'Low Stock Vaccines', value: lowStock.value.length, description: 'Vaccines need attention', icon: AlertTriangle, tint: 'bg-amber-50', text: 'text-amber-700' },
+    { to: '/admin/user-management', label: 'Total Users', value: accounts.value.length, description: 'Registered system users', icon: Users, tint: 'bg-teal-50', text: 'text-teal-700' },
+    { to: '/admin/patients', label: 'Total Patients', value: children.value.length, description: 'Registered children', icon: Baby, tint: 'bg-emerald-50', text: 'text-emerald-700' },
+    { to: '/admin/reports', label: 'Vaccinations This Month', value: thisMonth, description: 'Vaccinations recorded', icon: Syringe, tint: 'bg-sky-50', text: 'text-sky-700' },
+    { to: '/admin/inventory', label: 'Low Stock Vaccines', value: lowStock.value.length, description: 'Vaccines need attention', icon: AlertTriangle, tint: 'bg-amber-50', text: 'text-amber-700' },
   ]
 })
 
@@ -186,7 +187,7 @@ const todaysActivity = computed(() => [
 
         <!-- Overview cards -->
         <section class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-          <div v-for="card in summaryCards" :key="card.label" class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+          <button v-for="card in summaryCards" :key="card.label" type="button" @click="router.push(card.to)" class="min-w-0 bg-white border border-slate-200 rounded-xl p-4 shadow-sm" :class="cardClass(false)">
             <div class="flex items-start justify-between gap-2">
               <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ card.label }}</p>
               <div :class="card.tint" class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0">
@@ -195,7 +196,7 @@ const todaysActivity = computed(() => [
             </div>
             <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ card.value }}</p>
             <p class="mt-1 text-xs text-slate-500">{{ card.description }}</p>
-          </div>
+          </button>
         </section>
 
         <section class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">

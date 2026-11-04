@@ -4,6 +4,9 @@ import { API_ORIGIN } from '@/utils/apiBase'
 import { toISODate } from '@/utils/format'
 import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { useFloatingMenu } from '@/utils/floatingMenu'
+import TablePager from '@/components/Shared/TablePager.vue'
+import SortableTh from '@/components/Shared/SortableTh.vue'
+import { useTableSort } from '@/utils/tableSort'
 import axios from 'axios'
 import AppSidebar from './Components/AppSidebar.vue'
 import AppHeader from './Components/AppHeader.vue'
@@ -216,18 +219,14 @@ const groupedInventory = computed(() => {
 })
 
 /* ------------------------------ Pagination (over vaccine groups) ---------------------------- */
-const pageSize = ref(25)
+const pageSize = ref(10)
 const currentPage = ref(1)
 const totalGroups = computed(() => groupedInventory.value.length)
 const totalBatchesFiltered = computed(() => filteredInventory.value.length)
-const totalPages = computed(() => Math.max(1, Math.ceil(totalGroups.value / pageSize.value)))
 const paginatedGroups = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
   return groupedInventory.value.slice(start, start + pageSize.value)
 })
-function goToPage(p) {
-  currentPage.value = Math.min(Math.max(1, p), totalPages.value)
-}
 watch([searchQuery, vaccineFilter, statusFilter, expirationFilter, activeFilter, pageSize], () => {
   currentPage.value = 1
 })
@@ -244,6 +243,20 @@ function expandAll() {
 }
 function collapseAll() {
   expandedGroups.value = new Set()
+}
+
+// Batches inside each vaccine: First Expired First Out until a heading is clicked
+const batchSort = useTableSort(filteredInventory, {
+  status: (b) => computeStatus(b),
+  lifecycle: (b) => (isActive(b) ? 'Active' : 'Inactive'),
+})
+
+// The numbers in the strip below list those batches, using the dropdowns
+function showBatches({ status = 'All', expiration = 'All', active = 'All' } = {}) {
+  statusFilter.value = status
+  expirationFilter.value = expiration
+  activeFilter.value = active
+  expandAll()
 }
 
 /* -------------------------------- Dashboard summary (compact strip) ---------------------------------- */
@@ -538,36 +551,36 @@ async function setActiveState(item, nextActive) {
         <!-- ============ Compact overview strip ============ -->
         <section class="bg-white border border-slate-200 rounded-xl shadow-sm px-5 py-3.5">
           <div class="flex flex-wrap items-center gap-x-8 gap-y-2">
-            <div class="flex items-center gap-2">
+            <button type="button" @click="showBatches()" title="Show every batch" class="flex items-center gap-2 rounded-lg hover:underline decoration-slate-300 underline-offset-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
               <span class="text-xs font-medium text-slate-500">Vaccine Types</span>
               <span class="text-base font-bold text-slate-900">{{ summary.totalVaccineTypes }}</span>
-            </div>
+            </button>
             <div class="w-px h-5 bg-slate-200 hidden sm:block" />
-            <div class="flex items-center gap-2">
+            <button type="button" @click="showBatches({ active: 'Active' })" title="Show the active batches" class="flex items-center gap-2 rounded-lg hover:underline decoration-slate-300 underline-offset-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
               <span class="text-xs font-medium text-slate-500">Active Batches</span>
               <span class="text-base font-bold text-slate-900">{{ summary.totalBatches }}</span>
-            </div>
+            </button>
             <div class="w-px h-5 bg-slate-200 hidden sm:block" />
-            <div class="flex items-center gap-2">
+            <button type="button" @click="showBatches()" title="Show every batch" class="flex items-center gap-2 rounded-lg hover:underline decoration-slate-300 underline-offset-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
               <span class="text-xs font-medium text-slate-500">Available Doses</span>
               <span class="text-base font-bold text-slate-900">{{ summary.totalDoses }}</span>
-            </div>
+            </button>
             <div class="w-px h-5 bg-slate-200 hidden sm:block" />
-            <div class="flex items-center gap-2">
+            <button type="button" @click="showBatches({ status: 'Low Stock', active: 'Active' })" title="Show the low-stock batches" class="flex items-center gap-2 rounded-lg hover:underline decoration-slate-300 underline-offset-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
               <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
               <span class="text-xs font-medium text-slate-500">Low-Stock Batches</span>
               <span class="text-base font-bold text-amber-700">{{ summary.lowStock }}</span>
-            </div>
-            <div class="flex items-center gap-2">
+            </button>
+            <button type="button" @click="showBatches({ expiration: 'Expiring Soon', active: 'Active' })" title="Show the batches expiring within 30 days" class="flex items-center gap-2 rounded-lg hover:underline decoration-slate-300 underline-offset-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
               <span class="w-1.5 h-1.5 rounded-full bg-orange-500"></span>
               <span class="text-xs font-medium text-slate-500">Batches Expiring ≤30d</span>
               <span class="text-base font-bold text-orange-700">{{ summary.expiringSoon }}</span>
-            </div>
-            <div class="flex items-center gap-2">
+            </button>
+            <button type="button" @click="showBatches({ status: 'Expired', active: 'Active' })" title="Show the expired batches" class="flex items-center gap-2 rounded-lg hover:underline decoration-slate-300 underline-offset-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
               <span class="w-1.5 h-1.5 rounded-full bg-red-600"></span>
               <span class="text-xs font-medium text-slate-500">Expired Batches</span>
               <span class="text-base font-bold text-red-700">{{ summary.expired }}</span>
-            </div>
+            </button>
           </div>
         </section>
 
@@ -679,19 +692,19 @@ async function setActiveState(item, nextActive) {
                   <table class="w-full text-sm">
                     <thead>
                       <tr class="text-left text-xs uppercase tracking-wide text-slate-400 whitespace-nowrap">
-                        <th class="font-medium pl-12 pr-3 py-2">Lot Number</th>
-                        <th class="font-medium px-3 py-2">Current / Min</th>
-                        <th class="font-medium px-3 py-2">Manufactured</th>
-                        <th class="font-medium px-3 py-2">Expiration</th>
-                        <th class="font-medium px-3 py-2">Supplier</th>
-                        <th class="font-medium px-3 py-2">Status</th>
-                        <th class="font-medium px-3 py-2">Lifecycle</th>
+                        <SortableTh :sort="batchSort" column="lotNumber" class="font-medium pl-12 pr-3 py-2">Lot Number</SortableTh>
+                        <SortableTh :sort="batchSort" column="currentQuantity" class="font-medium px-3 py-2">Current / Min</SortableTh>
+                        <SortableTh :sort="batchSort" column="manufacturingDate" class="font-medium px-3 py-2">Manufactured</SortableTh>
+                        <SortableTh :sort="batchSort" column="expirationDate" class="font-medium px-3 py-2">Expiration</SortableTh>
+                        <SortableTh :sort="batchSort" column="supplier" class="font-medium px-3 py-2">Supplier</SortableTh>
+                        <SortableTh :sort="batchSort" column="status" class="font-medium px-3 py-2">Status</SortableTh>
+                        <SortableTh :sort="batchSort" column="lifecycle" class="font-medium px-3 py-2">Lifecycle</SortableTh>
                         <th class="font-medium pr-5 py-2 text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
                       <tr
-                        v-for="(item, idx) in group.batches"
+                        v-for="item in batchSort.sortList(group.batches)"
                         :key="item.inventoryID"
                         class="border-t border-slate-100 hover:bg-white transition-colors"
                         :class="!isActive(item) ? 'opacity-60' : ''"
@@ -699,7 +712,7 @@ async function setActiveState(item, nextActive) {
                         <td class="pl-12 pr-3 py-2.5">
                           <button @click.stop="openDrawer(item)" class="flex items-center gap-2 hover:underline decoration-slate-300 underline-offset-2">
                             <span class="font-mono text-xs text-slate-600 whitespace-nowrap">{{ item.lotNumber }}</span>
-                            <span v-if="idx === 0 && isActive(item)" class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 whitespace-nowrap">Use next</span>
+                            <span v-if="item === group.batches[0] && isActive(item)" class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 whitespace-nowrap">Use next</span>
                           </button>
                         </td>
                         <td class="px-3 py-2.5 whitespace-nowrap">
@@ -759,32 +772,7 @@ async function setActiveState(item, nextActive) {
               </div>
             </div>
 
-            <!-- Pagination -->
-            <div class="flex flex-wrap items-center justify-between gap-3 px-5 py-3 border-t border-slate-200">
-              <div class="flex items-center gap-2 text-xs text-slate-500">
-                <span>Show</span>
-                <select v-model.number="pageSize" class="text-xs rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-emerald-500">
-                  <option :value="10">10</option>
-                  <option :value="25">25</option>
-                  <option :value="50">50</option>
-                  <option :value="100">100</option>
-                </select>
-                <span>per page · {{ totalGroups }} vaccine{{ totalGroups === 1 ? '' : 's' }} total</span>
-              </div>
-              <div class="flex items-center gap-2">
-                <button
-                  @click="goToPage(currentPage - 1)"
-                  :disabled="currentPage <= 1"
-                  class="text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                >Previous</button>
-                <span class="text-xs text-slate-500 px-1">Page {{ currentPage }} of {{ totalPages }}</span>
-                <button
-                  @click="goToPage(currentPage + 1)"
-                  :disabled="currentPage >= totalPages"
-                  class="text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                >Next</button>
-              </div>
-            </div>
+            <TablePager :total="totalGroups" v-model:page="currentPage" v-model:page-size="pageSize" />
           </div>
 
           <!-- Inventory Alerts panel -->
