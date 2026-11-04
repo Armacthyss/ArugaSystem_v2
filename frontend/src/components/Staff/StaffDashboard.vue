@@ -282,6 +282,14 @@ const selectedParent = ref(null);
 const selectedChildIds = ref([]);
 const submittingCheckIn = ref(false);
 const checkInError = ref(null);
+const checkInClosedMessage = ref(null);   // set outside check-in hours (the API refuses then too)
+
+const loadCheckInHours = async () => {
+  try {
+    const res = await fetch(`${API_BASE}/ClinicOperatingSchedule/today`);
+    if (res.ok) checkInClosedMessage.value = (await res.json()).checkInClosedMessage ?? null;
+  } catch { /* the API still checks when they press Check In */ }
+};
 
 // Confirmed real shapes from ParentsController.cs and ChildrenController.cs:
 // Parent: { parentID, firstName, middleName, lastName, email, contactNo,
@@ -302,6 +310,7 @@ const getChildName = (c) =>
 const openCheckInModal = async () => {
   checkInModalOpen.value = true;
   checkInError.value = null;
+  loadCheckInHours();
   selectedParent.value = null;
   selectedChildIds.value = [];
   parentSearch.value = "";
@@ -386,7 +395,7 @@ const broughtByRelationshipText = computed(() =>
   broughtByRelationship.value === "Other" ? broughtByOther.value.trim() : broughtByRelationship.value);
 
 const canSubmitCheckIn = computed(() =>
-  !!selectedParent.value && selectedChildIds.value.length > 0 && !submittingCheckIn.value &&
+  !checkInClosedMessage.value && !!selectedParent.value && selectedChildIds.value.length > 0 && !submittingCheckIn.value &&
   (broughtBy.value === "parent" || (broughtByName.value.trim() && broughtByRelationshipText.value)));
 
 const childrenForSelectedParent = computed(() => {
@@ -1180,7 +1189,12 @@ onUnmounted(() => {
         <div class="px-5 py-4 space-y-4 max-h-[70vh] overflow-y-auto">
           <p v-if="loadingCheckInData" class="text-[12.5px] text-stone-400">Loading parent/child records…</p>
 
-          <template v-if="!loadingCheckInData">
+          <div v-if="checkInClosedMessage" class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-900">
+            <p class="font-semibold">Check-in is closed</p>
+            <p class="mt-0.5">{{ checkInClosedMessage }}</p>
+          </div>
+
+          <template v-else-if="!loadingCheckInData">
             <!-- Step 1: find the family by the child's or parent's name -->
             <div v-if="!selectedParent">
               <label class="block text-[12px] font-medium text-stone-600 mb-1">Search child or parent name</label>

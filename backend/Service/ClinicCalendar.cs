@@ -63,6 +63,39 @@ namespace AndroidWebAPI.Services
             };
         }
 
+        // Why families can't check in right now, or null while they can: on a
+        // vaccination day, from opening time until the queue cutoff. The same
+        // rule for parents (phone) and staff (desk), so nobody joins the queue
+        // when there is no vaccinator. Operating Hours exceptions win.
+        public static async Task<string?> CheckInClosedMessageAsync(AppDbContext context)
+        {
+            var now = DateTime.Now;
+            var today = now.Date;
+
+            var exception = await context.ClinicScheduleExceptions
+                .FirstOrDefaultAsync(e => e.IsActive && e.ExceptionDate == today);
+            var weekly = await context.ClinicOperatingSchedules
+                .FirstOrDefaultAsync(s => s.IsActive && s.DayOfWeek == (int)today.DayOfWeek);
+
+            bool open = exception?.IsOpen ?? weekly?.IsOpen ?? false;
+            var opens = exception?.OpeningTime ?? weekly?.OpeningTime;
+            var cutoff = exception?.QueueCutoffTime ?? weekly?.QueueCutoffTime;
+
+            if (open && now.TimeOfDay >= opens && now.TimeOfDay <= cutoff) return null;
+
+            static string Time(TimeSpan? t) => DateTime.Today.Add(t!.Value).ToString("h:mm tt");
+            var next = (await NextOpenDayAsync(context, today.AddDays(1))).ToString("dddd, MMMM d");
+
+            if (exception != null && !exception.IsOpen)
+            {
+                var reason = string.IsNullOrWhiteSpace(exception.Reason) ? "" : $" ({exception.Reason})";
+                return $"The health center is closed today{reason}. The next vaccination day is {next}.";
+            }
+            if (!open) return $"There are no vaccinations today. The next vaccination day is {next}.";
+            if (now.TimeOfDay < opens) return $"Check-in opens at {Time(opens)} and runs until {Time(cutoff)}.";
+            return $"Check-in for vaccinations today closed at {Time(cutoff)}. The next vaccination day is {next}.";
+        }
+
         // The health center's general hours (other services run until 5 PM),
         // shown to parents next to the vaccination hours. Set "Clinic:Hours"
         // in appsettings.json to change it.

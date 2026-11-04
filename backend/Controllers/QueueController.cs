@@ -503,6 +503,10 @@ public async Task<IActionResult> GetAll()
                 });
             }
 
+            // Parents and staff alike: only during check-in hours
+            var closed = await AndroidWebAPI.Services.ClinicCalendar.CheckInClosedMessageAsync(_context);
+            if (closed != null) return BadRequest(new { message = closed });
+
             // A parent checking in from their own phone must scan today's QR
             bool isParent = User.IsInRole("Parent");
             if (isParent && (await qrSettings.GetAsync())?.IsEnabled == true)

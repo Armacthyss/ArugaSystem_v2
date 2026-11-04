@@ -49,6 +49,8 @@ function flash(msg) {
   setTimeout(() => { toast.value = ""; }, 4000);
 }
 
+const checkInOpen = ref(true);   // outside check-in hours, no Check In at Desk
+
 async function loadData() {
   loading.value = true;
   loadError.value = "";
@@ -60,6 +62,8 @@ async function loadData() {
       axios.get(`${API_BASE}/Queue/today`),
       axios.get(`${API_BASE}/VaccineInventory`).catch(() => ({ data: [] })),
     ]);
+    const hours = await axios.get(`${API_BASE}/ClinicOperatingSchedule/today`).catch(() => null);
+    checkInOpen.value = !hours?.data?.checkInClosedMessage;
     schedule.value = s.data;
     todaysQueue.value = q.data;
     inventory.value = inv.data;
@@ -258,7 +262,7 @@ const {
 
 /* ---------------- Actions ---------------- */
 const queueingKey = ref("");
-const canQueue = (a) => !a.inQueue && a.status !== "Completed" && a.parentID && (a.overdue || a.dueISO === todayISO);
+const canQueue = (a) => checkInOpen.value && !a.inQueue && a.status !== "Completed" && a.parentID && (a.overdue || a.dueISO === todayISO);
 
 // POST /api/Queue — the whole visit for this child's parent today.
 // Parents normally check in themselves with the clinic QR; this is the desk

@@ -73,6 +73,8 @@ namespace AndroidWebAPI.Controllers
                 closesAt = Time(closes),
                 checkInUntil = Time(cutoff),
                 checkInOpenNow = open && DateTime.Now.TimeOfDay >= opens && DateTime.Now.TimeOfDay <= cutoff,
+                // In words, for the staff's desk check-in; null while check-in is open
+                checkInClosedMessage = await AndroidWebAPI.Services.ClinicCalendar.CheckInClosedMessageAsync(_context),
                 // Early morning of a vaccination day: today is still the next vaccination day
                 checkInNotYetOpen = open && DateTime.Now.TimeOfDay < opens,
                 reason = exception?.Reason,
