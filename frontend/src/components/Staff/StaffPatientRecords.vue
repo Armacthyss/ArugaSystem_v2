@@ -1536,7 +1536,7 @@ async function submitChildRegister() {
     <!-- VIEW CHILD DRAWER -->
     <transition name="fade"><div v-if="showChildDrawer" class="fixed inset-0 z-30 bg-stone-900/30" @click="showChildDrawer = false"></div></transition>
     <transition name="slide">
-      <aside v-if="showChildDrawer && selectedChild" class="fixed right-0 top-0 z-40 h-full w-[440px] bg-white border-l border-stone-200 shadow-xl overflow-y-auto">
+      <aside v-if="showChildDrawer && selectedChild" class="fixed right-0 top-0 z-40 h-full w-full max-w-[640px] bg-white border-l border-stone-200 shadow-xl overflow-y-auto">
         <div class="flex items-center justify-between px-5 py-4 border-b border-stone-200 sticky top-0 bg-white">
           <div><p class="text-[15px] font-semibold">Child Information</p><p class="text-[11.5px] text-stone-500">{{ selectedChild.familyNo ? `Family No. ${selectedChild.familyNo}` : 'No Family No. yet' }} · {{ barangayLabel(selectedChild.barangay) }}</p></div>
           <button @click="showChildDrawer = false" class="p-1.5 rounded-lg hover:bg-stone-100" aria-label="Close"><X :size="17" class="text-stone-500" /></button>
@@ -1572,9 +1572,10 @@ async function submitChildRegister() {
             </div>
             <p v-if="vaccinationLoading" class="text-[12px] text-stone-500 py-2">Loading vaccination records...</p>
             <div v-else-if="selectedChildVaccinations.length" class="rounded-xl border border-stone-200 overflow-hidden">
+              <div class="overflow-x-auto">
               <table class="w-full text-[12.5px]">
                 <thead><tr class="bg-stone-50">
-                  <SortableTh :sort="historySort" column="vaccine" class="text-left font-semibold px-3 py-2 text-[10.5px] uppercase tracking-wide text-stone-500">Vaccine</SortableTh>
+                  <SortableTh :sort="historySort" column="vaccine"class="text-left font-semibold px-3 py-2 text-[10.5px] uppercase tracking-wide text-stone-500">Vaccine</SortableTh>
                   <SortableTh :sort="historySort" column="doseNumber" class="text-left font-semibold px-3 py-2 text-[10.5px] uppercase tracking-wide text-stone-500">Dose</SortableTh>
                   <SortableTh :sort="historySort" column="vaccinationDate" class="text-left font-semibold px-3 py-2 text-[10.5px] uppercase tracking-wide text-stone-500">Date</SortableTh>
                   <SortableTh :sort="historySort" column="injectionSite" class="text-left font-semibold px-3 py-2 text-[10.5px] uppercase tracking-wide text-stone-500">Site</SortableTh>
@@ -1584,12 +1585,13 @@ async function submitChildRegister() {
                   <tr v-for="v in pagedHistory" :key="v.vaccinationRecordID" class="border-t border-stone-200">
                     <td class="px-3 py-2">{{ v.vaccineName || vaccineNameById(v.vaccineID) }}</td>
                     <td class="px-3 py-2">{{ v.doseNumber }}</td>
-                    <td class="px-3 py-2">{{ formatVaccDate(v.vaccinationDate) }}</td>
+                    <td class="px-3 py-2 whitespace-nowrap">{{ formatVaccDate(v.vaccinationDate) }}</td>
                     <td class="px-3 py-2 whitespace-nowrap">{{ v.injectionSite || '—' }}</td>
                     <td class="px-3 py-2"><span class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium bg-emerald-50 text-emerald-700">{{ v.status }}</span></td>
                   </tr>
                 </tbody>
               </table>
+              </div>
               <TablePager :total="selectedChildVaccinations.length" v-model:page="historyPage" v-model:page-size="historyPageSize" />
             </div>
             <p v-else class="rounded-xl bg-stone-50 p-3.5 text-[12.5px] text-stone-500">No vaccination records yet.</p>
