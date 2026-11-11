@@ -1,1 +1,11 @@
 @import "tailwindcss";
+
+/* "Download PDF" / Print on the report pages goes through the browser's print
+   view, which leaves out background colours unless told otherwise. The bars
+   of the charts are background colours, so without this they print blank. */
+@media print {
+  .print-colors {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

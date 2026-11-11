@@ -812,7 +812,7 @@ onUnmounted(() => {
             type="button"
             @click="CARD_TARGETS[c.label]?.go()"
             :title="CARD_TARGETS[c.label]?.hint"
-            class="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm text-left transition hover:border-emerald-300 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+            class="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm text-left cursor-pointer transition hover:border-emerald-500 hover:bg-emerald-50 hover:shadow-lg active:shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
           >
             <div class="flex items-center justify-between">
               <p class="text-[10.5px] font-semibold uppercase tracking-wide text-stone-500">{{ c.label }}</p>

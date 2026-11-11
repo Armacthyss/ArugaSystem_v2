@@ -121,7 +121,10 @@ export function useCardFilter(filters, onChange) {
   return { activeCard, pickCard, applyCard }
 }
 
+// A number card that can be clicked: hand cursor, and on hover a green border,
+// a light green fill and a deeper shadow, so it reads as a button (panel,
+// final defense). The picked card stays green with a ring.
 export const cardClass = (selected) => [
-  'w-full text-left transition hover:border-emerald-300 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500',
-  selected ? 'border-emerald-600! ring-2 ring-emerald-600/20' : '',
+  'w-full text-left cursor-pointer transition hover:border-emerald-500 hover:bg-emerald-50 hover:shadow-lg active:shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500',
+  selected ? 'border-emerald-600! bg-emerald-50! ring-2 ring-emerald-600/60 shadow-md' : '',
 ]

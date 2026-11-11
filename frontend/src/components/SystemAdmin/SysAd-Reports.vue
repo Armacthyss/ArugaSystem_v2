@@ -454,7 +454,7 @@ const printReport = () => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-slate-50 flex text-slate-900 print:bg-white">
+  <div class="print-colors min-h-screen bg-slate-50 flex text-slate-900 print:bg-white">
     <div class="print:hidden contents"><AppSidebar /></div>
 
     <div class="flex-1 min-w-0 flex flex-col">

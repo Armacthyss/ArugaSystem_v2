@@ -1,5 +1,5 @@
 <template>
-  <div class="flex h-screen bg-stone-50 antialiased text-stone-900 print:h-auto print:bg-white" style="font-family: 'Inter','Segoe UI',sans-serif;">
+  <div class="print-colors flex h-screen bg-stone-50 antialiased text-stone-900 print:h-auto print:bg-white" style="font-family: 'Inter','Segoe UI',sans-serif;">
 
     <div class="print:hidden contents"><StaffSidebar /></div>
 
@@ -49,7 +49,7 @@
               <div class="h-64 flex items-end justify-around gap-2 px-2">
                 <div v-for="b in byAge" :key="b.label" class="w-full flex flex-col items-center justify-end h-full gap-1">
                   <span class="text-[10px] font-bold text-slate-600">{{ b.value }}</span>
-                  <div class="w-full bg-emerald-100 rounded-t-lg transition-all hover:bg-emerald-500" :style="{ height: barHeight(b.value, maxAge) }"></div>
+                  <div class="w-full bg-emerald-100 print:bg-emerald-500 rounded-t-lg transition-all hover:bg-emerald-500" :style="{ height: barHeight(b.value, maxAge) }"></div>
                 </div>
               </div>
               <div class="flex justify-around mt-4 text-[10px] font-bold text-slate-400 uppercase">
@@ -69,7 +69,7 @@
               <div class="h-64 flex items-end justify-around gap-3 px-2">
                 <div v-for="b in byVaccine" :key="b.label" class="w-full flex flex-col items-center justify-end h-full gap-1">
                   <span class="text-[10px] font-bold text-slate-600">{{ b.value }}</span>
-                  <div class="w-full bg-slate-200 rounded-t-lg transition-all hover:bg-emerald-500" :style="{ height: barHeight(b.value, maxVaccine) }"></div>
+                  <div class="w-full bg-slate-200 print:bg-emerald-500 rounded-t-lg transition-all hover:bg-emerald-500" :style="{ height: barHeight(b.value, maxVaccine) }"></div>
                 </div>
               </div>
               <div class="flex justify-around mt-4 text-[10px] font-bold text-slate-400 uppercase">
@@ -90,7 +90,7 @@
             <div class="h-64 flex items-end justify-between gap-2 px-2 border-b border-slate-100">
               <div v-for="m in byMonth" :key="m.label" class="w-full flex flex-col items-center justify-end h-full gap-1">
                 <span class="text-[10px] font-bold text-slate-600">{{ m.value || '' }}</span>
-                <div class="w-full bg-emerald-600/20 rounded-t transition-all hover:bg-emerald-600" :style="{ height: barHeight(m.value, maxMonth) }"></div>
+                <div class="w-full bg-emerald-600/20 print:bg-emerald-500 rounded-t transition-all hover:bg-emerald-600" :style="{ height: barHeight(m.value, maxMonth) }"></div>
               </div>
             </div>
             <div class="flex justify-between mt-4 text-[10px] font-bold text-slate-400 uppercase px-1">
